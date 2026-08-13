@@ -17,10 +17,16 @@ export async function sembrarGrowth() {
   const sql = postgres(process.env.DATABASE_URL, { max: 1 });
   try {
     const datos = JSON.parse(readFileSync(new URL('./growth-demo.json', import.meta.url), 'utf8'));
+    // Se puede apuntar a un cliente que ya existe, para que su manual quede
+    // junto a su investigación en vez de crear un cliente aparte.
+    const porId = process.env.SEED_GROWTH_CLIENT_ID;
     const nombre = process.env.SEED_GROWTH_CLIENTE ?? 'Yessica Villa';
 
-    const [cliente] = await sql`SELECT id FROM clients WHERE nombre = ${nombre} LIMIT 1`;
+    const [cliente] = porId
+      ? await sql`SELECT id FROM clients WHERE id = ${porId} LIMIT 1`
+      : await sql`SELECT id FROM clients WHERE nombre = ${nombre} LIMIT 1`;
     let clientId = cliente?.id;
+    if (!clientId && porId) throw new Error('No existe el cliente ' + porId);
     if (!clientId) {
       const [nuevo] = await sql`
         INSERT INTO clients (nombre, giro, producto, ciudad, ticket, notas)
