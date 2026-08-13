@@ -479,6 +479,34 @@ td .secundario {
   min-width: 150px;
 }
 
+.zona {
+  margin-top: 20px;
+  padding: 30px 24px;
+  border: 1.5px dashed var(--border-med);
+  border-radius: var(--radius-sm);
+  background: var(--glass-deep);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.zona:hover,
+.zona:focus-visible,
+.zona.encima {
+  border-color: var(--pink);
+  background: rgba(212, 104, 138, 0.07);
+  outline: none;
+}
+
+.zona .titulo {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.zona .ayuda {
+  margin-top: 5px;
+}
+
 /* ── Listas de definición ───────────────────────────── */
 
 .datos {

@@ -2,6 +2,7 @@
 import { eq, desc } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import LinksEditor from '@/components/LinksEditor';
+import FilesUploader from '@/components/FilesUploader';
 import { db, clients, clientLinks, clientFiles, researchJobs, researchResults } from '@/db';
 
 const { id } = Astro.params;
@@ -116,28 +117,17 @@ const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok').length;
     <p class="sub">
       PDF, DOCX, TXT e imágenes. Se extrae el texto para alimentar la investigación.
     </p>
-    <div id="editor-archivos" data-cliente={cliente.id}>
-      {
-        archivos.length === 0 ? (
-          <div class="vacio">
-            <strong>Sin archivos</strong>
-            Se perderá el detalle del producto que solo está en los documentos.
-          </div>
-        ) : (
-          <ul class="lista">
-            {archivos.map((a) => (
-              <li>
-                <span class={`etiqueta ${a.estadoExtraccion === 'ok' ? 'completado' : ''}`}>
-                  {a.estadoExtraccion}
-                </span>
-                <span>{a.nombreOriginal}</span>
-                <span class="secundario">{Math.round(a.bytes / 1024)} KB</span>
-              </li>
-            ))}
-          </ul>
-        )
-      }
-    </div>
+    <FilesUploader
+      client:load
+      clientId={cliente.id}
+      iniciales={archivos.map((a) => ({
+        id: a.id,
+        nombreOriginal: a.nombreOriginal,
+        mime: a.mime,
+        bytes: a.bytes,
+        estadoExtraccion: a.estadoExtraccion,
+      }))}
+    />
   </section>
 
   <!-- 4 · Investigaciones -->
