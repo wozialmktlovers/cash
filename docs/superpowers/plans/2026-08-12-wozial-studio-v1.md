@@ -690,6 +690,7 @@ Ambos devuelven JSON con `{ok: true, id}` o `{ok: false, errores}` y código 400
 - [ ] **Paso 6: Escribir las páginas**
 
 `src/pages/index.astro`: consulta clientes con su último job y costo acumulado, los lista en tabla.
+Incluye un campo de búsqueda por nombre que filtra del lado del cliente; se muestra solo cuando hay más de diez clientes, como pide el spec.
 `src/pages/clientes/nuevo.astro`: formulario con los siete campos.
 `src/pages/clientes/[id].astro`: ficha con los cuatro bloques del spec.
 
@@ -1527,7 +1528,17 @@ export async function correrCompetencia(ctx: string) {
 
 - [ ] **Paso 5: Escribir los otros tres agentes de investigación**
 
-`audiencia.ts`, `canales.ts` y `mercado.ts` con la misma forma: importan `SISTEMA_COMUN`, definen su instrucción específica y llaman a `pedirJson` con su esquema y `buscarWeb: true`.
+Con la misma forma que `competencia.ts`: importan `SISTEMA_COMUN`, definen su instrucción específica y llaman a `pedirJson` con su esquema y `buscarWeb: true`.
+
+**Los nombres de las funciones exportadas son obligatorios** — la Tarea 10 los importa así:
+
+| Archivo | Función exportada | Esquema | Tipo |
+|---|---|---|---|
+| `agents/audiencia.ts` | `correrAudiencia(ctx: string)` | `audienciaSchema` | `Audiencia` |
+| `agents/canales.ts` | `correrCanales(ctx: string)` | `canalesSchema` | `Canales` |
+| `agents/mercado.ts` | `correrMercado(ctx: string)` | `mercadoSchema` | `Mercado` |
+
+Las tres devuelven `Promise<{datos, tokensEntrada, tokensSalida}>`, igual que `correrCompetencia`.
 
 - Audiencia: escalera de términos, jerga, dolores con citas anonimizadas, aspiraciones, miedo principal, unidad mental de compra, dos personas contrastantes.
 - Canales: plataformas con alcance, formatos que rinden, horarios, tendencias, y advertencia regulatoria si el giro la tiene.
@@ -1781,6 +1792,7 @@ Esperado: los 5 tests pasan.
 import { eq, or, asc } from 'drizzle-orm';
 import { db, researchJobs } from '@/db';
 import { ejecutarJob } from './pipeline';
+import { limpiarSesionesVencidas } from '@/lib/auth';
 
 let corriendo = false;
 let arrancado = false;
@@ -1809,6 +1821,7 @@ export function arrancarWorker(): void {
   if (arrancado) return;
   arrancado = true;
   setInterval(() => { void tick(); }, 5000);
+  setInterval(() => { void limpiarSesionesVencidas(); }, 6 * 60 * 60_000);
   console.log('[worker] iniciado');
 }
 ```

@@ -122,7 +122,9 @@ Una sola fila en v1. La tabla existe para que agregar usuarios después no requi
 | estado_extraccion | enum | `pendiente`, `ok`, `fallo`, `no_aplica` |
 | created_at | timestamptz | |
 
-Las imágenes tienen `estado_extraccion = no_aplica`: no se extrae texto, se envían como contenido visual al agente que las necesite.
+Las imágenes tienen `estado_extraccion = no_aplica`: no se extrae texto y **en v1 no se envían a los agentes**.
+
+Se guardan como referencia para el operador. Enviarlas multiplicaría el costo de cada investigación y el aporte es marginal: una captura de un perfil de Instagram informa menos que visitar ese perfil, que es lo que el agente ya hace. Analizar imágenes con visión queda para una versión posterior, cuando haya un caso concreto que lo justifique.
 
 ### `research_jobs`
 | Columna | Tipo | Nota |
