@@ -44,6 +44,18 @@ describe('renderizado', () => {
     expect(html).toContain('&lt;script&gt;');
   });
 
+  it('incluye los elementos que el script de navegación necesita', () => {
+    // El script del machote hace tot.textContent al arrancar: si falta
+    // cualquiera de estos ids, revienta en la primera línea y la presentación
+    // se queda sin flechas, sin puntos, sin progreso y sin teclado.
+    const html = renderizarPresentacion(completa as any, meta);
+    for (const id of ['deck', 'dots', 'cur', 'tot', 'prev', 'next', 'progFill']) {
+      expect(html, `falta id="${id}"`).toContain(`id="${id}"`);
+    }
+    expect(html).toContain('class="nav-bar"');
+    expect(html).toContain('class="prog"');
+  });
+
   it('escapa también las URL de las fuentes', () => {
     const conScript = JSON.parse(JSON.stringify(completa));
     conScript.competencia.datos.directos[0].fuente.url = 'https://x.com/"><script>alert(1)</script>';

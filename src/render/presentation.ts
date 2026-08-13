@@ -1,5 +1,6 @@
 import type { Investigacion } from '@/research/schemas';
 import { ESTILOS, NAVEGACION } from './estilos';
+import { LOGO_WOZIAL_SRC } from './marca';
 import { escapar, panelVacio } from './panels/comunes';
 import {
   panelPortada, panelResumen, panelReconocer, panelDolores, panelCanales,
@@ -97,7 +98,29 @@ export function renderizarPresentacion(
 <style>${ESTILOS}</style>
 </head><body>
 ${barraOperador}
+<div class="nav-bar">
+  <div class="nav-brand">
+    <img src="${LOGO_WOZIAL_SRC}" alt="Wozial" class="nav-logo">
+    <div class="nav-sep"></div>
+    <div class="nav-ttl">Social Research · <b>${escapar(meta.cliente)} · ${escapar(meta.giro)}</b></div>
+  </div>
+  <div class="nav-ctr">
+    <span class="nav-count"><b id="cur">01</b> / <span id="tot">17</span></span>
+    <button class="nav-btn" id="prev" aria-label="Anterior">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="nav-btn" id="next" aria-label="Siguiente">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 2l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+</div>
+<div class="prog"><div class="prog-fill" id="progFill"></div></div>
 <div class="deck" id="deck">${paneles}</div>
+<div class="dots" id="dots"></div>
+<div class="hint">
+  <span>Desliza</span>
+  <svg width="15" height="15" viewBox="0 0 14 14" fill="none"><path d="M5 2l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</div>
 <script>${NAVEGACION}</script>
 </body></html>`;
 }
