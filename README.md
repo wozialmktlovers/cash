@@ -111,8 +111,20 @@ El servicio necesita:
 
 ```bash
 railway logs        # "Migraciones aplicadas", "[worker] iniciado"
-railway run node scripts/crear-usuario.mjs tu@correo.com "contraseña"
 ```
+
+### Crear el usuario administrador en producción
+
+Si el servicio no tiene shell, define estas dos variables y redespliega:
+
+| Variable | Valor |
+|---|---|
+| `ADMIN_EMAIL` | Tu correo |
+| `ADMIN_PASSWORD` | Contraseña de 12 caracteres o más |
+
+El arranque crea (o actualiza) ese usuario y lo anuncia en el registro.
+**Borra ambas variables en cuanto puedas entrar:** ya cumplieron su función y
+no hay razón para dejar una contraseña en las variables del servicio.
 
 ## Seguridad
 
