@@ -560,5 +560,377 @@
         "detalle": "Fuera de México. Español (México) como idioma para evitar impresiones sin mercado"
       }
     ]
+  },
+  "googleAmpliado": {
+    "hallazgos": [
+      "«escuela» gana a «curso» por unas 25 veces. El copy y las keywords se construyen sobre escuela, carrera y estudiar, no sobre curso, que además compite contra todo el ecosistema de «cursos gratis».",
+      "«cosmetología» se busca 5.8 veces más que «cosmiatría». Y la consulta número uno del segundo término es «cosmiatría qué es»: no es puerta de entrada."
+    ],
+    "configuracionObligatoria": [
+      "Ubicación: «Presencia», nunca «presencia o interés»",
+      "Negativas como lista compartida a nivel cuenta",
+      "Idioma español · País México · Sin socios de búsqueda al inicio",
+      "Competidores con Ads activo: Instituto VISSÊ, CEEI y certificacionconocer.com.mx"
+    ],
+    "campanas": [
+      {
+        "clave": "marca",
+        "presupuesto": "5%",
+        "concordancia": "Defensiva · concordancia frase y exacta",
+        "keywords": [
+          "yessica villa",
+          "ana yessica villa",
+          "diplomado yessica villa",
+          "cosmiatría yessica villa",
+          "yessica villa cosmetología",
+          "yessica villa opiniones",
+          "yessica villa curso",
+          "cosmiatría integral yessica",
+          "Yessica Villa · Sitio Oficial",
+          "Diplomado Oficial",
+          "Cosmiatría con Yessica Villa",
+          "Inscripciones Abiertas",
+          "Postgrado U. de Barcelona",
+          "8 Meses · 100% en Línea"
+        ],
+        "negativas": [
+          "gratis",
+          "pdf",
+          "empleo",
+          "sueldo"
+        ],
+        "titulares": [
+          "yessica villa curso",
+          "cosmiatría integral yessica",
+          "Yessica Villa · Sitio Oficial",
+          "Diplomado Oficial",
+          "Cosmiatría con Yessica Villa",
+          "Inscripciones Abiertas",
+          "Postgrado U. de Barcelona",
+          "8 Meses · 100% en Línea"
+        ],
+        "descripciones": [
+          "Formacion en cosmiatria con practica supervisada y aval verificable. Cupo limitado.",
+          "Consulta el temario, los planes de pago y las fechas de la proxima generacion."
+        ]
+      },
+      {
+        "clave": "categoria",
+        "presupuesto": "45%",
+        "concordancia": "Ofensiva · concordancia amplia modificada y frase",
+        "keywords": [
+          "escuela de cosmetología",
+          "escuela cosmetología",
+          "carrera de cosmetología",
+          "cosmetología carrera",
+          "estudiar cosmetología",
+          "cosmetología dónde estudiar",
+          "licenciatura en cosmetología",
+          "cosmetología y cosmiatría",
+          "escuela de cosmiatría",
+          "cosmiatría carrera",
+          "cosmiatría dónde estudiar",
+          "cosmiatría licenciatura",
+          "diplomado en cosmiatría",
+          "diplomado en cosmetología"
+        ],
+        "negativas": [
+          "gratis",
+          "pdf",
+          "empleo",
+          "sueldo"
+        ],
+        "titulares": [
+          "licenciatura en cosmetología",
+          "cosmetología y cosmiatría",
+          "escuela de cosmiatría",
+          "cosmiatría carrera",
+          "cosmiatría dónde estudiar",
+          "cosmiatría licenciatura",
+          "diplomado en cosmiatría",
+          "diplomado en cosmetología"
+        ],
+        "descripciones": [
+          "Formacion en cosmiatria con practica supervisada y aval verificable. Cupo limitado.",
+          "Consulta el temario, los planes de pago y las fechas de la proxima generacion."
+        ]
+      },
+      {
+        "clave": "precio",
+        "presupuesto": "20%",
+        "concordancia": "Comparativa · concordancia frase",
+        "keywords": [
+          "cuánto cuesta estudiar cosmetología",
+          "cuánto cuesta estudiar cosmetología en méxico",
+          "carrera de cosmetología precio",
+          "cosmetología cuánto cuesta la carrera",
+          "precio diplomado cosmiatría",
+          "cosmiatría precio",
+          "curso de cosmiatría precio",
+          "mensualidad escuela de cosmetología",
+          "escuela de cosmetología con financiamiento",
+          "cosmetología becas",
+          "curso de cosmetología título oficial",
+          "curso de cosmetología título oficial online",
+          "certificación cosmetología sep",
+          "curso cosmetología sep"
+        ],
+        "negativas": [
+          "gratis",
+          "pdf",
+          "empleo",
+          "sueldo"
+        ],
+        "titulares": [
+          "curso de cosmiatría precio",
+          "cosmetología becas",
+          "certificación cosmetología sep",
+          "curso cosmetología sep",
+          "escuela de cosmetología sep",
+          "cosmiatría sep",
+          "diplomado cosmetología rvoe",
+          "ec0046"
+        ],
+        "descripciones": [
+          "Formacion en cosmiatria con practica supervisada y aval verificable. Cupo limitado.",
+          "Consulta el temario, los planes de pago y las fechas de la proxima generacion."
+        ]
+      },
+      {
+        "clave": "geo",
+        "presupuesto": "20%",
+        "concordancia": "Local · concordancia frase con modificador de ciudad",
+        "keywords": [
+          "escuela de cosmetología en guadalajara",
+          "escuela de cosmetología cdmx",
+          "escuela de cosmetología y cosmiatría cdmx",
+          "escuela de cosmiatría cdmx",
+          "escuela de cosmiatría en querétaro",
+          "escuela de cosmiatría en puebla",
+          "escuela de cosmiatría estado de méxico",
+          "carrera de cosmetología en cdmx",
+          "carrera de cosmetología en puebla",
+          "licenciatura en cosmetología monterrey",
+          "licenciatura en cosmetología guadalajara",
+          "licenciatura en cosmetología toluca",
+          "licenciatura en cosmetología león gto",
+          "diplomado en cosmetología monterrey"
+        ],
+        "negativas": [
+          "gratis",
+          "pdf",
+          "empleo",
+          "sueldo"
+        ],
+        "titulares": [
+          "cosmetología querétaro cursos",
+          "Cosmetología en Guadalajara",
+          "Escuela en CDMX",
+          "Estudia en Monterrey",
+          "Cosmiatría en Querétaro",
+          "Desde Puebla, en Línea",
+          "Sin Traslados · 100% Online"
+        ],
+        "descripciones": [
+          "escuela de cosmetología y cosmiatría en guadalajara",
+          "Formacion en cosmiatria con practica supervisada y aval verificable. Cupo limitado.",
+          "Consulta el temario, los planes de pago y las fechas de la proxima generacion."
+        ]
+      },
+      {
+        "clave": "contenido",
+        "presupuesto": "10%",
+        "concordancia": "Informativa · concordancia amplia con negativas duras",
+        "keywords": [
+          "cuánto cobrar por limpieza facial",
+          "cuánto cobrar por facial",
+          "cómo abrir una cabina de estética",
+          "cuánto cuesta poner una cabina de estética",
+          "menú de servicios para cabina estética",
+          "ficha clínica cosmetóloga",
+          "requisitos cofepris cabina estética",
+          "cómo conseguir clientas estética",
+          "lista de precios cosmetología",
+          "cómo poner precios en estética",
+          "curso de aparatología estética",
+          "curso de aparatología facial",
+          "curso de aparatología corporal",
+          "curso de dermapen"
+        ],
+        "negativas": [
+          "gratis",
+          "pdf",
+          "empleo",
+          "sueldo"
+        ],
+        "titulares": [
+          "lista de precios cosmetología",
+          "cómo poner precios en estética",
+          "curso de aparatología estética",
+          "curso de aparatología facial",
+          "curso de aparatología corporal",
+          "curso de dermapen",
+          "curso de hydrafacial",
+          "curso de microneedling"
+        ],
+        "descripciones": [
+          "Formacion en cosmiatria con practica supervisada y aval verificable. Cupo limitado.",
+          "Consulta el temario, los planes de pago y las fechas de la proxima generacion."
+        ]
+      }
+    ],
+    "extensiones": [
+      {
+        "tipo": "Vínculos",
+        "detalle": "Temario completo · Precios y planes · Credenciales · Testimonios de egresadas"
+      },
+      {
+        "tipo": "Textos destacados",
+        "detalle": "100% en línea · Trámite SEP incluido · Módulo de negocio · Desde $3,299/mes · Inscripción incluida"
+      },
+      {
+        "tipo": "Fragmentos",
+        "detalle": "Tipo «Cursos»: Diagnóstico · Aparatología · Peelings · Acné · Hipercromías · Corporal"
+      },
+      {
+        "tipo": "Llamada",
+        "detalle": "Solo en horario con alguien disponible para contestar"
+      },
+      {
+        "tipo": "Formulario",
+        "detalle": "Extensión de clientes potenciales en G2 y G3"
+      },
+      {
+        "tipo": "Imagen",
+        "detalle": "1200×1200 y 1200×628. Mejora el CTR en móvil"
+      }
+    ],
+    "estacionalidad": [
+      {
+        "periodo": "Enero",
+        "interes": "Pico anual",
+        "accion": "Máxima inversión"
+      },
+      {
+        "periodo": "Julio y agosto",
+        "interes": "Segundo pico",
+        "accion": "Inversión alta"
+      },
+      {
+        "periodo": "Febrero y septiembre",
+        "interes": "Alto",
+        "accion": "Sostener"
+      },
+      {
+        "periodo": "Marzo a junio",
+        "interes": "Medio",
+        "accion": "Base"
+      },
+      {
+        "periodo": "Noviembre",
+        "interes": "Bajo",
+        "accion": "Reducir"
+      },
+      {
+        "periodo": "Diciembre",
+        "interes": "Mínimo",
+        "accion": "Cortar la primera quincena"
+      }
+    ],
+    "notaEstacionalidad": "Diciembre cae entre 25 y 30% contra el promedio. Concentrar el 55-60% del presupuesto anual en las dos ventanas altas. Serie de Google Trends México a cinco años, comparando «cosmetología» y «cosmiatría»."
+  },
+  "tecnico": {
+    "arquitectura": [
+      {
+        "capa": "1 · Contenedor",
+        "herramienta": "Google Tag Manager",
+        "funcion": "Orquesta todas las etiquetas. Único fragmento en el sitio",
+        "identificador": "GTM-XXXXXXX"
+      },
+      {
+        "capa": "2 · Analítica",
+        "herramienta": "Google Analytics 4",
+        "funcion": "Fuente de verdad. Recibe eventos y atribuye por UTM",
+        "identificador": "G-XXXXXXXXXX"
+      },
+      {
+        "capa": "3 · Meta",
+        "herramienta": "Píxel + API de Conversiones",
+        "funcion": "Optimización y remarketing en Meta",
+        "identificador": "ID de 15-16 dígitos"
+      },
+      {
+        "capa": "4 · Google Ads",
+        "herramienta": "Etiqueta de Google",
+        "funcion": "Conversiones y remarketing en Google",
+        "identificador": "AW-XXXXXXXXX"
+      },
+      {
+        "capa": "5 · Servidor",
+        "herramienta": "API de Conversiones de Meta",
+        "funcion": "Recupera lo que el navegador bloquea. No es opcional",
+        "identificador": "Token de acceso"
+      }
+    ],
+    "etiquetas": [
+      {
+        "etiqueta": "GA4 · Configuración",
+        "activador": "All Pages"
+      },
+      {
+        "etiqueta": "Meta · Píxel base",
+        "activador": "All Pages"
+      },
+      {
+        "etiqueta": "Google Ads · Etiqueta",
+        "activador": "All Pages"
+      },
+      {
+        "etiqueta": "GA4 · view_content",
+        "activador": "Página contiene /diplomado"
+      },
+      {
+        "etiqueta": "GA4 · generate_lead",
+        "activador": "Envío de formulario de registro"
+      },
+      {
+        "etiqueta": "GA4 · contact",
+        "activador": "Clic en enlace wa.me"
+      },
+      {
+        "etiqueta": "GA4 · begin_checkout",
+        "activador": "Página contiene /pago"
+      },
+      {
+        "etiqueta": "GA4 · purchase",
+        "activador": "Página de gracias tras pago"
+      },
+      {
+        "etiqueta": "Meta · Lead",
+        "activador": "Mismo activador que generate_lead"
+      },
+      {
+        "etiqueta": "Meta · Contact, InitiateCheckout y Purchase",
+        "activador": "Espejo de los de GA4"
+      },
+      {
+        "etiqueta": "Google Ads · Conversión Lead y Purchase",
+        "activador": "Espejo de los de GA4"
+      }
+    ],
+    "variables": [
+      "Page URL",
+      "Page Path",
+      "Referrer",
+      "Click URL",
+      "Click Text",
+      "Form ID",
+      "Scroll Depth",
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_content",
+      "utm_term"
+    ]
   }
 }

@@ -65,7 +65,7 @@ export function renderizarManual(
     seccion('google', seccionGoogle(datos, huecos)),
     seccion('rsa', seccionRsa(datos, huecos)),
     seccion('traza', seccionTraza(urls)),
-    seccion('tecnico', seccionTecnico(meta)),
+    seccion('tecnico', seccionTecnico(meta, datos)),
     seccion('seguimiento', seccionSeguimiento(datos)),
   ].join('\n');
 

@@ -1,29 +1,37 @@
-import { escapar, cabeceraSeccion, hueco } from './comunes';
+import { escapar, cabeceraSeccion, tablaGrowth, hueco } from './comunes';
 import type { Growth } from '@/growth/schemas';
 
-/** Anuncios adaptables. Se muestra el conteo de caracteres: es lo primero que rechaza Google. */
+/** Extensiones y estacionalidad: cuándo invertir más y qué acompaña a cada anuncio. */
 export function seccionRsa(g: Partial<Growth>, huecos: Record<string, string>): string {
-  const r = g.rsa;
-  if (!r) {
-    return `${cabeceraSeccion({ numero: '05', kicker: 'Google Ads', titulo: 'Anuncios adaptables' })}
-      <div style="margin-top:18px;">${hueco(huecos.google ?? 'Los anuncios no se generaron.')}</div>`;
+  const cab = cabeceraSeccion({
+    numero: '05', kicker: 'Google Ads', titulo: 'Extensiones y estacionalidad',
+    lead: 'Las extensiones son gratis y suben el CTR. La estacionalidad decide dónde va el presupuesto anual.',
+  });
+
+  const a = g.googleAmpliado;
+  if (!a) {
+    return `${cab}<div style="margin-top:18px;">${hueco(huecos.google ?? 'No se generaron las extensiones ni la estacionalidad.')}</div>`;
   }
 
-  const linea = (t: string, max: number) => {
-    const n = t.length;
-    const color = n > max ? 'b-pink' : 'b-gray';
-    return `<div class="kv">
-      <div class="kv-k"><span class="badge ${color}">${n}/${max}</span></div>
-      <div class="copy">${escapar(t)}</div>
+  return `${cab}
+    <div class="g2" style="margin-top:20px;">
+      <div class="card">
+        <h4>Extensiones · obligatorias en las cinco campañas</h4>
+        <div style="margin-top:10px;">
+          ${a.extensiones.map((e) =>
+            `<div class="kv"><div class="kv-k">${escapar(e.tipo)}</div><div>${escapar(e.detalle)}</div></div>`).join('')}
+        </div>
+      </div>
+      <div class="card card-pink">
+        <h4>Estacionalidad · cuándo invertir más</h4>
+        <div style="margin-top:10px;">
+          ${tablaGrowth(['Periodo', 'Interés', 'Acción'],
+            a.estacionalidad.map((e) => [
+              `<strong>${escapar(e.periodo)}</strong>`,
+              `<span class="chip">${escapar(e.interes)}</span>`,
+              escapar(e.accion)]))}
+        </div>
+        <p class="tiny" style="margin-top:12px;">${escapar(a.notaEstacionalidad)}</p>
+      </div>
     </div>`;
-  };
-
-  return `${cabeceraSeccion({
-    numero: '05', kicker: 'Google Ads', titulo: 'Anuncios adaptables',
-    lead: 'Quince titulares y cuatro descripciones. El conteo va a la vista porque el límite es duro.',
-  })}
-  <h3 style="margin-top:22px;">Titulares · máximo 30 caracteres</h3>
-  ${r.titulares.map((t) => linea(t, 30)).join('')}
-  <h3 style="margin-top:24px;">Descripciones · máximo 90 caracteres</h3>
-  ${r.descripciones.map((d) => linea(d, 90)).join('')}`;
 }

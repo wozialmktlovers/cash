@@ -30,8 +30,15 @@ if (!clientId) {
             VALUES (${clientId}, 'sitio', 'https://yessicavilla.com')`;
 }
 
-const [ya] = await sql`SELECT id FROM growth_results WHERE client_id = ${clientId} LIMIT 1`;
-if (ya) { console.log('[seed] el manual de ejemplo ya existe:', ya.id); await sql.end(); process.exit(0); }
+// Se reemplaza el contenido en vez de saltar: así una versión nueva del
+// ejemplo llega al mismo link, que puede estar ya repartido.
+const [ya] = await sql`SELECT id FROM growth_results WHERE client_id = ${clientId} ORDER BY version DESC LIMIT 1`;
+if (ya) {
+  await sql`UPDATE growth_results SET datos = ${sql.json(datos)} WHERE id = ${ya.id}`;
+  console.log('[seed] manual de ejemplo actualizado en /growth/' + ya.id);
+  await sql.end();
+  process.exit(0);
+}
 
 const [job] = await sql`
   INSERT INTO research_jobs (client_id, tipo, estado, etapas, finished_at)

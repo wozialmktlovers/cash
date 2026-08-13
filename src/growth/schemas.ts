@@ -116,6 +116,58 @@ export const segmentacionSchema = z.object({
 export type Segmentacion = z.infer<typeof segmentacionSchema>;
 export type Perfil = z.infer<typeof perfilSchema>;
 
+
+/* ── Google, extensiones y medición ────────────────────────────────────
+   En el entregable real los títulos y descripciones van POR CAMPAÑA, no en
+   una bolsa común: cada intención de búsqueda merece su propio anuncio, y
+   mezclarlos obliga a reescribirlos al cargarlos. */
+
+export const campanaSearchSchema = z.object({
+  clave: z.enum(CLAVES_GOOGLE),
+  presupuesto: z.string().trim().min(1),
+  concordancia: z.string().trim().min(1),
+  keywords: z.array(z.string().trim().min(1)).min(4).max(20),
+  negativas: z.array(z.string().trim().min(1)),
+  titulares: z.array(z.string().trim().min(1).max(30)).min(4).max(15),
+  descripciones: z.array(z.string().trim().min(1).max(90)).min(2).max(4),
+});
+
+export const extensionSchema = z.object({
+  tipo: z.string().trim().min(1),
+  detalle: z.string().trim().min(1),
+});
+
+export const tecnicoSchema = z.object({
+  arquitectura: z.array(z.object({
+    capa: z.string().trim().min(1),
+    herramienta: z.string().trim().min(1),
+    funcion: z.string().trim().min(1),
+    identificador: z.string().trim().min(1),
+  })).min(3).max(8),
+  etiquetas: z.array(z.object({
+    etiqueta: z.string().trim().min(1),
+    activador: z.string().trim().min(1),
+  })).min(5).max(16),
+  variables: z.array(z.string().trim().min(1)).min(3).max(20),
+});
+
+export const googleAmpliadoSchema = z.object({
+  hallazgos: z.array(z.string().trim().min(1)).min(1).max(4),
+  configuracionObligatoria: z.array(z.string().trim().min(1)).min(2).max(8),
+  campanas: z.array(campanaSearchSchema).length(5),
+  extensiones: z.array(extensionSchema).min(3).max(8),
+  estacionalidad: z.array(z.object({
+    periodo: z.string().trim().min(1),
+    interes: z.string().trim().min(1),
+    accion: z.string().trim().min(1),
+  })).min(3).max(12),
+  notaEstacionalidad: z.string().trim().min(1),
+});
+
+export type GoogleAmpliado = z.infer<typeof googleAmpliadoSchema>;
+export type CampanaSearch = z.infer<typeof campanaSearchSchema>;
+export type Tecnico = z.infer<typeof tecnicoSchema>;
+
 export const growthSchema = z.object({
   // Lo único variable de la portada. El machote deja [N] Semanas como marcador
   // y fija los demás números.
@@ -141,6 +193,8 @@ export const growthSchema = z.object({
   }),
 
   segmentacion: segmentacionSchema.optional(),
+  googleAmpliado: googleAmpliadoSchema.optional(),
+  tecnico: tecnicoSchema.optional(),
   bloqueantes: z.array(z.string().trim().min(1)).min(1),
   reglasCopy: z.array(z.string().trim().min(1)).min(1),
 });

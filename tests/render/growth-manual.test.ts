@@ -82,10 +82,39 @@ describe('manual de campaña', () => {
 
   it('marca en rojo un titular que se pasa del límite de Google', () => {
     const g = clonar();
-    g.rsa.titulares[0] = 'x'.repeat(35);
+    g.googleAmpliado.campanas[0].titulares[0] = 'x'.repeat(35);
     const html = renderizarManual(g, meta);
-    expect(html).toContain('35/30');
     expect(html).toContain('badge b-pink">35/30');
+  });
+
+  it('los títulos y descripciones van por campaña, no en una bolsa común', () => {
+    const html = renderizarManual(completo as any, meta);
+    for (const g of ['G1 · Marca', 'G3 · Precio', 'G5 · Contenido']) {
+      expect(html, `falta ${g}`).toContain(g);
+    }
+  });
+
+  it('rinde extensiones y estacionalidad, no solo anuncios adaptables', () => {
+    const html = renderizarManual(completo as any, meta);
+    expect(html).toContain('Extensiones y estacionalidad');
+    expect(html).toContain('Estacionalidad');
+    expect(html).toContain('Diciembre');
+  });
+
+  it('rinde la matriz de medición con sus identificadores', () => {
+    const html = renderizarManual(completo as any, meta);
+    expect(html).toContain('Arquitectura de medición');
+    expect(html).toContain('GTM-XXXXXXX');
+    expect(html).toContain('Etiquetas a crear en GTM');
+    expect(html).toContain('generate_lead');
+  });
+
+  it('rinde la hoja de captura de Meta completa', () => {
+    const html = renderizarManual(completo as any, meta);
+    for (const b of ['Perfil del target', 'Configuración por campaña', 'Segmentación detallada',
+                     'Lo que NO hay que segmentar', 'Audiencias personalizadas', 'Geografía']) {
+      expect(html, `falta el bloque ${b}`).toContain(b);
+    }
   });
 
   it('el manual y el deck son documentos distintos: aquí no hay deck ni paneles', () => {
