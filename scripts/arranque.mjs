@@ -21,7 +21,8 @@ if (process.env.SEMBRAR_EJEMPLO === '1') {
 // a mano. No lo generan los agentes; se siembra para poder enseñar el motor.
 if (process.env.SEED_GROWTH) {
   try {
-    await import('./sembrar-growth.mjs');
+    const { sembrarGrowth } = await import('./sembrar-growth.mjs');
+    await sembrarGrowth();
   } catch (e) {
     console.error('[seed growth] no se pudo sembrar:', e instanceof Error ? e.message : e);
   }
