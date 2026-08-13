@@ -50,8 +50,13 @@ export async function sembrarGrowth() {
         UPDATE research_jobs SET estado = 'completado', error = NULL,
           etapas = ${sql.json({ estructura: 'ok', creativos: 'ok', google: 'ok', prompts: 'ok', segmentacion: 'ok' })}
         WHERE id = (SELECT job_id FROM growth_results WHERE id = ${ya.id})`;
-      // Los demás jobs de campaña del cliente son intentos fallidos sin
-      // resultado útil: estorban en la ficha.
+      // Los intentos fallidos dejaron manuales vacíos: una fila de resultado
+      // sin campañas dentro. En la ficha aparecen como «Ver manual de
+      // campaña» y llevan a un documento con todo declarado sin datos.
+      await sql`
+        DELETE FROM growth_results
+        WHERE client_id = ${clientId} AND id <> ${ya.id}
+          AND (datos->'campanasMeta') IS NULL`;
       await sql`
         DELETE FROM research_jobs
         WHERE client_id = ${clientId} AND tipo = 'growth' AND estado = 'fallido'
