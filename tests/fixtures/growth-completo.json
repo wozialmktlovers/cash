@@ -1,0 +1,248 @@
+{
+  "semanas": 4,
+  "campanasMeta": [
+    {
+      "grupo": "a",
+      "nombre": "Grupo A · salario invisible",
+      "objetivo": "Trafico a registro",
+      "audiencia": "Mujeres 25-40, interes en estetica y formacion, Jalisco",
+      "angulo": "salario invisible"
+    },
+    {
+      "grupo": "b",
+      "nombre": "Grupo B · aval que si sirve",
+      "objetivo": "Trafico a registro",
+      "audiencia": "Mujeres 25-40, interes en estetica y formacion, Jalisco",
+      "angulo": "aval que si sirve"
+    },
+    {
+      "grupo": "c",
+      "nombre": "Grupo C · mensualidad accesible",
+      "objetivo": "Trafico a registro",
+      "audiencia": "Mujeres 25-40, interes en estetica y formacion, Jalisco",
+      "angulo": "mensualidad accesible"
+    }
+  ],
+  "campanasGoogle": [
+    {
+      "clave": "marca",
+      "nombre": "Search · marca",
+      "intencion": "Busca la marca por nombre"
+    },
+    {
+      "clave": "categoria",
+      "nombre": "Search · categoria",
+      "intencion": "Busca la categoria sin marca"
+    },
+    {
+      "clave": "precio",
+      "nombre": "Search · precio",
+      "intencion": "Compara costo antes de decidir"
+    },
+    {
+      "clave": "geo",
+      "nombre": "Search · geo",
+      "intencion": "Busca formacion en su ciudad"
+    },
+    {
+      "clave": "contenido",
+      "nombre": "Search · contenido",
+      "intencion": "Investiga el oficio, aun sin intencion de compra"
+    }
+  ],
+  "creativos": [
+    {
+      "grupo": "a",
+      "formato": "imagen",
+      "ratio": "1x1",
+      "medidas": "1080 × 1080 px",
+      "angulo": "salario invisible",
+      "copyA": "La cosmetologa promedio en Jalisco gana $6,480 al mes. Las certificadas, hasta $18,000.",
+      "copyB": "El oficio no vale poco: el precio lo pone quien no puede sustentar lo que cobra."
+    },
+    {
+      "grupo": "a",
+      "formato": "video",
+      "ratio": "9x16",
+      "medidas": "1080 × 1920 px",
+      "angulo": "salario invisible",
+      "copyA": "La cosmetologa promedio en Jalisco gana $6,480 al mes. Las certificadas, hasta $18,000.",
+      "copyB": "El oficio no vale poco: el precio lo pone quien no puede sustentar lo que cobra."
+    },
+    {
+      "grupo": "a",
+      "formato": "carrusel",
+      "ratio": "4x5",
+      "medidas": "1080 × 1350 px",
+      "angulo": "salario invisible",
+      "copyA": "La cosmetologa promedio en Jalisco gana $6,480 al mes. Las certificadas, hasta $18,000.",
+      "copyB": "El oficio no vale poco: el precio lo pone quien no puede sustentar lo que cobra."
+    },
+    {
+      "grupo": "b",
+      "formato": "imagen",
+      "ratio": "1x1",
+      "medidas": "1080 × 1080 px",
+      "angulo": "aval que si sirve",
+      "copyA": "Un aval que se compra por $3,450 no es un diferenciador. Pregunta que respalda el tuyo.",
+      "copyB": "No todos los diplomas dicen lo mismo. Revisa quien emite el que estas pagando."
+    },
+    {
+      "grupo": "b",
+      "formato": "video",
+      "ratio": "9x16",
+      "medidas": "1080 × 1920 px",
+      "angulo": "aval que si sirve",
+      "copyA": "Un aval que se compra por $3,450 no es un diferenciador. Pregunta que respalda el tuyo.",
+      "copyB": "No todos los diplomas dicen lo mismo. Revisa quien emite el que estas pagando."
+    },
+    {
+      "grupo": "b",
+      "formato": "carrusel",
+      "ratio": "4x5",
+      "medidas": "1080 × 1350 px",
+      "angulo": "aval que si sirve",
+      "copyA": "Un aval que se compra por $3,450 no es un diferenciador. Pregunta que respalda el tuyo.",
+      "copyB": "No todos los diplomas dicen lo mismo. Revisa quien emite el que estas pagando."
+    },
+    {
+      "grupo": "c",
+      "formato": "imagen",
+      "ratio": "1x1",
+      "medidas": "1080 × 1080 px",
+      "angulo": "mensualidad accesible",
+      "copyA": "Pagar en 12 meses sale mas barato que en 8. La aritmetica esta publicada.",
+      "copyB": "El total asusta; la mensualidad se decide. Empieza por la segunda cifra."
+    },
+    {
+      "grupo": "c",
+      "formato": "video",
+      "ratio": "9x16",
+      "medidas": "1080 × 1920 px",
+      "angulo": "mensualidad accesible",
+      "copyA": "Pagar en 12 meses sale mas barato que en 8. La aritmetica esta publicada.",
+      "copyB": "El total asusta; la mensualidad se decide. Empieza por la segunda cifra."
+    },
+    {
+      "grupo": "c",
+      "formato": "carrusel",
+      "ratio": "4x5",
+      "medidas": "1080 × 1350 px",
+      "angulo": "mensualidad accesible",
+      "copyA": "Pagar en 12 meses sale mas barato que en 8. La aritmetica esta publicada.",
+      "copyB": "El total asusta; la mensualidad se decide. Empieza por la segunda cifra."
+    }
+  ],
+  "promptsImagen": {
+    "base": "Premium dark editorial composition, near-black background, subtle film grain, soft volumetric glow in rose pink and periwinkle blue, no identifiable faces",
+    "porCreativo": [
+      "salario invisible scene, imagen format, 1x1 aspect ratio, no faces",
+      "salario invisible scene, video format, 9x16 aspect ratio, no faces",
+      "salario invisible scene, carrusel format, 4x5 aspect ratio, no faces",
+      "aval que si sirve scene, imagen format, 1x1 aspect ratio, no faces",
+      "aval que si sirve scene, video format, 9x16 aspect ratio, no faces",
+      "aval que si sirve scene, carrusel format, 4x5 aspect ratio, no faces",
+      "mensualidad accesible scene, imagen format, 1x1 aspect ratio, no faces",
+      "mensualidad accesible scene, video format, 9x16 aspect ratio, no faces",
+      "mensualidad accesible scene, carrusel format, 4x5 aspect ratio, no faces"
+    ]
+  },
+  "googleKeywords": [
+    {
+      "clave": "marca",
+      "keywords": [
+        "diplomado yessica villa",
+        "yessica villa cosmiatria"
+      ],
+      "negativas": [
+        "gratis",
+        "pdf"
+      ]
+    },
+    {
+      "clave": "categoria",
+      "keywords": [
+        "diplomado cosmiatria",
+        "curso cosmetologia certificado"
+      ],
+      "negativas": [
+        "gratis",
+        "online gratis"
+      ]
+    },
+    {
+      "clave": "precio",
+      "keywords": [
+        "diplomado cosmiatria precio",
+        "cuanto cuesta certificarse cosmetologia"
+      ],
+      "negativas": [
+        "barato",
+        "gratis"
+      ]
+    },
+    {
+      "clave": "geo",
+      "keywords": [
+        "diplomado cosmiatria guadalajara",
+        "cursos esteticista jalisco"
+      ],
+      "negativas": [
+        "cdmx",
+        "online"
+      ]
+    },
+    {
+      "clave": "contenido",
+      "keywords": [
+        "que es cosmiatria",
+        "diferencia cosmetologa cosmiatra"
+      ],
+      "negativas": [
+        "sueldo",
+        "empleo"
+      ]
+    }
+  ],
+  "rsa": {
+    "titulares": [
+      "Diplomado en Cosmiatria",
+      "Certificate con aval real",
+      "De esteticista a cosmiatra",
+      "Pagas en 12 mensualidades",
+      "Aval que si te respalda",
+      "Cosmiatria con practica",
+      "Formacion seria, no curso",
+      "Cupo limitado por grupo",
+      "Practica en modelo real",
+      "Diploma con respaldo SEP",
+      "Aprende protocolo clinico",
+      "Sube tu ticket promedio",
+      "Guadalajara, presencial",
+      "Empieza este semestre",
+      "Agenda tu lugar hoy"
+    ],
+    "descripciones": [
+      "Formacion en cosmiatria con practica supervisada y aval verificable. Cupo limitado.",
+      "Pasa de improvisar a cobrar por protocolo. Doce mensualidades y diploma con respaldo.",
+      "Protocolo clinico, practica en modelo y acompanamiento. Revisa el aval antes de pagar.",
+      "Sube tu ticket con formacion que se sostiene. Consulta fechas y plan de pagos."
+    ]
+  },
+  "bloqueantes": [
+    "Precios corregidos y publicados: pagar en 12 meses sale mas barato que en 8, esta invertido",
+    "Quitar el \"$240 USD\" de la pagina de Kartra",
+    "Contenedor de GTM publicado con pixel, GA4 y etiqueta de Google Ads",
+    "Quien responde WhatsApp y en que horario",
+    "Fecha real de cierre de inscripciones",
+    "Monto de inversion mensual"
+  ],
+  "reglasCopy": [
+    "No prometer ingresos. Solo citar datos publicos con fuente",
+    "Nada inyectable: exosomas, bioestimuladores, toxina y rellenos son acto medico",
+    "No afirmar atributos del lector. Meta rechaza \"Cansada de tu sueldo bajo\". Tercera persona",
+    "El aval no es titular: va en el cuerpo, como objecion resuelta",
+    "Liderar con mensualidad, nunca con el total",
+    "Decir \"cosmetologia\" en frio: se busca 5.8x mas que \"cosmiatria\""
+  ]
+}
