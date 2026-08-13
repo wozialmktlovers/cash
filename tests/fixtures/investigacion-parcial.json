@@ -1,0 +1,39 @@
+{
+  "competencia": {
+    "estado": "ok",
+    "datos": {
+      "directos": [
+        {
+          "nombre": "Instituto Bellezza GDL",
+          "producto": "Diplomado en cosmetología facial",
+          "precio": "$28,500 MXN",
+          "duracion": "6 meses",
+          "modalidad": "Presencial sabatino",
+          "aval": "SEP (RVOE estatal)",
+          "fuente": { "url": "https://institutobellezza.mx/diplomados", "consultado": "2026-08-10" }
+        }
+      ],
+      "indirectos": [],
+      "referentes": [],
+      "hallazgos": [
+        "Con un solo competidor verificado no alcanza para trazar el mapa de precios del nicho."
+      ]
+    }
+  },
+  "audiencia": {
+    "estado": "vacio",
+    "razon": "El agente no devolvió datos válidos tras dos intentos."
+  },
+  "canales": {
+    "estado": "vacio",
+    "razon": "Se alcanzó el tope de costo antes de ejecutar esta etapa."
+  },
+  "mercado": {
+    "estado": "vacio",
+    "razon": "No se encontraron cifras oficiales con fuente verificable para este giro y esta zona."
+  },
+  "sintesis": {
+    "estado": "vacio",
+    "razon": "Sin audiencia, canales ni mercado no hay material suficiente para sintetizar decisiones."
+  }
+}

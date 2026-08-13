@@ -1,0 +1,101 @@
+---
+import { eq, desc } from 'drizzle-orm';
+import { db, researchResults, clients, shareLinks } from '@/db';
+import { renderizarPresentacion, escapar } from '@/render/presentation';
+
+const { id } = Astro.params;
+
+const [r] = await db.select().from(researchResults).where(eq(researchResults.id, id!)).limit(1);
+if (!r) return new Response('Resultado no encontrado', { status: 404 });
+
+const [c] = await db.select().from(clients).where(eq(clients.id, r.clientId)).limit(1);
+if (!c) return new Response('Cliente no encontrado', { status: 404 });
+
+const links = await db
+  .select()
+  .from(shareLinks)
+  .where(eq(shareLinks.resultId, r.id))
+  .orderBy(desc(shareLinks.createdAt));
+
+const activo = links.find((l) => !l.revocado) ?? null;
+const base = (process.env.PUBLIC_BASE_URL ?? Astro.url.origin).replace(/\/+$/, '');
+
+const barra = `
+<div id="barra-op">
+  <span class="bo-marca">Wozial Studio</span>
+  <span class="bo-cliente">${escapar(c.nombre)} · v${r.version}</span>
+  <a class="bo-btn" href="/clientes/${escapar(c.id)}">Cliente</a>
+  <a class="bo-btn" href="/clientes/${escapar(c.id)}/investigar">Regenerar</a>
+  <a class="bo-btn" href="/api/resultados/${escapar(r.id)}" target="_blank" rel="noopener">JSON crudo</a>
+  <span class="bo-sep"></span>
+  <span id="bo-link" class="bo-link" ${activo ? '' : 'hidden'}>
+    <input id="bo-url" readonly value="${activo ? escapar(`${base}/p/${activo.token}`) : ''}" data-token="${activo ? escapar(activo.token) : ''}">
+    <button class="bo-btn" id="bo-copiar" type="button">Copiar</button>
+    <button class="bo-btn bo-peligro" id="bo-revocar" type="button">Revocar</button>
+  </span>
+  <button class="bo-btn bo-primario" id="bo-crear" type="button" ${activo ? 'hidden' : ''}>Crear link público</button>
+  <span class="bo-estado" id="bo-estado"></span>
+</div>
+<style>
+  #barra-op{position:fixed;top:0;left:0;right:0;z-index:99;display:flex;align-items:center;gap:10px;
+    padding:9px 16px;background:rgba(10,10,10,.92);backdrop-filter:blur(12px);
+    border-bottom:1px solid rgba(255,255,255,.14);font-family:'Poppins',sans-serif;font-size:12.5px;flex-wrap:wrap;}
+  #barra-op .bo-marca{font-weight:700;letter-spacing:.2em;text-transform:uppercase;font-size:10.5px;color:#d4688a;}
+  #barra-op .bo-cliente{color:rgba(255,255,255,.55);}
+  #barra-op .bo-sep{flex:1;}
+  #barra-op .bo-btn{display:inline-block;padding:6px 11px;border-radius:8px;border:1px solid rgba(255,255,255,.2);
+    color:rgba(255,255,255,.8);text-decoration:none;cursor:pointer;background:transparent;
+    font-family:inherit;font-size:12.5px;white-space:nowrap;}
+  #barra-op .bo-btn:hover{color:#fff;border-color:#d4688a;}
+  #barra-op .bo-primario{background:#d4688a;border-color:#d4688a;color:#fff;font-weight:600;}
+  #barra-op .bo-peligro{color:#ffb3c8;border-color:rgba(212,104,138,.45);}
+  #barra-op .bo-link{display:inline-flex;align-items:center;gap:7px;}
+  #barra-op input{width:min(320px,42vw);padding:6px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.2);
+    background:rgba(255,255,255,.06);color:#fff;font-family:inherit;font-size:12px;}
+  #barra-op .bo-estado{color:rgba(255,255,255,.55);}
+  .deck,.panel{padding-top:44px;}
+</style>
+<script>
+(function(){
+  var estado=document.getElementById('bo-estado');
+  var envoltura=document.getElementById('bo-link');
+  var campo=document.getElementById('bo-url');
+  var crear=document.getElementById('bo-crear');
+  var avisar=function(t){estado.textContent=t;setTimeout(function(){estado.textContent='';},2600);};
+
+  crear.addEventListener('click',async function(){
+    crear.disabled=true;
+    try{
+      var res=await fetch('/api/share',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({resultId:'${escapar(r.id)}'})});
+      var b=await res.json();
+      if(b.ok){campo.value=b.url;campo.dataset.token=b.token;envoltura.hidden=false;crear.hidden=true;avisar('Link creado.');}
+      else{avisar('No se pudo crear.');}
+    }catch(e){avisar('Sin conexión.');}
+    crear.disabled=false;
+  });
+
+  document.getElementById('bo-copiar').addEventListener('click',function(){
+    campo.select();
+    navigator.clipboard.writeText(campo.value).then(function(){avisar('Copiado.');},function(){avisar('Copia manual.');});
+  });
+
+  document.getElementById('bo-revocar').addEventListener('click',async function(){
+    try{
+      var res=await fetch('/api/share',{method:'DELETE',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({token:campo.dataset.token})});
+      if(res.ok){envoltura.hidden=true;crear.hidden=false;avisar('Link revocado. Ahora devuelve 404.');}
+      else{avisar('No se pudo revocar.');}
+    }catch(e){avisar('Sin conexión.');}
+  });
+})();
+</script>`;
+
+const html = renderizarPresentacion(
+  r.datos as any,
+  { cliente: c.nombre, giro: c.giro, fecha: r.createdAt.toISOString().slice(0, 10) },
+  barra,
+);
+---
+
+<Fragment set:html={html} />

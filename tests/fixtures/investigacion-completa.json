@@ -1,0 +1,301 @@
+{
+  "competencia": {
+    "estado": "ok",
+    "datos": {
+      "directos": [
+        {
+          "nombre": "Instituto Bellezza GDL",
+          "producto": "Diplomado en cosmetología facial",
+          "precio": "$28,500 MXN",
+          "duracion": "6 meses",
+          "modalidad": "Presencial sabatino",
+          "aval": "SEP (RVOE estatal)",
+          "fuente": { "url": "https://institutobellezza.mx/diplomados", "consultado": "2026-08-10" }
+        },
+        {
+          "nombre": "Academia Dermo Studio",
+          "producto": "Certificación en cosmiatría",
+          "precio": "$41,000 MXN",
+          "duracion": "9 meses",
+          "modalidad": "Híbrida",
+          "aval": "Aval de asociación gremial",
+          "fuente": { "url": "https://dermostudio.com.mx/certificacion", "consultado": "2026-08-10" }
+        }
+      ],
+      "indirectos": [
+        {
+          "nombre": "Cursos sueltos en línea",
+          "producto": "Módulos individuales de faciales",
+          "precio": "$1,200 MXN por módulo",
+          "duracion": "3 semanas",
+          "modalidad": "Autogestivo",
+          "aval": "Sin aval",
+          "fuente": { "url": "https://ejemplo-cursos.com/faciales", "consultado": "2026-08-11" }
+        }
+      ],
+      "referentes": [
+        {
+          "cuenta": "@cosmiatria.mx",
+          "seguidores": 184000,
+          "pais": "México",
+          "fuente": { "url": "https://instagram.com/cosmiatria.mx", "consultado": "2026-08-11" }
+        },
+        {
+          "cuenta": "@pielsana.academy",
+          "seguidores": 92500,
+          "pais": "Colombia",
+          "fuente": { "url": "https://instagram.com/pielsana.academy", "consultado": "2026-08-11" }
+        }
+      ],
+      "hallazgos": [
+        "La franja entre $30,000 y $40,000 está desatendida: o cobran menos de 29 mil sin aval fuerte, o pasan de 41 mil con nombre consolidado.",
+        "Ningún competidor directo de Guadalajara ofrece acompañamiento posterior a la graduación; todos terminan en la constancia.",
+        "El aval SEP se usa como argumento de venta en el 100% de los directos, lo que lo vuelve un requisito de entrada y no un diferenciador."
+      ]
+    }
+  },
+  "audiencia": {
+    "estado": "ok",
+    "datos": {
+      "escalera": [
+        { "termino": "Chica de los faciales", "connotacion": "Despectivo, lo usa quien no valora el oficio" },
+        { "termino": "Esteticista", "connotacion": "Neutro, el más común en el gremio" },
+        { "termino": "Cosmetóloga", "connotacion": "Aspiracional, implica formación seria" },
+        { "termino": "Cosmiatra", "connotacion": "Máximo estatus, implica respaldo clínico" }
+      ],
+      "jerga": ["limpieza profunda", "extracción", "peeling químico", "fototipo", "barrera cutánea"],
+      "jergaNegocio": ["cartera de clientas", "paquete cerrado", "cliente cautiva", "hueco en agenda"],
+      "tono": [
+        "Directo y práctico, sin adornos de marketing",
+        "Solidario entre colegas, muy crítico con los cursos rápidos",
+        "Ansioso cuando se habla de cobrar más caro"
+      ],
+      "dolores": [
+        {
+          "texto": "Terminé el curso y no supe qué hacer después. Nadie te enseña a conseguir clientas.",
+          "contexto": "Egresada de un curso corto, comentario en un grupo del gremio",
+          "anonimizada": true,
+          "fuente": { "url": "https://ejemplo-foro.mx/hilo/2291", "consultado": "2026-08-09" }
+        },
+        {
+          "texto": "Me da pena cobrar lo que vale mi trabajo porque siempre hay alguien más barata.",
+          "contexto": "Esteticista con dos años de práctica, respuesta en una publicación del nicho",
+          "anonimizada": true,
+          "fuente": { "url": "https://ejemplo-foro.mx/hilo/1874", "consultado": "2026-08-09" }
+        }
+      ],
+      "aspiraciones": [
+        {
+          "texto": "Quiero mi propio espacio, aunque sea un cuarto, pero que sea mío.",
+          "contexto": "Estudiante próxima a graduarse, comentario público en el nicho",
+          "anonimizada": true,
+          "fuente": { "url": "https://ejemplo-foro.mx/hilo/3310", "consultado": "2026-08-09" }
+        }
+      ],
+      "miedoPrincipal": {
+        "nombre": "Invertir en otra formación que tampoco le traiga clientas",
+        "evidencia": "En los hilos revisados, la objeción más repetida no es el precio sino haber pagado antes por un curso que no se tradujo en ingresos.",
+        "fuente": { "url": "https://ejemplo-foro.mx/hilo/2291", "consultado": "2026-08-09" }
+      },
+      "unidadDeCompra": "No compran un diplomado: compran la certeza de dejar de depender de un salario y poder cobrar por su cuenta.",
+      "personas": [
+        {
+          "nombre": "Karla, la que ya cobra pero mal",
+          "edad": "27 años",
+          "ciudad": "Guadalajara",
+          "situacion": "Trabaja en un spa por comisión y atiende clientas por su cuenta los domingos",
+          "demografia": ["Ingreso mensual de 9 a 12 mil pesos", "Vive con su familia", "Sin hijos"],
+          "comportamiento": ["Consume contenido técnico en video corto", "Compara precios antes de decidir", "Pregunta en grupos antes de comprar"],
+          "dolor": ["Su ingreso depende del spa", "No sabe cuánto cobrar por su cuenta"],
+          "objeciones": ["¿De verdad me va a servir el aval?", "¿Puedo pagarlo en mensualidades?"],
+          "comoSeGana": "Con evidencia de egresadas que hoy cobran más, con cifras y no con promesas",
+          "riesgo": "Se va con la opción más barata si no percibe la diferencia del acompañamiento"
+        },
+        {
+          "nombre": "Mariana, la que empieza de cero",
+          "edad": "34 años",
+          "ciudad": "Zapopan",
+          "situacion": "Dejó un empleo administrativo y busca reconvertirse de oficio",
+          "demografia": ["Ahorro disponible de 40 a 60 mil pesos", "Dos hijos en primaria", "Pareja con ingreso estable"],
+          "comportamiento": ["Investiga a fondo antes de comprometerse", "Valora el aval oficial por encima del precio", "Necesita horarios compatibles con la escuela de sus hijos"],
+          "dolor": ["Miedo a equivocarse de carrera otra vez", "No tiene red de contactos en el gremio"],
+          "objeciones": ["¿Sirve si nunca he trabajado en esto?", "¿Qué pasa si no puedo asistir un sábado?"],
+          "comoSeGana": "Con estructura clara del plan de estudios y con el aval explicado sin tecnicismos",
+          "riesgo": "Pospone la decisión indefinidamente si no hay una fecha de cierre de inscripciones"
+        }
+      ]
+    }
+  },
+  "canales": {
+    "estado": "ok",
+    "datos": {
+      "plataformas": [
+        {
+          "nombre": "Instagram",
+          "alcance": "El nicho concentra ahí la conversación técnica y el portafolio visual",
+          "notas": "Los reels de procedimiento superan por mucho al contenido estático",
+          "fuente": { "url": "https://ejemplo-reporte.mx/redes-2026", "consultado": "2026-08-11" }
+        },
+        {
+          "nombre": "TikTok",
+          "alcance": "Audiencia más joven, en fase de descubrimiento del oficio",
+          "notas": "Alto alcance pero menor intención de compra inmediata",
+          "fuente": { "url": "https://ejemplo-reporte.mx/redes-2026", "consultado": "2026-08-11" }
+        }
+      ],
+      "formatos": [
+        "Video corto de procedimiento real, sin música y con voz explicando",
+        "Antes y después con la técnica nombrada",
+        "Testimonio de egresada mostrando su espacio de trabajo"
+      ],
+      "horarios": "Concentración de consumo entre 21:00 y 23:00, después de la jornada en el spa; segundo pico los domingos por la mañana.",
+      "tendencias": [
+        "Creciente rechazo al contenido de 'curso rápido' y preferencia por formación larga",
+        "Aumento de búsquedas de 'cosmiatría con aval' frente a 'curso de faciales'"
+      ],
+      "advertenciaRegulatoria": "La publicidad de servicios estéticos no puede atribuir resultados terapéuticos ni usar imágenes de procedimientos invasivos sin respaldo profesional. Revisar los lineamientos sanitarios aplicables antes de pautar."
+    }
+  },
+  "mercado": {
+    "estado": "ok",
+    "datos": {
+      "datos": [
+        {
+          "etiqueta": "Establecimientos de servicios de belleza en Jalisco",
+          "valor": "11,482 unidades económicas",
+          "fuente": { "url": "https://www.inegi.org.mx/app/mapa/denue/", "consultado": "2026-08-10" }
+        },
+        {
+          "etiqueta": "Personal ocupado promedio por establecimiento",
+          "valor": "2.4 personas",
+          "fuente": { "url": "https://www.inegi.org.mx/app/mapa/denue/", "consultado": "2026-08-10" }
+        }
+      ],
+      "salarios": [
+        {
+          "puesto": "Esteticista empleada en spa",
+          "rango": "$8,500 a $13,000 MXN mensuales",
+          "fuente": { "url": "https://ejemplo-observatorio.mx/salarios/belleza", "consultado": "2026-08-10" }
+        },
+        {
+          "puesto": "Cosmetóloga con consultorio propio",
+          "rango": "$18,000 a $35,000 MXN mensuales",
+          "fuente": { "url": "https://ejemplo-observatorio.mx/salarios/belleza", "consultado": "2026-08-10" }
+        }
+      ],
+      "regulacion": [
+        {
+          "norma": "Aviso de funcionamiento sanitario para establecimientos de servicios estéticos",
+          "implicacion": "La egresada que abra su propio espacio debe tramitarlo antes de operar; conviene que el diplomado lo cubra como módulo.",
+          "fuente": { "url": "https://ejemplo-normativa.mx/aviso-funcionamiento", "consultado": "2026-08-10" }
+        }
+      ],
+      "crecimiento": "El registro de establecimientos del sector en Jalisco creció de forma sostenida en los últimos tres cortes publicados, aunque la fuente no desglosa cosmetología del resto de servicios de belleza."
+    }
+  },
+  "sintesis": {
+    "estado": "ok",
+    "datos": {
+      "hallazgos": [
+        {
+          "tipo": "problema",
+          "titulo": "El aval no diferencia",
+          "texto": "Todos los competidores directos usan el aval SEP como argumento central. Lo que el cliente cree que es su ventaja es en realidad el precio de entrada de la categoría."
+        },
+        {
+          "tipo": "bloqueante",
+          "titulo": "Hay un competidor más barato con el mismo aval",
+          "texto": "Instituto Bellezza ofrece diplomado avalado a $28,500 frente al ticket de $36,792 del cliente. Sin una razón explícita para la diferencia de 8 mil pesos, la comparación se pierde."
+        },
+        {
+          "tipo": "oportunidad",
+          "titulo": "Nadie acompaña después de la constancia",
+          "texto": "Ningún directo ofrece seguimiento posterior a la graduación, y ese es justo el punto donde la audiencia declara haberse quedado sola en investigaciones previas."
+        },
+        {
+          "tipo": "salida",
+          "titulo": "Vender ingreso, no formación",
+          "texto": "La unidad mental de compra no es el diplomado sino dejar de depender de un salario. El mensaje debe partir de ahí y usar la formación como el medio."
+        }
+      ],
+      "posicionamiento": {
+        "frase": "El único diplomado de la zona que no termina en la constancia, sino cuando ya cobras por tu cuenta.",
+        "sustento": "Conecta el vacío real del mercado (cero acompañamiento posterior) con el miedo principal declarado por la audiencia (volver a invertir sin que se traduzca en ingresos)."
+      },
+      "focos": [
+        {
+          "nombre": "Esteticistas empleadas que ya cobran por fuera",
+          "tipo": "prioritario",
+          "razon": "Ya validaron que pueden cobrar, tienen ingreso para pagar y su dolor es concreto: depender del spa."
+        },
+        {
+          "nombre": "Reconversión de oficio desde otro sector",
+          "tipo": "expansion",
+          "razon": "Ticket alcanzable y alta intención, pero ciclo de decisión largo y requiere más prueba antes de comprometerse."
+        },
+        {
+          "nombre": "Recién egresadas de bachillerato",
+          "tipo": "descartado",
+          "razon": "Sin capacidad de pago para un ticket de 36 mil pesos y sin la urgencia de ingreso que mueve la decisión."
+        }
+      ],
+      "oferta": {
+        "problemaReal": "La audiencia no tiene un problema de conocimiento técnico: tiene un problema de conversión de ese conocimiento en ingreso.",
+        "activosSinExplotar": [
+          "La red de egresadas ya formadas, que hoy no se usa como prueba",
+          "El consultorio propio del cliente, que puede servir de práctica supervisada"
+        ],
+        "faltaConstruir": [
+          "Un módulo de precios y captación de clientas",
+          "Un mecanismo de seguimiento a tres y seis meses de egresadas"
+        ],
+        "traduccion": [
+          {
+            "antes": "240 horas de formación",
+            "despues": "Seis meses para dejar de depender del spa",
+            "porQue": "Las horas miden el esfuerzo del que enseña; los meses miden el cambio de quien compra."
+          },
+          {
+            "antes": "Aval SEP",
+            "despues": "Puedes tramitar tu aviso sanitario y abrir legalmente",
+            "porQue": "El aval solo importa por lo que habilita, y eso nadie lo está diciendo."
+          }
+        ],
+        "titularFinal": "Deja de rentarle tus manos a un spa."
+      },
+      "precios": {
+        "diagnostico": "El ticket de $36,792 cae justo en la franja desatendida entre 30 y 40 mil pesos, pero hoy no hay nada en la oferta que justifique los 8 mil pesos de diferencia contra el competidor avalado más barato.",
+        "riesgos": [
+          "Bajar el precio para competir con Bellezza destruiría el margen sin ganar el argumento",
+          "Sostener el precio sin agregar el acompañamiento deja la objeción sin respuesta"
+        ],
+        "propuesta": [
+          { "plan": "Pago único", "monto": "$36,792", "total": "$36,792" },
+          { "plan": "Seis mensualidades", "monto": "$6,700", "total": "$40,200" }
+        ]
+      },
+      "ciclo": {
+        "tipo": "Largo y con consulta al gremio: entre el primer contacto y la inscripción median semanas y al menos una validación con colegas.",
+        "etapas": [
+          { "nombre": "Descubrimiento", "quePiensa": "Esto se ve más serio que los cursos que he visto", "fraseTipo": "¿Y este de dónde salió?" },
+          { "nombre": "Validación", "quePiensa": "Necesito que alguien del gremio me diga que sí sirve", "fraseTipo": "¿Alguien ha estudiado ahí?" },
+          { "nombre": "Comparación", "quePiensa": "Hay uno más barato con el mismo papel", "fraseTipo": "¿Por qué cuesta más que el otro?" },
+          { "nombre": "Decisión", "quePiensa": "Si no me alcanza de contado, necesito otra forma", "fraseTipo": "¿Manejan mensualidades?" }
+        ],
+        "fricciones": [
+          "No hay respuesta pública a la comparación de precio contra el competidor avalado más barato",
+          "Las mensualidades no aparecen en el material y son la objeción final más frecuente"
+        ],
+        "aceleradores": [
+          "Testimonios de egresadas con cifras de ingreso, no con adjetivos",
+          "Fecha de cierre de inscripciones visible desde el primer contacto"
+        ]
+      },
+      "pendientes": [
+        "No se pudo verificar el precio real del competidor híbrido: su sitio solo lo entrega tras dejar datos.",
+        "No hay dato público de cuántas egresadas del cliente ejercen hoy por su cuenta; conviene levantarlo antes de usarlo como argumento.",
+        "El crecimiento del sector no está desglosado por cosmetología, así que la cifra sirve de contexto y no de proyección."
+      ]
+    }
+  }
+}

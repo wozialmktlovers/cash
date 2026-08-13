@@ -1,0 +1,88 @@
+---
+import { eq } from 'drizzle-orm';
+import Base from '@/layouts/Base.astro';
+import ProgresoJob from '@/components/ProgresoJob';
+import { db, researchJobs, researchResults, clients } from '@/db';
+
+const { id } = Astro.params;
+
+const [job] = await db.select().from(researchJobs).where(eq(researchJobs.id, id!)).limit(1);
+if (!job) return new Response('Investigación no encontrada', { status: 404 });
+
+const [cliente] = await db.select().from(clients).where(eq(clients.id, job.clientId)).limit(1);
+const [resultado] = await db
+  .select({ id: researchResults.id })
+  .from(researchResults)
+  .where(eq(researchResults.jobId, job.id))
+  .limit(1);
+
+const inicial = {
+  ok: true,
+  estado: job.estado,
+  etapaActual: job.etapaActual,
+  etapas: (job.etapas ?? {}) as Record<string, string>,
+  costoUsd: Number(job.costoUsd),
+  error: job.error,
+  resultId: resultado?.id ?? null,
+};
+---
+
+<Base
+  titulo={`Investigación · ${cliente?.nombre ?? ''}`}
+  migas={`Clientes › ${cliente?.nombre ?? ''} › Investigación`}
+>
+  <div class="encabezado">
+    <div>
+      <h1>Investigación en curso</h1>
+      <p class="sub">
+        {cliente?.nombre} · {cliente?.giro}. La página se actualiza sola cada tres segundos.
+      </p>
+    </div>
+    <a href={`/clientes/${job.clientId}`} class="btn fantasma">Volver al cliente</a>
+  </div>
+
+  <section class="tarjeta">
+    <ProgresoJob client:load jobId={job.id} inicial={inicial} />
+  </section>
+</Base>
+
+<style is:global>
+  .resumen {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .etapas {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .etapas li {
+    padding: 16px 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--glass-deep);
+    transition: border-color 0.2s ease;
+  }
+
+  .etapas li.activa {
+    border-color: rgba(90, 110, 204, 0.5);
+    background: rgba(90, 110, 204, 0.08);
+  }
+
+  .etapas .cabeza {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .etapas .ayuda {
+    margin-top: 4px;
+  }
+</style>

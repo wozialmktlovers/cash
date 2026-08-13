@@ -1,0 +1,123 @@
+---
+import { eq } from 'drizzle-orm';
+import Base from '@/layouts/Base.astro';
+import { db, clients, clientLinks, clientFiles } from '@/db';
+import { revisarAntesDeInvestigar } from '@/lib/precheck';
+
+const { id } = Astro.params;
+
+const [cliente] = await db.select().from(clients).where(eq(clients.id, id!)).limit(1);
+if (!cliente) return new Response('Cliente no encontrado', { status: 404 });
+
+const enlaces = await db.select().from(clientLinks).where(eq(clientLinks.clientId, cliente.id));
+const archivos = await db.select().from(clientFiles).where(eq(clientFiles.clientId, cliente.id));
+const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok');
+
+const revision = revisarAntesDeInvestigar({
+  enlaces: enlaces.length,
+  archivosConTexto: conTexto.length,
+  ticket: cliente.ticket,
+  ciudad: cliente.ciudad,
+});
+
+const estimado = Number(process.env.COST_ESTIMATE_USD || 8);
+const tope = Number(process.env.COST_LIMIT_USD || 15);
+const dinero = (n: number) =>
+  n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+---
+
+<Base titulo={`Investigar · ${cliente.nombre}`} migas={`Clientes › ${cliente.nombre} › Investigar`}>
+  <div class="encabezado">
+    <div>
+      <h1>Investigar a {cliente.nombre}</h1>
+      <p class="sub">Cinco agentes: competencia, audiencia, canales, mercado y síntesis.</p>
+    </div>
+  </div>
+
+  <section class="tarjeta">
+    <h2>Lo que se va a enviar</h2>
+    <p class="sub">Esto es todo el contexto que recibirán los agentes.</p>
+
+    <dl class="datos">
+      <div><dt>Giro</dt><dd>{cliente.giro}</dd></div>
+      <div><dt>Producto</dt><dd>{cliente.producto}</dd></div>
+      <div><dt>Ciudad</dt><dd>{cliente.ciudad ?? '—'}</dd></div>
+      <div><dt>Ticket</dt><dd>{cliente.ticket ?? '—'}</dd></div>
+      <div><dt>Enlaces</dt><dd>{enlaces.length}</dd></div>
+      <div><dt>Archivos con texto</dt><dd>{conTexto.length} de {archivos.length}</dd></div>
+    </dl>
+  </section>
+
+  {
+    revision.advertencias.length > 0 && (
+      <section class="tarjeta">
+        <h2>Antes de lanzar</h2>
+        <p class="sub">
+          Nada de esto bloquea la investigación, pero baja la calidad del resultado.
+        </p>
+        {revision.advertencias.map((a) => <p class="aviso amarillo">{a}</p>)}
+      </section>
+    )
+  }
+
+  <section class="tarjeta">
+    <h2>Costo</h2>
+    <p class="sub">Cada investigación gasta dinero real de la cuenta de Anthropic.</p>
+
+    <dl class="datos">
+      <div><dt>Estimado</dt><dd>{dinero(estimado)}</dd></div>
+      <div><dt>Tope duro</dt><dd>{dinero(tope)}</dd></div>
+    </dl>
+
+    <p class="aviso" style="margin-top:20px">
+      Al alcanzar el tope, las etapas que falten se declaran vacías en lugar de continuar.
+    </p>
+
+    <div class="aviso rosa" id="error" hidden></div>
+
+    <div class="acciones">
+      <button type="button" class="btn" id="lanzar">Lanzar investigación</button>
+      <a href={`/clientes/${cliente.id}`} class="btn fantasma">Cancelar</a>
+    </div>
+  </section>
+</Base>
+
+<script>
+  const lanzar = document.getElementById('lanzar') as HTMLButtonElement;
+  const error = document.getElementById('error') as HTMLElement;
+  const clientId = window.location.pathname.split('/')[2];
+
+  lanzar.addEventListener('click', async () => {
+    error.hidden = true;
+    lanzar.disabled = true;
+    lanzar.textContent = 'Encolando…';
+
+    try {
+      const res = await fetch('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId }),
+      });
+      const cuerpo = await res.json();
+
+      if (cuerpo.ok) {
+        window.location.href = `/jobs/${cuerpo.id}`;
+        return;
+      }
+
+      if (res.status === 409 && cuerpo.jobId) {
+        window.location.href = `/jobs/${cuerpo.jobId}`;
+        return;
+      }
+
+      error.textContent = (cuerpo.errores ?? ['No se pudo lanzar la investigación.']).join(' · ');
+      error.hidden = false;
+    } catch {
+      error.textContent = 'No se pudo contactar al servidor.';
+      error.hidden = false;
+    }
+
+    lanzar.disabled = false;
+    lanzar.textContent = 'Lanzar investigación';
+  });
+</script>
