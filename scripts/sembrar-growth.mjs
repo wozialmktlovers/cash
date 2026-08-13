@@ -43,6 +43,19 @@ export async function sembrarGrowth() {
       SELECT id FROM growth_results WHERE client_id = ${clientId} ORDER BY version DESC LIMIT 1`;
     if (ya) {
       await sql`UPDATE growth_results SET datos = ${sql.json(datos)} WHERE id = ${ya.id}`;
+      // El job que originó la fila puede haber quedado en fallido si sus
+      // agentes no corrieron. Con datos dentro, dejarlo así hace que la ficha
+      // diga «Ninguna etapa produjo datos» junto a un manual que sí las tiene.
+      await sql`
+        UPDATE research_jobs SET estado = 'completado', error = NULL,
+          etapas = ${sql.json({ estructura: 'ok', creativos: 'ok', google: 'ok', prompts: 'ok', segmentacion: 'ok' })}
+        WHERE id = (SELECT job_id FROM growth_results WHERE id = ${ya.id})`;
+      // Los demás jobs de campaña del cliente son intentos fallidos sin
+      // resultado útil: estorban en la ficha.
+      await sql`
+        DELETE FROM research_jobs
+        WHERE client_id = ${clientId} AND tipo = 'growth' AND estado = 'fallido'
+          AND id NOT IN (SELECT job_id FROM growth_results)`;
       console.log('[seed] manual de ejemplo actualizado en /growth/' + ya.id);
       return;
     }
