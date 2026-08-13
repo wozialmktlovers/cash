@@ -4,12 +4,20 @@
   --blue: #5a6ecc;
   --yellow: #c8c800;
   --green: #10b981;
-  --glass: rgba(255, 255, 255, 0.06);
-  --glass-deep: rgba(255, 255, 255, 0.03);
-  --border: rgba(255, 255, 255, 0.12);
+  /* Escala de superficies, la misma que los documentos. Antes todo estaba al
+     mismo valor sobre un solo negro y ninguna zona se separaba de otra. */
+  --s0: #08080b;
+  --s1: #0e0e14;
+  --s2: #14141c;
+  --s3: #1c1c26;
+  --glass: var(--s2);
+  --glass-deep: var(--s1);
+  /* Los datos —costos, fechas, identificadores— en voz de evidencia. */
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  --border: rgba(255, 255, 255, 0.14);
   --border-med: rgba(255, 255, 255, 0.2);
-  --dim: rgba(255, 255, 255, 0.45);
-  --mid: rgba(255, 255, 255, 0.72);
+  --dim: rgba(255, 255, 255, 0.58);
+  --mid: rgba(255, 255, 255, 0.82);
   --radius: 16px;
   --radius-sm: 10px;
 }
@@ -561,3 +569,15 @@ td .secundario {
     font-size: 26px;
   }
 }
+
+/* ── Voz de evidencia ────────────────────────────────────────────────
+   Costos, fechas e identificadores en monoespaciada: son datos que se
+   comparan entre filas, y la cifra tabular alinea la comparación. */
+table td:nth-child(3),
+table td:nth-child(1) {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.82rem;
+}
+/* La cabecera se separa del cuerpo con superficie, no solo con línea. */
+table thead { background: rgba(255, 255, 255, 0.028); }

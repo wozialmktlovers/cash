@@ -194,6 +194,50 @@ body{padding-top:64px; overflow-y:auto; overflow-x:hidden; min-height:100vh;}
 .fmt-hd .slots-car .slot-p{font-size:0.75rem;}
 .fmt-hd .slots-car .slot-t{font-size:0.75rem;}
 
+/* ── Placa de sección ────────────────────────────────── */
+/* La firma del documento. El numeral crece hasta ser una marca de expediente
+   y la espina de color corre a lo alto de la sección: al desplazarse se nota
+   el cambio de capítulo antes de leer el título. Alterna el suelo entre
+   secciones para que dos capítulos seguidos no se fundan en una mancha. */
+.sec{position:relative;background:var(--s0);}
+.sec:nth-of-type(even){background:var(--s1);}
+.sec::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
+  background:linear-gradient(180deg,var(--pink) 0%,rgba(212,104,138,.12) 38%,transparent 72%);
+}
+.sec:nth-of-type(3n+2)::before{
+  background:linear-gradient(180deg,var(--blue) 0%,rgba(90,110,204,.12) 38%,transparent 72%);
+}
+.sec:nth-of-type(3n)::before{
+  background:linear-gradient(180deg,var(--yellow) 0%,rgba(200,200,0,.1) 38%,transparent 72%);
+}
+.shead{position:relative;}
+.shead{align-items:baseline;gap:18px;}
+/* El machote encierra el número en una caja de 54px. Aquí se suelta: la marca
+   de expediente es el numeral mismo, no su recuadro. */
+.shead-n{
+  width:auto!important;height:auto!important;border:none;background:none;
+  box-shadow:none;border-radius:0;flex-shrink:0;
+  font-family:var(--mono);
+  font-size:clamp(3.4rem,7vw,5.6rem);
+  font-weight:700;line-height:.8;letter-spacing:-.06em;
+  align-self:flex-start;
+}
+/* Sin el aro de degradado del recuadro: ya no hay recuadro. */
+.shead-n::after{display:none;}
+/* El degradado del machote se conserva pero atenuado: es marca, no titular.
+   El tamaño se pone en el span porque el machote se lo fija ahí. */
+.shead-n>*{
+  font-family:var(--mono);
+  font-size:clamp(3.4rem,7vw,5.6rem)!important;
+  font-weight:700;line-height:.8;letter-spacing:-.06em;
+  opacity:.4;
+}
+.skicker{
+  font-family:var(--mono);
+  letter-spacing:.16em;text-transform:uppercase;
+}
+
 @media (max-width:768px){
   .nav-links{display:none;}
   .slot{width:100%!important;height:auto!important;aspect-ratio:1/1;}

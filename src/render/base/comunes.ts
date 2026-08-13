@@ -38,11 +38,22 @@ strong{color:rgba(255,255,255,.96);font-weight:600;}
 
 /* ── Cards ───────────────────────────────────────────── */
 .card{
-  background:var(--glass);border:1px solid var(--border);
+  background:var(--s2);border:1px solid var(--border);
   border-radius:var(--radius);padding:24px;
+  position:relative;
   transition:border-color .3s,background .3s,transform .3s;
 }
-.card:hover{background:rgba(255,255,255,.085);border-color:var(--border-med);}
+/* Filo superior de color: el papel de la tarjeta se lee antes que su texto.
+   Rosa hallazgo, azul mercado, amarillo cautela, verde validado. */
+.card-pink::before,.card-blue::before,.card-yellow::before,.card-green::before{
+  content:'';position:absolute;top:-1px;left:16px;right:16px;height:2px;
+  border-radius:2px;
+}
+.card-pink::before{background:linear-gradient(90deg,var(--pink),transparent);}
+.card-blue::before{background:linear-gradient(90deg,var(--blue),transparent);}
+.card-yellow::before{background:linear-gradient(90deg,var(--yellow),transparent);}
+.card-green::before{background:linear-gradient(90deg,var(--green),transparent);}
+.card:hover{background:var(--s3);border-color:var(--border-med);}
 .card-pink{border-color:rgba(212,104,138,.36);background:rgba(212,104,138,.06);}
 .card-blue{border-color:rgba(90,110,204,.36);background:rgba(90,110,204,.06);}
 .card-yellow{border-color:rgba(200,200,0,.32);background:rgba(200,200,0,.05);}
@@ -86,12 +97,17 @@ strong{color:rgba(255,255,255,.96);font-weight:600;}
 .b-gray{background:rgba(255,255,255,.08);color:var(--mid);border:1px solid var(--border);}
 
 /* ── Stats ───────────────────────────────────────────── */
-.stat{background:var(--glass-deep);border:1px solid var(--border);border-radius:var(--radius-sm);padding:18px;}
-.stat-v{font-size:clamp(1.5rem,2.6vw,2.1rem);font-weight:800;line-height:1.05;letter-spacing:-.02em;}
+/* Las cifras de portada son dato, no titular: van en la voz de la evidencia
+   y sobre la superficie más baja, para que no compitan con el titular. */
+.stat{background:var(--s1);border:1px solid var(--border);border-radius:var(--radius-sm);padding:18px 18px 16px;position:relative;overflow:hidden;}
+.stat::after{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--pink),transparent);}
+.stat-v{font-family:var(--mono);font-size:clamp(1.5rem,2.6vw,2.1rem);font-weight:700;line-height:1.05;letter-spacing:-.03em;}
 .stat-l{font-size:0.75rem;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-top:6px;font-weight:600;}
 
 /* ── Tabla ───────────────────────────────────────────── */
 .tbl{width:100%;border-collapse:collapse;font-size:0.88rem;}
+/* La cabecera de tabla se separa del cuerpo con superficie, no solo con línea. */
+.tbl thead{background:rgba(255,255,255,.028);}
 .tbl th{
   text-align:left;padding:11px 13px;font-size:0.75rem;font-weight:800;
   text-transform:uppercase;letter-spacing:.1em;color:var(--dim);
@@ -100,7 +116,7 @@ strong{color:rgba(255,255,255,.96);font-weight:600;}
 .tbl td{padding:12px 13px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mid);vertical-align:top;}
 .tbl tbody tr:last-child td{border-bottom:none;}
 .tbl tbody tr:hover td{background:rgba(255,255,255,.04);}
-.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--glass-deep);}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--s1);}
 .tbl-wrap::-webkit-scrollbar{height:5px;}
 .tbl-wrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px;}
 
@@ -179,7 +195,7 @@ strong{color:rgba(255,255,255,.96);font-weight:600;}
 .av-blue{background:linear-gradient(135deg,rgba(90,110,204,.85),rgba(200,200,0,.5));}
 
 /* ── Fuente ──────────────────────────────────────────── */
-.src{font-size:0.75rem;color:rgba(255,255,255,.46);margin-top:9px;letter-spacing:.02em;line-height:1.6;}
+.src{font-family:var(--mono);font-size:0.75rem;color:rgba(255,255,255,.5);margin-top:9px;letter-spacing:0;line-height:1.7;}
 .src a{color:rgba(255,255,255,.6);text-decoration:underline;text-underline-offset:2px;}
 
 /* ── Alert ───────────────────────────────────────────── */

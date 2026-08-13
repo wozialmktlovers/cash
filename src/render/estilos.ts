@@ -8,6 +8,22 @@
 import { TOKENS, CSS_COMUN } from './base';
 
 const CSS_DECK = `
+/* ── Ritmo de láminas ────────────────────────────────── */
+/* Cada lámina lleva su espina de color en el canto izquierdo y alterna el
+   suelo, para que al pasar de una a otra se note el cambio antes de leer.
+   El machote las tenía todas al mismo negro y el deck se leía como una sola
+   superficie infinita. */
+.panel{background:var(--s0);}
+.panel:nth-child(even){background:var(--s1);}
+.panel::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:2px;z-index:2;
+  background:linear-gradient(180deg,var(--pink) 0%,rgba(212,104,138,.1) 40%,transparent 75%);
+}
+.panel:nth-child(3n+2)::before{background:linear-gradient(180deg,var(--blue) 0%,rgba(90,110,204,.1) 40%,transparent 75%);}
+.panel:nth-child(3n)::before{background:linear-gradient(180deg,var(--yellow) 0%,rgba(200,200,0,.09) 40%,transparent 75%);}
+
+/* El número de lámina es referencia, no titular: voz de evidencia. */
+.pnum{font-family:var(--mono);letter-spacing:.14em;}
 /* El deck desplaza láminas: el body no se desplaza. */
 body{overflow:hidden; height:100vh; height:100dvh;}
 /* ── DECK: scroll horizontal ─────────────────────────── */

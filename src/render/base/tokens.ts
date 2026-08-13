@@ -4,9 +4,18 @@
 
 export const TOKENS = `
 :root{
-  --black:#0a0a0a; --white:#fff;
+  --black:#08080b; --white:#fff;
   --pink:#d4688a; --blue:#5a6ecc; --yellow:#c8c800; --green:#10b981;
-  --glass:rgba(255,255,255,.06); --glass-deep:rgba(255,255,255,.03);
+  /* Escala de superficies. Antes había un solo negro y todo flotaba al mismo
+     valor, así que ninguna sección se separaba de la siguiente. Cuatro
+     niveles: suelo, banda de sección, tarjeta y tarjeta elevada. */
+  --s0:#08080b; --s1:#0e0e14; --s2:#14141c; --s3:#1c1c26;
+  --glass:var(--s2); --glass-deep:var(--s1);
+
+  /* Tipografía de evidencia. Lo verificable —fuentes, identificadores, UTMs,
+     medidas, conteos— va en monoespaciada; lo juzgado va en Poppins. Es la
+     distinción que define este producto, así que la carga la tipografía. */
+  --mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
   --border:rgba(255,255,255,.14); --border-med:rgba(255,255,255,.24);
   /* Subidos desde .45 y .72 del machote: es el detalle que primero se pierde
      al recomprimirse la pantalla compartida. */
@@ -22,7 +31,7 @@ html{
 }
 body{
   font-family:'Poppins',-apple-system,sans-serif;
-  background:var(--black); color:var(--white);
+  background:var(--s0); color:var(--white);
   line-height:1.65;
   /* El alto y el overflow NO van aquí: el deck bloquea el scroll del body
      porque desplaza láminas, y el manual de campaña se lee de corrido y tiene
