@@ -3,6 +3,8 @@ import { escapar } from '@/render/panels/comunes';
 export type OpcionesBarra = {
   clienteId: string;
   clienteNombre: string;
+  /** Nombre del negocio en forma de URL. Va delante del token en el link. */
+  clienteSlug: string;
   documentoId: string;
   version: number;
   tipo: 'research' | 'growth';
@@ -20,7 +22,7 @@ export type OpcionesBarra = {
  * y eso viaja en `tipo`.
  */
 export function barraOperador(o: OpcionesBarra): string {
-  const url = o.tokenActivo ? `${o.base}/p/${o.tokenActivo}` : '';
+  const url = o.tokenActivo ? `${o.base}/p/${o.clienteSlug}/${o.tokenActivo}` : '';
   const regenerar = o.tipo === 'growth'
     ? `/clientes/${escapar(o.clienteId)}`
     : `/clientes/${escapar(o.clienteId)}/investigar`;

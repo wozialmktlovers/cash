@@ -1,0 +1,17 @@
+---
+import { resolverDocumentoPublico } from '@/lib/documento-publico';
+
+const { slug, token } = Astro.params;
+
+const r = await resolverDocumentoPublico(token!);
+if (r.tipo === 'no-encontrado') return new Response('No encontrado', { status: 404 });
+
+// El nombre del negocio es cosmético: quien manda es el token. Si no coincide
+// —porque el cliente cambió de nombre o alguien editó la URL— se redirige a la
+// forma canónica en vez de servir el documento bajo un nombre que no es.
+if (slug !== r.slug) return Astro.redirect(`/p/${r.slug}/${token}`, 301);
+
+const html = r.html;
+---
+
+<Fragment set:html={html} />

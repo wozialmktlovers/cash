@@ -3,6 +3,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db, researchResults, clients, shareLinks } from '@/db';
 import { renderizarPresentacion } from '@/render/presentation';
 import { barraOperador } from '@/render/barra-operador';
+import { slugificar } from '@/lib/slug';
 
 const { id } = Astro.params;
 
@@ -23,7 +24,7 @@ const html = renderizarPresentacion(
   r.datos as any,
   { cliente: c.nombre, giro: c.giro, fecha: r.createdAt.toISOString().slice(0, 10) },
   barraOperador({
-    clienteId: c.id, clienteNombre: c.nombre, documentoId: r.id,
+    clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
     version: r.version, tipo: 'research', tokenActivo: activo?.token ?? null, base,
   }),
 );

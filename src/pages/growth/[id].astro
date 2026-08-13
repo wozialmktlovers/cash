@@ -3,6 +3,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db, growthResults, clients, clientLinks, shareLinks } from '@/db';
 import { renderizarManual } from '@/render/growth/manual';
 import { barraOperador } from '@/render/barra-operador';
+import { slugificar } from '@/lib/slug';
 
 const { id } = Astro.params;
 
@@ -34,7 +35,7 @@ const html = renderizarManual(
     creadoEn: r.createdAt,
   },
   barraOperador({
-    clienteId: c.id, clienteNombre: c.nombre, documentoId: r.id,
+    clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
     version: r.version, tipo: 'growth', tokenActivo: activo?.token ?? null, base,
   }),
 );
