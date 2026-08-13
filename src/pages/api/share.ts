@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
-import { db, researchResults } from '@/db';
+import { db, researchResults, growthResults } from '@/db';
 import { crearShareLink, revocarShareLink } from '@/lib/share';
 
 const json = (cuerpo: unknown, status = 200) =>
@@ -16,7 +16,7 @@ function baseUrl(request: Request): string {
 }
 
 export const POST: APIRoute = async ({ request }) => {
-  let crudo: { resultId?: string };
+  let crudo: { resultId?: string; tipo?: string };
   try {
     crudo = await request.json();
   } catch {
@@ -26,14 +26,16 @@ export const POST: APIRoute = async ({ request }) => {
   const resultId = String(crudo.resultId ?? '').trim();
   if (!resultId) return json({ ok: false, errores: ['Falta resultId'] }, 400);
 
+  const tipo = crudo.tipo === 'growth' ? 'growth' : 'research';
+
   const [resultado] = await db
     .select({ id: researchResults.id })
-    .from(researchResults)
-    .where(eq(researchResults.id, resultId))
+    .from(tipo === 'growth' ? growthResults : researchResults)
+    .where(eq(tipo === 'growth' ? growthResults.id : researchResults.id, resultId))
     .limit(1);
   if (!resultado) return json({ ok: false, errores: ['El resultado no existe'] }, 404);
 
-  const token = await crearShareLink(resultId, 'research');
+  const token = await crearShareLink(resultId, tipo);
   return json({ ok: true, token, url: `${baseUrl(request)}/p/${token}` }, 201);
 };
 

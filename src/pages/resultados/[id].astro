@@ -1,7 +1,8 @@
 ---
 import { eq, and, desc } from 'drizzle-orm';
 import { db, researchResults, clients, shareLinks } from '@/db';
-import { renderizarPresentacion, escapar } from '@/render/presentation';
+import { renderizarPresentacion } from '@/render/presentation';
+import { barraOperador } from '@/render/barra-operador';
 
 const { id } = Astro.params;
 
@@ -11,145 +12,20 @@ if (!r) return new Response('Resultado no encontrado', { status: 404 });
 const [c] = await db.select().from(clients).where(eq(clients.id, r.clientId)).limit(1);
 if (!c) return new Response('Cliente no encontrado', { status: 404 });
 
-const links = await db
-  .select()
-  .from(shareLinks)
+const links = await db.select().from(shareLinks)
   .where(and(eq(shareLinks.documentoId, r.id), eq(shareLinks.documentoTipo, 'research')))
   .orderBy(desc(shareLinks.createdAt));
 
 const activo = links.find((l) => !l.revocado) ?? null;
 const base = (process.env.PUBLIC_BASE_URL ?? Astro.url.origin).replace(/\/+$/, '');
 
-const barra = `
-<div id="barra-op">
-  <div class="bo-fila">
-    <span class="bo-marca">Wozial Studio</span>
-    <span class="bo-cliente">${escapar(c.nombre)} · v${r.version}</span>
-    <button class="bo-btn bo-menu" id="bo-menu" type="button" aria-expanded="false" aria-controls="bo-panel">Acciones</button>
-  </div>
-
-  <div class="bo-panel" id="bo-panel">
-    <a class="bo-btn" href="/clientes/${escapar(c.id)}">Cliente</a>
-    <a class="bo-btn" href="/clientes/${escapar(c.id)}/investigar">Regenerar</a>
-    <a class="bo-btn" href="/api/resultados/${escapar(r.id)}" target="_blank" rel="noopener">JSON crudo</a>
-    <span class="bo-sep"></span>
-    <span id="bo-link" class="bo-link" ${activo ? '' : 'hidden'}>
-      <input id="bo-url" readonly value="${activo ? escapar(`${base}/p/${activo.token}`) : ''}" data-token="${activo ? escapar(activo.token) : ''}">
-      <button class="bo-btn" id="bo-copiar" type="button">Copiar</button>
-      <button class="bo-btn bo-peligro" id="bo-revocar" type="button">Revocar</button>
-    </span>
-    <button class="bo-btn bo-primario" id="bo-crear" type="button" ${activo ? 'hidden' : ''}>Crear link público</button>
-    <span class="bo-estado" id="bo-estado"></span>
-  </div>
-</div>
-<style>
-  :root{--barra-h:46px;}
-
-  /* El atributo hidden debe ganarle a cualquier display propio de la barra.
-     Sin esto se veían a la vez «Crear link público» y el link ya creado. */
-  #barra-op [hidden]{display:none !important;}
-
-  /* z-index 101: por encima de la .nav-bar del machote, que usa 100. */
-  #barra-op{position:fixed;top:0;left:0;right:0;z-index:101;
-    background:rgba(10,10,10,.94);backdrop-filter:blur(12px);
-    border-bottom:1px solid rgba(255,255,255,.14);
-    font-family:'Poppins',sans-serif;font-size:12.5px;}
-
-  #barra-op .bo-fila{display:flex;align-items:center;gap:10px;
-    height:var(--barra-h);padding:0 16px;}
-  #barra-op .bo-marca{font-weight:700;letter-spacing:.2em;text-transform:uppercase;
-    font-size:10.5px;color:#d4688a;white-space:nowrap;}
-  #barra-op .bo-cliente{color:rgba(255,255,255,.55);flex:1;min-width:0;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-
-  #barra-op .bo-btn{display:inline-block;padding:6px 11px;border-radius:8px;
-    border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8);
-    text-decoration:none;cursor:pointer;background:transparent;
-    font-family:inherit;font-size:12.5px;white-space:nowrap;}
-  #barra-op .bo-btn:hover{color:#fff;border-color:#d4688a;}
-  #barra-op .bo-primario{background:#d4688a;border-color:#d4688a;color:#fff;font-weight:600;}
-  #barra-op .bo-peligro{color:#ffb3c8;border-color:rgba(212,104,138,.45);}
-  #barra-op .bo-link{display:inline-flex;align-items:center;gap:7px;min-width:0;}
-  #barra-op input{width:min(320px,60vw);padding:6px 10px;border-radius:8px;
-    border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);
-    color:#fff;font-family:inherit;font-size:12px;}
-  #barra-op .bo-estado{color:rgba(255,255,255,.55);}
-  #barra-op .bo-sep{flex:1;}
-
-  /* Móvil: las acciones viven en un desplegable que flota sobre la
-     presentación, para que la barra mida siempre lo mismo. */
-  #barra-op .bo-panel{display:none;flex-wrap:wrap;gap:8px;align-items:center;
-    padding:12px 16px;border-top:1px solid rgba(255,255,255,.1);
-    background:rgba(10,10,10,.97);}
-  #barra-op.abierta .bo-panel{display:flex;}
-
-  @media (min-width:900px){
-    #barra-op .bo-menu{display:none;}
-    #barra-op .bo-fila{padding-right:10px;}
-    #barra-op{display:flex;align-items:center;}
-    #barra-op .bo-fila{flex:0 0 auto;}
-    #barra-op .bo-panel{display:flex;flex:1;border-top:none;background:transparent;
-      padding:0 16px 0 0;height:var(--barra-h);flex-wrap:nowrap;}
-  }
-
-  /* Todo lo fijo del machote baja lo que mide la barra. No se toca el padding
-     de los paneles: es el del machote y define el aire de cada lámina. */
-  .nav-bar{top:var(--barra-h);}
-  .prog{top:calc(var(--barra-h) + 62px);}
-  .deck{margin-top:var(--barra-h);height:calc(100vh - var(--barra-h));height:calc(100dvh - var(--barra-h));}
-
-  @media (max-width:420px){
-    .prog{top:calc(var(--barra-h) + 56px);}
-  }
-</style>
-<script>
-(function(){
-  var barra=document.getElementById('barra-op');
-  var estado=document.getElementById('bo-estado');
-  var envoltura=document.getElementById('bo-link');
-  var campo=document.getElementById('bo-url');
-  var crear=document.getElementById('bo-crear');
-  var menu=document.getElementById('bo-menu');
-  var avisar=function(t){estado.textContent=t;setTimeout(function(){estado.textContent='';},2600);};
-
-  menu.addEventListener('click',function(){
-    var abierta=barra.classList.toggle('abierta');
-    menu.setAttribute('aria-expanded',String(abierta));
-    menu.textContent=abierta?'Cerrar':'Acciones';
-  });
-
-  crear.addEventListener('click',async function(){
-    crear.disabled=true;
-    try{
-      var res=await fetch('/api/share',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({resultId:'${escapar(r.id)}'})});
-      var b=await res.json();
-      if(b.ok){campo.value=b.url;campo.dataset.token=b.token;envoltura.hidden=false;crear.hidden=true;avisar('Link creado.');}
-      else{avisar('No se pudo crear.');}
-    }catch(e){avisar('Sin conexión.');}
-    crear.disabled=false;
-  });
-
-  document.getElementById('bo-copiar').addEventListener('click',function(){
-    campo.select();
-    navigator.clipboard.writeText(campo.value).then(function(){avisar('Copiado.');},function(){avisar('Copia manual.');});
-  });
-
-  document.getElementById('bo-revocar').addEventListener('click',async function(){
-    try{
-      var res=await fetch('/api/share',{method:'DELETE',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({token:campo.dataset.token})});
-      if(res.ok){envoltura.hidden=true;crear.hidden=false;avisar('Link revocado. Ahora devuelve 404.');}
-      else{avisar('No se pudo revocar.');}
-    }catch(e){avisar('Sin conexión.');}
-  });
-})();
-</script>`;
-
 const html = renderizarPresentacion(
   r.datos as any,
   { cliente: c.nombre, giro: c.giro, fecha: r.createdAt.toISOString().slice(0, 10) },
-  barra,
+  barraOperador({
+    clienteId: c.id, clienteNombre: c.nombre, documentoId: r.id,
+    version: r.version, tipo: 'research', tokenActivo: activo?.token ?? null, base,
+  }),
 );
 ---
 

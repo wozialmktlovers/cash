@@ -3,7 +3,7 @@ import { eq, desc } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import LinksEditor from '@/components/LinksEditor';
 import FilesUploader from '@/components/FilesUploader';
-import { db, clients, clientLinks, clientFiles, researchJobs, researchResults } from '@/db';
+import { db, clients, clientLinks, clientFiles, researchJobs, researchResults, growthResults } from '@/db';
 
 const { id } = Astro.params;
 
@@ -22,7 +22,19 @@ const resultados = await db
   .from(researchResults)
   .where(eq(researchResults.clientId, cliente.id));
 
+const manuales = await db
+  .select()
+  .from(growthResults)
+  .where(eq(growthResults.clientId, cliente.id))
+  .orderBy(desc(growthResults.version));
+
 const resultadoPorJob = new Map(resultados.map((r) => [r.jobId, r.id]));
+const manualPorJob = new Map(manuales.map((m) => [m.jobId, m.id]));
+
+// El manual de campaña parte de la investigación: sin una completada no hay
+// nada sobre lo que razonar, así que el botón se ofrece deshabilitado con su
+// razón en vez de dejar encolar un job que va a fallar.
+const puedeGrowth = resultados.length > 0;
 
 const dinero = (n: number) =>
   n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
@@ -47,6 +59,14 @@ const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok').length;
     </div>
     <div class="acciones" style="margin-top:0">
       <a href={`/clientes/${cliente.id}/investigar`} class="btn">Investigar</a>
+      {puedeGrowth ? (
+        <button type="button" class="btn" id="generar-growth">Generar manual de campaña</button>
+      ) : (
+        <button type="button" class="btn" disabled
+          title="Este cliente aún no tiene una investigación completada. El manual de campaña parte de ella.">
+          Generar manual de campaña
+        </button>
+      )}
       <button type="button" class="btn peligro" id="borrar">Eliminar</button>
       <span id="confirmar-borrado" class="confirmar" hidden>
         <span class="ayuda">Se borran también enlaces, archivos e investigaciones.</span>
@@ -155,6 +175,7 @@ const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok').length;
                 <th>Fecha</th>
                 <th>Estado</th>
                 <th>Costo</th>
+                <th>Tipo</th>
                 <th>Resultado</th>
               </tr>
             </thead>
@@ -162,13 +183,18 @@ const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok').length;
               {jobs.map((j) => (
                 <tr>
                   <td>{fechaHora(j.createdAt)}</td>
+                  <td>{j.tipo === 'growth' ? 'Campaña' : 'Investigación'}</td>
                   <td>
                     <span class={`etiqueta ${j.estado}`}>{j.estado}</span>
                     {j.error && <div class="secundario">{j.error}</div>}
                   </td>
                   <td>{dinero(Number(j.costoUsd))}</td>
                   <td>
-                    {resultadoPorJob.has(j.id) ? (
+                    {manualPorJob.has(j.id) ? (
+                      <a href={`/growth/${manualPorJob.get(j.id)}`} class="principal">
+                        Ver manual de campaña
+                      </a>
+                    ) : resultadoPorJob.has(j.id) ? (
                       <a href={`/resultados/${resultadoPorJob.get(j.id)}`} class="principal">
                         Ver presentación
                       </a>
@@ -289,3 +315,31 @@ const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok').length;
     max-width: 260px;
   }
 </style>
+
+<script>
+  // Encola el manual de campaña. El botón solo existe si ya hay una
+  // investigación completada, pero el servidor lo vuelve a comprobar: la
+  // interfaz no es una garantía.
+  const boton = document.getElementById('generar-growth');
+  boton?.addEventListener('click', async () => {
+    const b = boton as HTMLButtonElement;
+    b.disabled = true;
+    const original = b.textContent;
+    b.textContent = 'Encolando…';
+    try {
+      const res = await fetch('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: location.pathname.split('/')[2], tipo: 'growth' }),
+      });
+      const cuerpo = await res.json();
+      if (cuerpo.ok) { location.href = `/jobs/${cuerpo.id}`; return; }
+      if (cuerpo.jobId) { location.href = `/jobs/${cuerpo.jobId}`; return; }
+      alert(cuerpo.errores?.join('\n') ?? 'No se pudo encolar.');
+    } catch {
+      alert('Sin conexión con el servidor.');
+    }
+    b.disabled = false;
+    b.textContent = original;
+  });
+</script>

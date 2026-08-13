@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { and, eq, or } from 'drizzle-orm';
-import { db, researchJobs, clients } from '@/db';
+import { db, researchJobs, researchResults, clients } from '@/db';
+import { puedeGenerarGrowth } from '@/lib/precheck';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -9,7 +10,7 @@ const json = (cuerpo: unknown, status = 200) =>
   });
 
 export const POST: APIRoute = async ({ request }) => {
-  let crudo: { clientId?: string };
+  let crudo: { clientId?: string; tipo?: string };
   try {
     crudo = await request.json();
   } catch {
@@ -19,12 +20,22 @@ export const POST: APIRoute = async ({ request }) => {
   const clientId = String(crudo.clientId ?? '').trim();
   if (!clientId) return json({ ok: false, errores: ['Falta clientId'] }, 400);
 
+  const tipo = crudo.tipo === 'growth' ? 'growth' : 'research';
+
   const [cliente] = await db
     .select({ id: clients.id })
     .from(clients)
     .where(eq(clients.id, clientId))
     .limit(1);
   if (!cliente) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
+
+  // El manual parte de la investigación: sin ella no hay nada que razonar.
+  if (tipo === 'growth') {
+    const [previo] = await db.select({ id: researchResults.id })
+      .from(researchResults).where(eq(researchResults.clientId, clientId)).limit(1);
+    const r = puedeGenerarGrowth({ tieneResultado: Boolean(previo) });
+    if (!r.ok) return json({ ok: false, errores: [r.razon] }, 409);
+  }
 
   const [enCurso] = await db
     .select({ id: researchJobs.id })
@@ -44,7 +55,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const [creado] = await db
     .insert(researchJobs)
-    .values({ clientId, estado: 'encolado', etapas: {} })
+    .values({ clientId, tipo, estado: 'encolado', etapas: {} })
     .returning({ id: researchJobs.id });
 
   return json({ ok: true, id: creado.id }, 201);

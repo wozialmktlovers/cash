@@ -8,6 +8,7 @@ type Estado = {
   costoUsd: number;
   error: string | null;
   resultId: string | null;
+  tipo?: 'research' | 'growth';
 };
 
 const ETAPAS = [
@@ -86,7 +87,9 @@ export default function ProgresoJob({ jobId, inicial }: { jobId: string; inicial
 
       {terminado && estado.resultId && (
         <div className="acciones">
-          <a href={`/resultados/${estado.resultId}`} className="btn">Ver la presentación</a>
+          <a href={estado.tipo === 'growth' ? `/growth/${estado.resultId}` : `/resultados/${estado.resultId}`} className="btn">
+            {estado.tipo === 'growth' ? 'Ver el manual de campaña' : 'Ver la presentación'}
+          </a>
         </div>
       )}
 

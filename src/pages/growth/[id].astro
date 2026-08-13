@@ -1,0 +1,43 @@
+---
+import { eq, and, desc } from 'drizzle-orm';
+import { db, growthResults, clients, clientLinks, shareLinks } from '@/db';
+import { renderizarManual } from '@/render/growth/manual';
+import { barraOperador } from '@/render/barra-operador';
+
+const { id } = Astro.params;
+
+const [r] = await db.select().from(growthResults).where(eq(growthResults.id, id!)).limit(1);
+if (!r) return new Response('Manual no encontrado', { status: 404 });
+
+const [c] = await db.select().from(clients).where(eq(clients.id, r.clientId)).limit(1);
+if (!c) return new Response('Cliente no encontrado', { status: 404 });
+
+// El destino de las URLs etiquetadas es el sitio registrado del cliente. Sin
+// él la tabla de trazabilidad se declara vacía en vez de inventar enlaces.
+const [sitio] = await db.select().from(clientLinks)
+  .where(and(eq(clientLinks.clientId, c.id), eq(clientLinks.tipo, 'sitio'))).limit(1);
+
+const links = await db.select().from(shareLinks)
+  .where(and(eq(shareLinks.documentoId, r.id), eq(shareLinks.documentoTipo, 'growth')))
+  .orderBy(desc(shareLinks.createdAt));
+
+const activo = links.find((l) => !l.revocado) ?? null;
+const base = (process.env.PUBLIC_BASE_URL ?? Astro.url.origin).replace(/\/+$/, '');
+
+const html = renderizarManual(
+  r.datos as any,
+  {
+    cliente: c.nombre, producto: c.producto,
+    fecha: r.createdAt.toISOString().slice(0, 10),
+    ciudad: c.ciudad ?? undefined,
+    destino: sitio?.url,
+    creadoEn: r.createdAt,
+  },
+  barraOperador({
+    clienteId: c.id, clienteNombre: c.nombre, documentoId: r.id,
+    version: r.version, tipo: 'growth', tokenActivo: activo?.token ?? null, base,
+  }),
+);
+---
+
+<Fragment set:html={html} />
