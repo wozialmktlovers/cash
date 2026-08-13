@@ -19,12 +19,13 @@ Tu tarea: mapear la competencia del cliente.
 - Referentes: las cuentas más grandes del nicho, con su número de seguidores y país.
 - Hallazgos: qué revela el mapa de precios. Si hay una franja desatendida, dilo.`;
 
-export async function correrCompetencia(ctx: string) {
+export async function correrCompetencia(ctx: string, onUso?: (e: number, s: number) => boolean) {
   return pedirJson<Competencia>({
     modelo: process.env.MODEL_RESEARCH || 'claude-sonnet-5',
     sistema: SISTEMA,
     usuario: `${ctx}\n\nInvestiga la competencia y devuelve el JSON del esquema.`,
     schema: competenciaSchema,
     buscarWeb: true,
+    onUso,
   });
 }

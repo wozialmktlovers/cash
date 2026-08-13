@@ -15,7 +15,8 @@ Criterios:
 
 export async function correrSintesis(
   ctx: string,
-  previos: { competencia?: Competencia; audiencia?: Audiencia; canales?: Canales; mercado?: Mercado }
+  previos: { competencia?: Competencia; audiencia?: Audiencia; canales?: Canales; mercado?: Mercado },
+  onUso?: (e: number, s: number) => boolean,
 ) {
   const bloques = Object.entries(previos)
     .filter(([, v]) => v)
@@ -35,6 +36,7 @@ export async function correrSintesis(
     usuario: `${ctx}\n\n## Investigaciones previas\n${bloques}${aviso}\n\nDevuelve el JSON del esquema de síntesis.`,
     schema: sintesisSchema,
     buscarWeb: false,
+    onUso,
     // En Opus 5 el razonamiento está activo por omisión y consume del mismo
     // presupuesto que el texto. La síntesis es el JSON más grande del pipeline,
     // así que se le da holgura para que no se corte a la mitad.

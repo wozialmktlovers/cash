@@ -12,12 +12,13 @@ Tu tarea: dimensionar el mercado con datos oficiales.
 - crecimiento: la tendencia del sector si hay serie histórica que la sustente.
   Si no la hay, usa null. No proyectes una cifra que no puedas respaldar.`;
 
-export async function correrMercado(ctx: string) {
+export async function correrMercado(ctx: string, onUso?: (e: number, s: number) => boolean) {
   return pedirJson<Mercado>({
     modelo: process.env.MODEL_RESEARCH || 'claude-sonnet-5',
     sistema: SISTEMA,
     usuario: `${ctx}\n\nInvestiga el mercado y devuelve el JSON del esquema.`,
     schema: mercadoSchema,
     buscarWeb: true,
+    onUso,
   });
 }

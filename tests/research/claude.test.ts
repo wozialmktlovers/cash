@@ -88,6 +88,42 @@ describe('pedirJson', () => {
     expect(sinStream).not.toHaveBeenCalled();
   });
 
+  it('deja de reanudar el turno si el que llama dice que se acabó el presupuesto', async () => {
+    // La búsqueda web pausa el turno cada diez iteraciones. Reanudar sin mirar
+    // el gasto es la vía más rápida de pasarse del tope dentro de una sola etapa.
+    const { pedirJson } = await import('@/research/claude');
+    crear.mockResolvedValue(respuesta('', 100, 50, { stop_reason: 'pause_turn' }));
+    await expect(pedirJson({
+      modelo: 'claude-sonnet-5', sistema: 's', usuario: 'u', schema: esquema,
+      buscarWeb: true, onUso: () => false,
+    })).rejects.toThrow(/presupuesto|tope/i);
+    expect(crear).toHaveBeenCalledTimes(1);
+  });
+
+  it('sigue reanudando mientras haya presupuesto', async () => {
+    const { pedirJson } = await import('@/research/claude');
+    crear
+      .mockResolvedValueOnce(respuesta('', 100, 50, { stop_reason: 'pause_turn' }))
+      .mockResolvedValueOnce(respuesta('{"valor":"listo"}', 80, 20));
+    const r = await pedirJson({
+      modelo: 'claude-sonnet-5', sistema: 's', usuario: 'u', schema: esquema,
+      buscarWeb: true, onUso: () => true,
+    });
+    expect(r.datos.valor).toBe('listo');
+    expect(crear).toHaveBeenCalledTimes(2);
+  });
+
+  it('reporta el consumo de cada respuesta al que llama', async () => {
+    const { pedirJson } = await import('@/research/claude');
+    crear.mockResolvedValueOnce(respuesta('{"valor":"x"}', 120, 40));
+    const vistos: Array<[number, number]> = [];
+    await pedirJson({
+      modelo: 'claude-sonnet-5', sistema: 's', usuario: 'u', schema: esquema,
+      onUso: (e, s) => { vistos.push([e, s]); return true; },
+    });
+    expect(vistos).toEqual([[120, 40]]);
+  });
+
   it('avisa cuando la respuesta se cortó por límite de tokens', async () => {
     const { pedirJson } = await import('@/research/claude');
     crear.mockResolvedValue(respuesta('{"valor":"a medio', 100, 50, { stop_reason: 'max_tokens' }));

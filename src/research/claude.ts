@@ -31,8 +31,15 @@ export async function pedirJson<T>(opts: {
   schema: ZodType<T>;
   buscarWeb?: boolean;
   maxTokens?: number;
+  /**
+   * Se llama con el consumo de cada respuesta, incluidas las reanudaciones de
+   * `pause_turn`. Si devuelve false, se deja de reanudar: es el único punto
+   * donde se puede frenar el gasto DENTRO de una etapa, y con búsqueda web una
+   * sola etapa puede encadenar muchas llamadas.
+   */
+  onUso?: (tokensEntrada: number, tokensSalida: number) => boolean;
 }): Promise<{ datos: T; tokensEntrada: number; tokensSalida: number }> {
-  const { modelo, sistema, usuario, schema, buscarWeb = false, maxTokens = 16_000 } = opts;
+  const { modelo, sistema, usuario, schema, buscarWeb = false, maxTokens = 16_000, onUso } = opts;
   const api = obtenerCliente();
 
   let entrada = 0, salida = 0, ultimoError = '';
@@ -63,19 +70,29 @@ export async function pedirJson<T>(opts: {
       ...(buscarWeb ? { tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 12 }] } : {}),
     } as any).finalMessage() as Promise<any>;
 
+    const contabilizar = (r: any): boolean => {
+      const e = r.usage?.input_tokens ?? 0, s = r.usage?.output_tokens ?? 0;
+      entrada += e; salida += s;
+      return onUso ? onUso(e, s) : true;
+    };
+
     let res: any = await pedir();
-    entrada += res.usage?.input_tokens ?? 0;
-    salida += res.usage?.output_tokens ?? 0;
+    let hayPresupuesto = contabilizar(res);
 
     // Con herramientas de servidor, el turno se pausa cada 10 iteraciones.
     // Se reanuda devolviendo el turno del asistente sin agregar mensaje nuevo.
     let pausas = 0;
-    while (res.stop_reason === 'pause_turn' && pausas < MAX_PAUSAS) {
+    while (res.stop_reason === 'pause_turn' && pausas < MAX_PAUSAS && hayPresupuesto) {
       mensajes.push({ role: 'assistant', content: res.content });
       res = await pedir();
-      entrada += res.usage?.input_tokens ?? 0;
-      salida += res.usage?.output_tokens ?? 0;
+      hayPresupuesto = contabilizar(res);
       pausas++;
+    }
+
+    if (!hayPresupuesto && res.stop_reason === 'pause_turn') {
+      throw new Error(
+        'Se agotó el presupuesto a media búsqueda: el turno quedó pausado y no se reanudó.',
+      );
     }
 
     if (res.stop_reason === 'max_tokens') {

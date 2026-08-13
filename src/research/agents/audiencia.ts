@@ -14,12 +14,13 @@ Tu tarea: reconstruir cómo habla y qué teme la audiencia del cliente.
 - unidadDeCompra: qué cree la audiencia que está comprando. Rara vez es el producto que se vende.
 - personas: exactamente dos, deliberadamente contrastantes entre sí.`;
 
-export async function correrAudiencia(ctx: string) {
+export async function correrAudiencia(ctx: string, onUso?: (e: number, s: number) => boolean) {
   return pedirJson<Audiencia>({
     modelo: process.env.MODEL_RESEARCH || 'claude-sonnet-5',
     sistema: SISTEMA,
     usuario: `${ctx}\n\nInvestiga la audiencia y devuelve el JSON del esquema.`,
     schema: audienciaSchema,
     buscarWeb: true,
+    onUso,
   });
 }
