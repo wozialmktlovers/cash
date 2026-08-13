@@ -67,11 +67,16 @@ a {
 .barra {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 18px 32px;
+  gap: 22px;
+  padding: 20px 32px 21px;
   border-bottom: 1px solid var(--border);
-  background: rgba(8, 8, 11, 0.86);
-  backdrop-filter: blur(12px);
+  /* Halo tenue de marca en la esquina de la firma: da profundidad sin
+     convertir la barra en un banner. */
+  background:
+    radial-gradient(120% 260% at 0% 0%, rgba(212, 104, 138, 0.13), transparent 58%),
+    radial-gradient(90% 200% at 22% 0%, rgba(90, 110, 204, 0.1), transparent 60%),
+    rgba(8, 8, 11, 0.9);
+  backdrop-filter: blur(14px);
   position: sticky;
   top: 0;
   z-index: 20;
@@ -581,3 +586,74 @@ table td:nth-child(1) {
 }
 /* La cabecera se separa del cuerpo con superficie, no solo con línea. */
 table thead { background: rgba(255, 255, 255, 0.028); }
+
+
+/* ── Tira de calibración ─────────────────────────────────────────────
+   La firma del Studio. Cuatro segmentos con los colores que clasifican el
+   contenido: rosa hallazgo, azul mercado, ámbar cautela, verde validado.
+   Al cargar se despliega de izquierda a derecha, una sola vez. */
+.barra .calibre {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  display: grid;
+  grid-template-columns: 3fr 2fr 1fr 1fr;
+  overflow: hidden;
+}
+
+.barra .calibre i {
+  background: var(--c);
+  opacity: 0.85;
+  transform-origin: left center;
+  animation: calibrar 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.barra .calibre i:nth-child(2) { animation-delay: 0.06s; }
+.barra .calibre i:nth-child(3) { animation-delay: 0.12s; }
+.barra .calibre i:nth-child(4) { animation-delay: 0.18s; }
+
+@keyframes calibrar {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* ── Migas ───────────────────────────────────────────────────────────
+   La ruta se lee como una ruta: separadores atenuados y el punto actual
+   en blanco, para saber dónde estás sin contar palabras. */
+.barra .migas {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  color: var(--dim);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.barra .migas-sep { color: rgba(255, 255, 255, 0.24); }
+
+.barra .migas-actual {
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.barra .marca span {
+  font-family: var(--mono);
+  color: var(--pink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barra .calibre i { animation: none; }
+}
+
+@media (max-width: 640px) {
+  .barra { padding: 16px 20px 17px; gap: 14px; }
+  .barra .migas { font-size: 0.72rem; }
+}

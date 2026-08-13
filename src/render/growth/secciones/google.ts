@@ -1,5 +1,6 @@
 import { escapar, cabeceraSeccion, tablaGrowth, chips, hueco, listaGrowth } from './comunes';
 import type { Growth } from '@/growth/schemas';
+import type { UrlEtiquetada } from '@/growth/utm';
 
 const NOMBRE: Record<string, string> = {
   marca: 'Marca', categoria: 'Categoría', precio: 'Precio', geo: 'Geografía', contenido: 'Contenido',
@@ -11,7 +12,12 @@ const ORDEN: Record<string, number> = { marca: 1, categoria: 2, precio: 3, geo: 
  * común: cada intención de búsqueda merece su propio anuncio, y mezclarlos
  * obliga a reescribirlos al cargarlos.
  */
-export function seccionGoogle(g: Partial<Growth>, huecos: Record<string, string>): string {
+export function seccionGoogle(
+  g: Partial<Growth>,
+  huecos: Record<string, string>,
+  urls: UrlEtiquetada[] = [],
+): string {
+  const urlPorClave = new Map(urls.map((u) => [u.clave, u.url]));
   const cab = cabeceraSeccion({
     numero: '04', kicker: 'Google Ads', titulo: 'Estructura y keywords',
     lead: 'Meta genera demanda; Google la cosecha. Aquí solo se puja por intención, nunca por curiosidad.',
@@ -51,6 +57,12 @@ export function seccionGoogle(g: Partial<Growth>, huecos: Record<string, string>
           ${c.titulares.map((t) => contar(t, 30)).join('')}
           <div class="tiny" style="margin:14px 0 6px;">Descripciones · máximo 90 caracteres</div>
           ${c.descripciones.map((t) => contar(t, 90)).join('')}
+          ${(() => {
+            const u = [...urlPorClave.entries()].find(([k]) => k.startsWith(`g${ORDEN[c.clave]}_${c.clave}`));
+            return u
+              ? `<div class="tiny" style="margin:14px 0 6px;">URL final con etiquetas</div><div class="pre">${escapar(u[1])}</div>`
+              : '';
+          })()}
         </div>
       </div>`).join('');
 

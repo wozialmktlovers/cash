@@ -24,8 +24,11 @@ export function seccionPortada(
   const nGoogle = g.campanasGoogle?.length ?? 0;
   const nCre = g.creativos?.length ?? 0;
 
+  // Las cuatro cifras abren el documento. Este manual es una especificación
+  // de montaje, y su tesis es exactamente eso: cuánto hay que construir.
+  // Van como tira de especificación, no como tarjetas sueltas.
   const stat = (v: string, l: string) =>
-    `<div class="stat"><div class="stat-v">${escapar(v)}</div><div class="stat-l">${escapar(l)}</div></div>`;
+    `<div class="spec-i"><div class="spec-v">${escapar(v)}</div><div class="spec-l">${escapar(l)}</div></div>`;
 
   const aviso = meta.investigacionParcial
     ? `<div class="alert alert-yellow" style="margin-top:18px;"><strong>La investigación de origen venía incompleta.</strong> Esta campaña se construyó sobre los datos que sí había. Los apartados afectados lo declaran, y lo que falta por averiguar está en los bloqueantes.</div>`
@@ -33,10 +36,10 @@ export function seccionPortada(
 
   return `
     <span class="eyebrow">Growth Wozial · Manual de campaña</span>
-    <h1><span class="grad">${escapar(meta.producto)}</span></h1>
-    <p class="lead" style="margin-top:10px;">Todo lo necesario para montar, etiquetar y medir. Sin relleno.</p>
+    <h1 class="portada-ttl"><span class="grad">${escapar(meta.producto)}</span></h1>
+    <p class="portada-tesis">Todo lo necesario para montar, etiquetar y medir. <strong>Sin relleno.</strong></p>
     ${aviso}
-    <div class="g4" style="margin-top:26px;">
+    <div class="spec" style="margin-top:30px;">
       ${stat(`${nMeta}+${nGoogle}`, 'Campañas Meta + Google')}
       ${stat(String(nCre), 'Creativos Meta')}
       ${stat(String(totalUrls), 'URLs etiquetadas')}

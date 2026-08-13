@@ -2,6 +2,9 @@ import type { Growth } from './schemas';
 
 export type UrlEtiquetada = {
   plataforma: 'meta' | 'google';
+  /** El mismo valor que utm_content. Es la llave para emparejar cada URL con
+   *  su pieza sin depender del orden ni del texto de la etiqueta. */
+  clave: string;
   etiqueta: string;
   url: string;
 };
@@ -63,6 +66,7 @@ export function construirUrls(opts: {
 
   const meta: UrlEtiquetada[] = growth.creativos.map((c) => ({
     plataforma: 'meta',
+    clave: `g${c.grupo}_${c.formato}`,
     etiqueta: `Grupo ${c.grupo.toUpperCase()} · ${c.formato}`,
     url: armar({
       utm_source: 'meta',
@@ -79,6 +83,7 @@ export function construirUrls(opts: {
     const content = c.clave === 'geo' && ciudadNorm ? `${base}_${ciudadNorm}` : base;
     return {
       plataforma: 'google',
+      clave: content,
       etiqueta: c.nombre,
       url: armar({
         utm_source: 'google',

@@ -60,9 +60,9 @@ export function renderizarManual(
   const secciones = [
     seccion('setup', seccionPortada(datos, meta, urls.length, huecos)),
     seccion('meta', seccionMeta(datos, huecos)),
-    seccion('creativos', seccionCreativos(datos, huecos)),
+    seccion('creativos', seccionCreativos(datos, huecos, urls)),
     seccion('prompts', seccionPrompts(datos, huecos)),
-    seccion('google', seccionGoogle(datos, huecos)),
+    seccion('google', seccionGoogle(datos, huecos, urls)),
     seccion('rsa', seccionRsa(datos, huecos)),
     seccion('traza', seccionTraza(urls)),
     seccion('tecnico', seccionTecnico(meta, datos)),

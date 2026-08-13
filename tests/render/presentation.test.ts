@@ -23,7 +23,7 @@ describe('fixtures', () => {
 describe('renderizado', () => {
   it('produce 17 paneles con datos completos', () => {
     const html = renderizarPresentacion(completa as any, meta);
-    expect((html.match(/class="panel"/g) ?? []).length).toBe(17);
+    expect((html.match(/class="panel[ "]/g) ?? []).length).toBe(17);
   });
 
   it('incluye el nombre del cliente y el título', () => {
@@ -35,7 +35,7 @@ describe('renderizado', () => {
   it('marca los paneles vacíos con su razón, sin inventar contenido', () => {
     const html = renderizarPresentacion(parcial as any, meta);
     expect(html).toContain('Sin datos');
-    expect((html.match(/class="panel"/g) ?? []).length).toBe(17);
+    expect((html.match(/class="panel[ "]/g) ?? []).length).toBe(17);
   });
 
   it('escapa el HTML de los datos para evitar inyección', () => {

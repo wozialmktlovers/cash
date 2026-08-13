@@ -3,19 +3,27 @@ import { LOGO_WOZIAL } from '../marca';
 import { cabecera, escapar, lista, listaFuentes, siVacio, tabla, tarjeta } from './comunes';
 
 // ── 01 · Portada ─────────────────────────────────────────────────────
+/**
+ * Portada.
+ *
+ * La promesa de sourcing venía en letra pequeña al fondo de una tarjeta, y es
+ * lo que de verdad distingue este documento de cualquier otro informe de
+ * mercado. Aquí abre: es la tesis, no una nota al pie. Mismo contenido,
+ * distinta jerarquía.
+ */
 export function panelPortada(meta: { cliente: string; giro: string; fecha: string }): string {
-  return `<section class="panel"><div class="wrap">
-    <div style="width:100%;max-width:340px;margin-bottom:30px;">${LOGO_WOZIAL}</div>
+  return `<section class="panel portada"><div class="wrap">
+    <div class="portada-marca">${LOGO_WOZIAL}</div>
     <div class="pnum">01 · Social Research</div>
-    <h2>${escapar(meta.cliente)}</h2>
-    <p class="lead">${escapar(meta.giro)}</p>
-    <div class="card card-pink" style="margin-top:26px;">
-      <p class="tiny">Investigación de mercado · Wozial</p>
-      <p style="margin-top:6px;">Fecha de corte: <strong>${escapar(meta.fecha)}</strong></p>
-      <p class="tiny" style="margin-top:10px;">
-        Toda cifra de este documento lleva su fuente. Los apartados sin datos verificables
-        se declaran vacíos en lugar de rellenarse.
-      </p>
+    <h1 class="portada-ttl">${escapar(meta.cliente)}</h1>
+    <p class="portada-giro">${escapar(meta.giro)}</p>
+    <p class="portada-tesis">
+      Toda cifra de este documento lleva su fuente. Los apartados sin datos verificables
+      <strong>se declaran vacíos en lugar de rellenarse</strong>.
+    </p>
+    <div class="portada-pie">
+      <span>Investigación de mercado · Wozial</span>
+      <span class="portada-fecha">Corte ${escapar(meta.fecha)}</span>
     </div>
   </div></section>`;
 }

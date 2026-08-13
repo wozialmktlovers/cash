@@ -194,6 +194,40 @@ body{padding-top:64px; overflow-y:auto; overflow-x:hidden; min-height:100vh;}
 .fmt-hd .slots-car .slot-p{font-size:0.75rem;}
 .fmt-hd .slots-car .slot-t{font-size:0.75rem;}
 
+/* ── Portada ─────────────────────────────────────────── */
+/* La tira de especificación. Las cuatro cifras son la tesis del documento
+   —cuánto hay que construir— así que abren en la voz de la evidencia y
+   separadas por filetes, no encajonadas en tarjetas que las igualarían al
+   resto del contenido. */
+.portada-ttl{max-width:18ch;}
+.portada-tesis{
+  margin-top:14px;max-width:44ch;
+  font-size:clamp(1rem,1.5vw,1.2rem);font-weight:300;line-height:1.6;color:var(--mid);
+  padding-left:18px;border-left:2px solid var(--pink);
+}
+.portada-tesis strong{color:#fff;font-weight:600;}
+.spec{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  border-top:1px solid var(--border-med);border-bottom:1px solid var(--border-med);
+}
+.spec-i{padding:20px 22px 18px;border-left:1px solid var(--border);}
+.spec-i:first-child{border-left:none;padding-left:0;}
+.spec-v{
+  font-family:var(--mono);font-weight:700;
+  font-size:clamp(1.7rem,3.4vw,2.6rem);line-height:1;letter-spacing:-.04em;
+  background:linear-gradient(135deg,var(--pink),var(--blue));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
+}
+.spec-l{
+  font-family:var(--mono);font-size:0.75rem;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.12em;margin-top:10px;line-height:1.4;
+}
+@media (max-width:768px){
+  .spec{grid-template-columns:repeat(2,1fr);}
+  .spec-i{border-left:none;padding-left:0;border-top:1px solid var(--border);}
+  .spec-i:nth-child(-n+2){border-top:none;}
+}
+
 /* ── Placa de sección ────────────────────────────────── */
 /* La firma del documento. El numeral crece hasta ser una marca de expediente
    y la espina de color corre a lo alto de la sección: al desplazarse se nota

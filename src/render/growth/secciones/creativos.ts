@@ -1,4 +1,5 @@
 import { escapar, cabeceraSeccion, hueco } from './comunes';
+import type { UrlEtiquetada } from '@/growth/utm';
 import { RATIO_POR_FORMATO, GRUPOS, FORMATOS, type Growth, type Creativo } from '@/growth/schemas';
 
 const MEDIDAS: Record<string, string> = {
@@ -31,7 +32,15 @@ const ARCHIVOS: Record<string, { etiqueta: string; ratio: string }[]> = {
  * sabiendo qué piezas necesita y de qué tamaño. Lo único que faltaría son los
  * copys, y eso se declara.
  */
-export function seccionCreativos(g: Partial<Growth>, huecos: Record<string, string>): string {
+export function seccionCreativos(
+  g: Partial<Growth>,
+  huecos: Record<string, string>,
+  urls: UrlEtiquetada[] = [],
+): string {
+  // Cada pieza lleva su URL etiquetada al lado. Quien produce el creativo no
+  // debería tener que saltar a la sección de trazabilidad para encontrarla:
+  // ahí es donde se pierde el UTM y la campaña deja de medirse.
+  const urlPorClave = new Map(urls.map((u) => [u.clave, u.url]));
   const porClave = new Map<string, Creativo>();
   for (const c of g.creativos ?? []) porClave.set(`${c.grupo}-${c.formato}`, c);
 
@@ -47,6 +56,7 @@ export function seccionCreativos(g: Partial<Growth>, huecos: Record<string, stri
         ? `<div class="kv"><div class="kv-k">Opción A</div><div class="copy">${escapar(c.copyA)}</div></div>
            <div class="kv"><div class="kv-k">Opción B</div><div class="copy">${escapar(c.copyB)}</div></div>`
         : `<p class="tiny" style="margin-top:8px;">Sin copy: ${escapar(razon)}</p>`;
+      const url = urlPorClave.get(`g${grupo}_${formato}`);
       return `<div class="fmt">
         <div class="fmt-hd">
           <div class="${piezas.length > 1 ? 'slots-car' : 'slots'}">${piezas.map((pz) => `
@@ -61,6 +71,9 @@ export function seccionCreativos(g: Partial<Growth>, huecos: Record<string, stri
         <div class="fmt-bd">
           <h4>${escapar(formato)}</h4>
           ${copys}
+          ${url
+            ? `<div class="kv" style="margin-top:10px;"><div class="kv-k">URL</div><div class="pre">${escapar(url)}</div></div>`
+            : ''}
         </div>
       </div>`;
     }).join('');

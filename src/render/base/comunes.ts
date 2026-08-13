@@ -43,21 +43,31 @@ strong{color:rgba(255,255,255,.96);font-weight:600;}
   position:relative;
   transition:border-color .3s,background .3s,transform .3s;
 }
-/* Filo superior de color: el papel de la tarjeta se lee antes que su texto.
-   Rosa hallazgo, azul mercado, amarillo cautela, verde validado. */
-.card-pink::before,.card-blue::before,.card-yellow::before,.card-green::before{
-  content:'';position:absolute;top:-1px;left:16px;right:16px;height:2px;
-  border-radius:2px;
-}
-.card-pink::before{background:linear-gradient(90deg,var(--pink),transparent);}
-.card-blue::before{background:linear-gradient(90deg,var(--blue),transparent);}
-.card-yellow::before{background:linear-gradient(90deg,var(--yellow),transparent);}
-.card-green::before{background:linear-gradient(90deg,var(--green),transparent);}
+/* El papel de la tarjeta se lee por su cuerpo, no por un filete. Rosa
+   hallazgo, azul mercado, ámbar cautela, verde validado. Color sólido, sin
+   contorno y con el texto en blanco. */
 .card:hover{background:var(--s3);border-color:var(--border-med);}
-.card-pink{border-color:rgba(212,104,138,.36);background:rgba(212,104,138,.06);}
-.card-blue{border-color:rgba(90,110,204,.36);background:rgba(90,110,204,.06);}
-.card-yellow{border-color:rgba(200,200,0,.32);background:rgba(200,200,0,.05);}
-.card-green{border-color:rgba(16,185,129,.36);background:rgba(16,185,129,.06);}
+.card-pink,.card-blue,.card-yellow,.card-green{border-color:transparent;}
+.card-pink{background:var(--c-pink);}
+.card-blue{background:var(--c-blue);}
+.card-yellow{background:var(--c-yellow);}
+.card-green{background:var(--c-green);}
+/* Sobre cuerpo de color el texto sube a blanco: los grises pensados para el
+   suelo oscuro pierden contraste aquí. */
+.card-pink p,.card-blue p,.card-yellow p,.card-green p,
+.card-pink li,.card-blue li,.card-yellow li,.card-green li,
+.card-pink td,.card-blue td,.card-yellow td,.card-green td{color:rgba(255,255,255,.92);}
+.card-pink .tiny,.card-blue .tiny,.card-yellow .tiny,.card-green .tiny,
+.card-pink .stat-l,.card-blue .stat-l,.card-yellow .stat-l,.card-green .stat-l,
+.card-pink .kv-k,.card-blue .kv-k,.card-yellow .kv-k,.card-green .kv-k,
+.card-pink th,.card-blue th,.card-yellow th,.card-green th{color:rgba(255,255,255,.72);}
+.card-pink:hover,.card-blue:hover,.card-yellow:hover,.card-green:hover{
+  filter:brightness(1.14);background:inherit;
+}
+.card-pink h4,.card-pink h3{color:var(--c-pink-hi);}
+.card-blue h4,.card-blue h3{color:var(--c-blue-hi);}
+.card-yellow h4,.card-yellow h3{color:var(--c-yellow-hi);}
+.card-green h4,.card-green h3{color:var(--c-green-hi);}
 .card-sm{padding:17px;border-radius:var(--radius-sm);}
 
 /* ── Grids ───────────────────────────────────────────── */
@@ -203,9 +213,13 @@ strong{color:rgba(255,255,255,.96);font-weight:600;}
   border-radius:var(--radius-sm);padding:16px 19px;
   border-left:3px solid;font-size:0.88rem;line-height:1.7;
 }
-.alert-red{background:rgba(212,104,138,.1);border-color:var(--pink);}
-.alert-green{background:rgba(16,185,129,.1);border-color:var(--green);}
-.alert-yellow{background:rgba(200,200,0,.09);border-color:var(--yellow);}
+/* Los avisos siguen el mismo criterio: cuerpo sólido y texto en blanco. La
+   barra lateral se mantiene porque ahí sí codifica el tipo de aviso. */
+.alert{color:rgba(255,255,255,.92);}
+.alert strong{color:#fff;}
+.alert-red{background:var(--c-pink);border-color:var(--c-pink-hi);}
+.alert-green{background:var(--c-green);border-color:var(--c-green-hi);}
+.alert-yellow{background:var(--c-yellow);border-color:var(--c-yellow-hi);}
 
 /* ── Guía metodológica (solo plantilla) ──────────────── */
 .guia{

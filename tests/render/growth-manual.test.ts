@@ -123,3 +123,29 @@ describe('manual de campaña', () => {
     expect(html).not.toContain('id="deck"');
   });
 });
+
+describe('URL etiquetada junto a cada pieza', () => {
+  it('cada creativo de Meta lleva la URL de su grupo y formato', () => {
+    const html = renderizarManual(completo as any, meta);
+    const seccion = html.slice(html.indexOf('id="creativos"'), html.indexOf('id="prompts"'));
+    for (const c of ['ga_imagen', 'gb_video', 'gc_carrusel']) {
+      expect(seccion, `falta la URL de ${c} en la sección de creativos`).toContain(`utm_content=${c}`);
+    }
+    // Nueve piezas, nueve URLs, sin repetir ninguna.
+    const encontradas = [...seccion.matchAll(/utm_content=(g[abc]_[a-z]+)/g)].map((m) => m[1]);
+    expect(new Set(encontradas).size).toBe(9);
+  });
+
+  it('cada campaña de Google lleva su URL final', () => {
+    const html = renderizarManual(completo as any, meta);
+    const seccion = html.slice(html.indexOf('id="google"'), html.indexOf('id="rsa"'));
+    for (const c of ['g1_marca', 'g3_precio', 'g5_contenido']) {
+      expect(seccion, `falta la URL de ${c}`).toContain(`utm_content=${c}`);
+    }
+  });
+
+  it('sin destino no inventa URLs junto a las piezas', () => {
+    const html = renderizarManual(completo as any, { ...meta, destino: undefined });
+    expect(html).not.toContain('utm_content=');
+  });
+});

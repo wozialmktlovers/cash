@@ -10,6 +10,13 @@ export const TOKENS = `
      valor, así que ninguna sección se separaba de la siguiente. Cuatro
      niveles: suelo, banda de sección, tarjeta y tarjeta elevada. */
   --s0:#08080b; --s1:#0e0e14; --s2:#14141c; --s3:#1c1c26;
+
+  /* Cuerpos de tarjeta a color sólido, sin transparencia ni contorno. Son el
+     tono profundo de cada color de marca, no el color a plena saturación:
+     blanco sobre #d4688a da 2.6:1, que no es legible y empeora al comprimirse
+     el video. Estos pasan de 8:1 y siguen leyéndose como su color. */
+  --c-pink:#4a1a2a; --c-blue:#1e2450; --c-yellow:#38380c; --c-green:#0e3a2c;
+  --c-pink-hi:#f0a2bd; --c-blue-hi:#a5b2f5; --c-yellow-hi:#e4e44a; --c-green-hi:#4fe0ac;
   --glass:var(--s2); --glass-deep:var(--s1);
 
   /* Tipografía de evidencia. Lo verificable —fuentes, identificadores, UTMs,

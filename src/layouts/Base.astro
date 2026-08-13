@@ -32,10 +32,31 @@ const { titulo, migas } = Astro.props;
           <img src="/logo-wozial.png" alt="Wozial" width="545" height="194" />
           <span>Studio</span>
         </a>
-        <span class="migas">{migas}</span>
+        {migas && (
+          <nav class="migas" aria-label="Dónde estás">
+            {migas.split('›').map((paso, i) => (
+              <>
+                {i > 0 && <span class="migas-sep" aria-hidden="true">/</span>}
+                <span class={i === migas.split('›').length - 1 ? 'migas-actual' : ''}>
+                  {paso.trim()}
+                </span>
+              </>
+            ))}
+          </nav>
+        )}
         <form method="POST" action="/api/logout">
           <button type="submit" class="btn fantasma chico">Salir</button>
         </form>
+        <!-- Tira de calibración. En un estudio es lo que se usa para comprobar
+             que lo que sale es fiel al original, y verificar es exactamente lo
+             que hace este producto. Cada segmento es uno de los cuatro colores
+             con los que se clasifica el contenido. -->
+        <div class="calibre" aria-hidden="true">
+          <i style="--c:var(--pink)"></i>
+          <i style="--c:var(--blue)"></i>
+          <i style="--c:var(--yellow)"></i>
+          <i style="--c:var(--green)"></i>
+        </div>
       </header>
       <main class="contenido">
         <slot />

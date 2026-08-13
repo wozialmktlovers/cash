@@ -8,6 +8,32 @@
 import { TOKENS, CSS_COMUN } from './base';
 
 const CSS_DECK = `
+/* ── Portada ─────────────────────────────────────────── */
+/* Abre con la promesa, no con la marca. El nombre del cliente ocupa el ancho
+   y la tesis se lee entera antes de pasar de lámina. */
+.portada{display:flex;align-items:center;}
+.portada .wrap{width:100%;}
+.portada-marca{width:100%;max-width:280px;margin-bottom:38px;opacity:.9;}
+.portada-ttl{margin-top:4px;max-width:16ch;}
+.portada-giro{
+  font-family:var(--mono);font-size:0.95rem;color:var(--dim);
+  letter-spacing:.06em;text-transform:uppercase;margin-top:14px;
+}
+.portada-tesis{
+  margin-top:34px;max-width:46ch;
+  font-size:clamp(1.05rem,1.7vw,1.3rem);font-weight:300;line-height:1.6;
+  color:var(--mid);
+  padding-left:20px;border-left:2px solid var(--pink);
+}
+.portada-tesis strong{color:#fff;font-weight:600;}
+.portada-pie{
+  display:flex;flex-wrap:wrap;gap:8px 22px;align-items:baseline;
+  margin-top:40px;padding-top:18px;border-top:1px solid var(--border);
+  font-family:var(--mono);font-size:0.75rem;color:var(--dim);
+  letter-spacing:.05em;
+}
+.portada-fecha{color:var(--pink);}
+
 /* ── Ritmo de láminas ────────────────────────────────── */
 /* Cada lámina lleva su espina de color en el canto izquierdo y alterna el
    suelo, para que al pasar de una a otra se note el cambio antes de leer.

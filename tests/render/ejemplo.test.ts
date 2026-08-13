@@ -22,7 +22,7 @@ describe('investigación de ejemplo (Yessica Villa)', () => {
       giro: CLIENTE_EJEMPLO.giro,
       fecha: '2026-08-12',
     });
-    expect((html.match(/class="panel"/g) ?? []).length).toBe(17);
+    expect((html.match(/class="panel[ "]/g) ?? []).length).toBe(17);
   });
 
   it('conserva las cifras que sostienen el argumento', () => {
