@@ -11,6 +11,26 @@
 import { TOKENS, CSS_COMUN } from '../base';
 
 const CSS_GROWTH = `
+/* ── Tokens propios del machote de Growth ────────────── */
+/* El machote nombra sus superficies y líneas de otra forma que el Social
+   Research. Se declaran aquí, encima de la base compartida, en vez de
+   reescribir las 84 reglas portadas: menos superficie donde equivocarse.
+   Las líneas se alinean con --border y --border-med de la base para que los
+   dos documentos tengan el mismo peso de trazo en videollamada. */
+:root{
+  --s1:#101017; --s2:#16161f; --s3:#1d1d28; --s4:#252533;
+  --line:var(--border); --line-2:var(--border-med);
+  --hi:rgba(255,255,255,.96);
+  --r-xs:7px;
+  --sh-1:0 1px 2px rgba(0,0,0,.5), 0 4px 12px rgba(0,0,0,.3);
+}
+
+/* El envase del deck traía estas dos; el manual las necesita igual. */
+.nav-logo{height:23px;flex-shrink:0;filter:brightness(0) invert(1);opacity:.95;}
+main{position:relative;z-index:1;}
+/* La nav es fija: sin este hueco, la primera sección arranca debajo de ella. */
+body{padding-top:64px;}
+
 /* ── Barra de anclas ─────────────────────────────────── */
 .prog{position:fixed;top:54px;left:0;right:0;height:2px;background:rgba(255,255,255,.08);z-index:100;}
 .prog-fill{height:100%;background:linear-gradient(90deg,var(--pink),var(--blue));width:0;transition:width .2s ease;}
@@ -153,8 +173,15 @@ const CSS_GROWTH = `
   .shead-n span{font-size:0.938rem;}
   .card{padding:18px;}.grp-bd,.grp-hd{padding:16px;}
 }
+/* Los tamaños de .ar-* son los del machote y se respetan en pantalla ancha.
+   Aquí solo se impide que desborden su columna cuando no caben. */
+.slot{max-width:100%;}
+
 @media (max-width:768px){
   .nav-links{display:none;}
+  .slot{width:100%!important;height:auto!important;aspect-ratio:1/1;}
+  .ar-4x5{aspect-ratio:4/5;}
+  .ar-9x16{aspect-ratio:9/16;}
   .gbtn-txt{display:none;}
   .slots-car{grid-template-columns:repeat(2,1fr);}
   .gcols,.g5{grid-template-columns:1fr;}

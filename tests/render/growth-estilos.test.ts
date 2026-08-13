@@ -53,3 +53,21 @@ describe('navegación del manual', () => {
     expect(NAVEGACION_GROWTH).toContain('INPUT|TEXTAREA');
   });
 });
+
+describe('integridad de los tokens', () => {
+  it('ninguna variable CSS se usa sin estar definida', () => {
+    // El machote nombra sus superficies distinto que el Social Research
+    // (--s1, --line-2, --hi…). Una var() sin definir no falla: la declaración
+    // se descarta en silencio y el documento sale con la caja rota sin que
+    // nada avise.
+    const definidas = new Set([...ESTILOS_GROWTH.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+    const usadas = new Set([...ESTILOS_GROWTH.matchAll(/var\((--[a-z0-9-]+)/g)].map((m) => m[1]));
+    const huerfanas = [...usadas].filter((v) => !definidas.has(v));
+    expect(huerfanas, `variables sin definir: ${huerfanas.join(', ')}`).toEqual([]);
+  });
+
+  it('deja hueco para la nav fija y da tamaño al logo', () => {
+    expect(ESTILOS_GROWTH).toContain('.nav-logo');
+    expect(ESTILOS_GROWTH).toMatch(/body\{padding-top/);
+  });
+});
