@@ -44,7 +44,14 @@ export async function pedirJson<T>(opts: {
 
     const mensajes: any[] = [{ role: 'user', content: mensaje }];
 
-    const pedir = () => api.messages.create({
+    // Siempre en streaming. El SDK estima cuánto tardará una petición a partir
+    // de `max_tokens` y rechaza de entrada, sin llegar a la red, cualquiera que
+    // pase de diez minutos: con los 32k de la síntesis eso saltaba siempre
+    // ("Streaming is required for operations that may take longer than 10
+    // minutes"). `finalMessage()` acumula los eventos y devuelve el mismo
+    // objeto Message que `create`, con `usage` y `stop_reason` incluidos, así
+    // que el resto de la función no cambia.
+    const pedir = () => api.messages.stream({
       model: modelo,
       max_tokens: maxTokens,
       system: sistema,
@@ -54,7 +61,7 @@ export async function pedirJson<T>(opts: {
       // No se declara `code_execution` aparte: ya va incluido, y un segundo
       // entorno de ejecución confunde al modelo.
       ...(buscarWeb ? { tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 12 }] } : {}),
-    }) as Promise<any>;
+    } as any).finalMessage() as Promise<any>;
 
     let res: any = await pedir();
     entrada += res.usage?.input_tokens ?? 0;

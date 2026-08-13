@@ -1,9 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod';
 
+// `crear` es la fuente de las respuestas simuladas. `sinStream` es el
+// `messages.create` de verdad: si alguna vez se usa, la petición vuelve a
+// quedar sujeta al tope de 10 minutos del SDK.
 const crear = vi.fn();
+const sinStream = vi.fn((cuerpo: any) => crear(cuerpo));
+const transmitir = vi.fn((cuerpo: any) => ({ finalMessage: () => crear(cuerpo) }));
+
 vi.mock('@anthropic-ai/sdk', () => ({
-  default: class { messages = { create: crear }; },
+  default: class { messages = { create: sinStream, stream: transmitir }; },
 }));
 
 const esquema = z.object({ valor: z.string() });
@@ -17,7 +23,12 @@ function respuesta(texto: string, entrada = 100, salida = 50, extra: Record<stri
   };
 }
 
-beforeEach(() => { crear.mockReset(); process.env.ANTHROPIC_API_KEY = 'test'; });
+beforeEach(() => {
+  crear.mockReset();
+  sinStream.mockClear();
+  transmitir.mockClear();
+  process.env.ANTHROPIC_API_KEY = 'test';
+});
 
 describe('pedirJson', () => {
   it('devuelve datos validados y el consumo', async () => {
@@ -63,6 +74,18 @@ describe('pedirJson', () => {
     expect(crear).toHaveBeenCalledTimes(2);
     expect(r.tokensEntrada).toBe(300);
     expect(r.tokensSalida).toBe(80);
+  });
+
+  it('pide en streaming, porque sin él el SDK rechaza la síntesis por el tope de 10 minutos', async () => {
+    const { pedirJson } = await import('@/research/claude');
+    crear.mockResolvedValueOnce(respuesta('{"valor":"sintetizado"}'));
+    const r = await pedirJson({
+      modelo: 'claude-opus-5', sistema: 's', usuario: 'u', schema: esquema, maxTokens: 32_000,
+    });
+    expect(r.datos.valor).toBe('sintetizado');
+    expect(transmitir).toHaveBeenCalledTimes(1);
+    expect(transmitir.mock.calls[0][0].max_tokens).toBe(32_000);
+    expect(sinStream).not.toHaveBeenCalled();
   });
 
   it('avisa cuando la respuesta se cortó por límite de tokens', async () => {
