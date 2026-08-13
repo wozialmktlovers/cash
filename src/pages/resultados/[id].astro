@@ -1,5 +1,5 @@
 ---
-import { eq, desc } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import { db, researchResults, clients, shareLinks } from '@/db';
 import { renderizarPresentacion, escapar } from '@/render/presentation';
 
@@ -14,7 +14,7 @@ if (!c) return new Response('Cliente no encontrado', { status: 404 });
 const links = await db
   .select()
   .from(shareLinks)
-  .where(eq(shareLinks.resultId, r.id))
+  .where(and(eq(shareLinks.documentoId, r.id), eq(shareLinks.documentoTipo, 'research')))
   .orderBy(desc(shareLinks.createdAt));
 
 const activo = links.find((l) => !l.revocado) ?? null;

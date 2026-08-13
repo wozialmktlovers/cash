@@ -33,7 +33,7 @@ export const POST: APIRoute = async ({ request }) => {
     .limit(1);
   if (!resultado) return json({ ok: false, errores: ['El resultado no existe'] }, 404);
 
-  const token = await crearShareLink(resultId);
+  const token = await crearShareLink(resultId, 'research');
   return json({ ok: true, token, url: `${baseUrl(request)}/p/${token}` }, 201);
 };
 

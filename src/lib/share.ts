@@ -6,19 +6,26 @@ export function generarTokenShare(): string {
   return randomBytes(32).toString('base64url');
 }
 
-export async function crearShareLink(resultId: string): Promise<string> {
+export type DocumentoTipo = 'research' | 'growth';
+
+export async function crearShareLink(
+  documentoId: string,
+  documentoTipo: DocumentoTipo = 'research',
+): Promise<string> {
   const token = generarTokenShare();
-  await db.insert(shareLinks).values({ token, resultId });
+  await db.insert(shareLinks).values({ token, documentoId, documentoTipo });
   return token;
 }
 
-export async function resolverShareLink(token: string): Promise<{ resultId: string } | null> {
+export async function resolverShareLink(
+  token: string,
+): Promise<{ documentoId: string; documentoTipo: DocumentoTipo } | null> {
   const [l] = await db.select().from(shareLinks).where(eq(shareLinks.token, token)).limit(1);
   if (!l || l.revocado) return null;
   await db.update(shareLinks)
     .set({ visitas: sql`${shareLinks.visitas} + 1` })
     .where(eq(shareLinks.token, token));
-  return { resultId: l.resultId };
+  return { documentoId: l.documentoId, documentoTipo: l.documentoTipo as DocumentoTipo };
 }
 
 export async function revocarShareLink(token: string): Promise<void> {

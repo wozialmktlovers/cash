@@ -11,7 +11,7 @@ const { token } = Astro.params;
 const link = await resolverShareLink(token!);
 if (!link) return new Response('No encontrado', { status: 404 });
 
-const [r] = await db.select().from(researchResults).where(eq(researchResults.id, link.resultId)).limit(1);
+const [r] = await db.select().from(researchResults).where(eq(researchResults.id, link.documentoId)).limit(1);
 if (!r) return new Response('No encontrado', { status: 404 });
 
 const [c] = await db.select().from(clients).where(eq(clients.id, r.clientId)).limit(1);
