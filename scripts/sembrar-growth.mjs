@@ -39,6 +39,17 @@ export async function sembrarGrowth() {
                 VALUES (${clientId}, 'sitio', 'https://yessicavilla.com')`;
     }
 
+    // Sin enlace de tipo sitio no hay destino, y sin destino no se construye
+    // ninguna URL etiquetada: la trazabilidad sale vacía y las piezas se
+    // quedan sin su UTM.
+    const [sitio] = await sql`
+      SELECT id FROM client_links WHERE client_id = ${clientId} AND tipo = 'sitio' LIMIT 1`;
+    if (!sitio) {
+      await sql`INSERT INTO client_links (client_id, tipo, url)
+                VALUES (${clientId}, 'sitio', ${process.env.SEED_GROWTH_DESTINO ?? 'https://yessicavilla.com'})`;
+      console.log('[seed] enlace de sitio añadido: sin él no hay URLs etiquetadas');
+    }
+
     const [ya] = await sql`
       SELECT id FROM growth_results WHERE client_id = ${clientId} ORDER BY version DESC LIMIT 1`;
     if (ya) {
