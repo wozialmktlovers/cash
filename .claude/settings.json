@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit(//Users/michelangelgonzalezhernandez/Desktop/Claude/Wozial Studio/**)",
+      "Write(//Users/michelangelgonzalezhernandez/Desktop/Claude/Wozial Studio/**)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git checkout*)",
+      "Bash(git branch*)",
+      "Bash(git stash*)",
+      "Bash(git remote*)",
+      "Bash(git push*)",
+      "Bash(git pull*)",
+      "Bash(gh *)",
+      "Bash(railway *)",
+      "Bash(docker *)",
+      "Bash(colima *)",
+      "Bash(lsof *)",
+      "Bash(ls *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(mkdir *)",
+      "Bash(cp *)",
+      "Bash(jq *)",
+      "Bash(wc *)",
+      "Bash(openssl rand*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(git push --force*)"
+    ]
+  }
+}

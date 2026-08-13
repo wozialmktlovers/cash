@@ -4,3 +4,4 @@ dist/
 .astro/
 .env
 data/
+.claude/settings.local.json

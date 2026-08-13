@@ -1,0 +1,11 @@
+node_modules
+dist
+.astro
+.git
+.env
+.env.*
+data
+.claude
+.superpowers
+docs
+tests
