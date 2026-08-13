@@ -24,7 +24,7 @@ export const NAVEGACION = `
   var prev=document.getElementById('prev');
   var next=document.getElementById('next');
   var fill=document.getElementById('progFill');
-  var n=panels.length, i=0, anim=0;
+  var n=panels.length, i=0, anim=0, respaldo=0;
 
   if(tot) tot.textContent=String(n).padStart(2,'0');
 
@@ -63,8 +63,21 @@ export const NAVEGACION = `
       var e=k<0.5 ? 2*k*k : 1-Math.pow(-2*k+2,2)/2;
       deck.scrollLeft=inicio+delta*e;
       if(k<1){ anim=requestAnimationFrame(paso); }
-      else { deck.style.scrollSnapType=snapPrevio; sync(); }
+      else { rematar(destino,snapPrevio); }
     }
+    function rematar(d,snap){
+      clearTimeout(respaldo);
+      cancelAnimationFrame(anim);
+      deck.scrollLeft=d;
+      deck.style.scrollSnapType=snap;
+      sync();
+    }
+    // El navegador congela requestAnimationFrame en pestañas ocultas. Sin esta
+    // red, cambiar de pestaña a mitad de una transición deja el deck a medias y
+    // el scroll-snap apagado para siempre: al volver ya no avanza ninguna
+    // lámina. El respaldo cierra la animación sí o sí.
+    clearTimeout(respaldo);
+    respaldo=setTimeout(function(){ rematar(destino,snapPrevio); }, dur+220);
     anim=requestAnimationFrame(paso);
   }
 
@@ -83,6 +96,7 @@ export const NAVEGACION = `
     if(on&&dots&&dots.scrollWidth>dots.clientWidth){
       dots.scrollLeft=on.offsetLeft-dots.clientWidth/2+11;
     }
+    avisarCorte();
   }
 
   var t;
@@ -100,6 +114,7 @@ export const NAVEGACION = `
   window.addEventListener('resize',function(){
     cancelAnimationFrame(anim);
     deck.scrollLeft=i*deck.clientWidth;
+    avisarCorte();
   });
 
   // Rueda vertical al final o al inicio del panel: avanza de lámina.
@@ -118,6 +133,84 @@ export const NAVEGACION = `
     }
   },{passive:false});
 
+  // ── Escala tipográfica para pantalla compartida ──────────────
+  // Tres pasos. Suben el rem de la raíz, del que cuelgan todos los tamaños de
+  // letra; las rejillas y los espesores siguen en px y no se mueven, así que
+  // la composición aguanta. Se recuerda entre presentaciones porque el
+  // operador suele compartir siempre con el mismo montaje.
+  var PASOS=[
+    {k:'normal', v:1,    ttl:'Tamaño normal'},
+    {k:'grande', v:1.18, ttl:'Texto grande — para compartir pantalla'},
+    {k:'maxima', v:1.36, ttl:'Texto máximo — videollamada en ventana chica'}
+  ];
+  var esc=document.getElementById('escala');
+  var p=0;
+  try{
+    var guardado=localStorage.getItem('wozial-esc');
+    for(var q=0;q<PASOS.length;q++) if(PASOS[q].k===guardado) p=q;
+  }catch(e){}
+
+  function aplicarEscala(){
+    var paso=PASOS[p];
+    document.documentElement.style.setProperty('--esc',String(paso.v));
+    deck.dataset.esc=paso.k;
+    if(esc){
+      esc.textContent=String(paso.v)+'×';
+      esc.title=paso.ttl;
+      esc.classList.toggle('on',p>0);
+    }
+    try{ localStorage.setItem('wozial-esc',paso.k); }catch(e){}
+    // Cambia el alto útil de cada lámina: hay que recalcular el corte y
+    // recolocar el deck, que si no queda a medio camino entre dos paneles.
+    deck.scrollLeft=i*deck.clientWidth;
+    avisarCorte();
+  }
+  function moverEscala(d){
+    p=Math.max(0,Math.min(PASOS.length-1,p+d));
+    aplicarEscala();
+  }
+  if(esc) esc.onclick=function(){ p=(p+1)%PASOS.length; aplicarEscala(); };
+
+  // ── Pantalla completa ────────────────────────────────────────
+  // La barra del navegador se come cerca del 15% del alto, y en una
+  // videollamada ese alto es justo lo que falta.
+  var pant=document.getElementById('pantalla');
+  function alternarPantalla(){
+    if(document.fullscreenElement){ document.exitFullscreen(); }
+    else if(document.documentElement.requestFullscreen){
+      document.documentElement.requestFullscreen().catch(function(){});
+    }
+  }
+  if(pant) pant.onclick=alternarPantalla;
+
+  // ── Aviso de contenido por debajo del corte ──────────────────
+  // La audiencia de una videollamada no puede desplazarse: si la lámina sigue
+  // hacia abajo y el operador no lo nota, eso no se presenta.
+  var mas=document.getElementById('mas');
+  function avisarCorte(){
+    if(!mas) return;
+    // La lámina activa se deduce del scroll, no del índice i: así el aviso es
+    // correcto aunque se llame antes de que sync() haya puesto al día el
+    // índice, que es lo que pasa mientras dura una transición.
+    var w=deck.clientWidth||1;
+    var pa=panels[Math.max(0,Math.min(n-1,Math.round(deck.scrollLeft/w)))];
+    if(!pa){ mas.classList.remove('on'); return; }
+    var desborda=pa.scrollHeight-pa.clientHeight>8;
+    var alFinal=pa.scrollTop+pa.clientHeight>=pa.scrollHeight-8;
+    mas.classList.toggle('on',desborda&&!alFinal);
+  }
+  for(var k=0;k<n;k++){
+    panels[k].addEventListener('scroll',avisarCorte,{passive:true});
+  }
+
+  document.addEventListener('keydown',function(e){
+    if(e.key==='+'||e.key==='='){e.preventDefault();moverEscala(1);}
+    if(e.key==='-'||e.key==='_'){e.preventDefault();moverEscala(-1);}
+    if(e.key==='0'){e.preventDefault();p=0;aplicarEscala();}
+    if(e.key==='f'||e.key==='F'){e.preventDefault();alternarPantalla();}
+  });
+
+  aplicarEscala();
   sync();
 })();
 `;

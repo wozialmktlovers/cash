@@ -19,7 +19,7 @@ export function panelFoco(s: Sintesis): string {
     ${cabecera('11 · Recomendación de foco', 'Dónde debe pararse el cliente')}
     <div class="card card-pink" style="margin-top:22px;">
       <h3>Posicionamiento</h3>
-      <p style="font-size:19px;line-height:1.45;margin-top:8px;">«${escapar(s.posicionamiento.frase)}»</p>
+      <p style="font-size:1.19rem;line-height:1.45;margin-top:8px;">«${escapar(s.posicionamiento.frase)}»</p>
       <p class="tiny" style="margin-top:12px;">${escapar(s.posicionamiento.sustento)}</p>
     </div>
     <div class="g3" style="margin-top:18px;">
@@ -100,7 +100,7 @@ export function panelTraduccion(s: Sintesis): string {
     </div>
     <div class="card card-pink" style="margin-top:18px;text-align:center;">
       <p class="tiny">Titular propuesto</p>
-      <p style="font-size:26px;font-weight:700;line-height:1.25;margin-top:8px;">${escapar(o.titularFinal)}</p>
+      <p style="font-size:1.6rem;font-weight:700;line-height:1.25;margin-top:8px;">${escapar(o.titularFinal)}</p>
     </div>
   </div></section>`;
 }

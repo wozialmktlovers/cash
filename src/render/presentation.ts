@@ -109,6 +109,10 @@ ${barraOperador}
   </div>
   <div class="nav-ctr">
     <span class="nav-count"><b id="cur">01</b> / <span id="tot">17</span></span>
+    <button class="nav-btn nav-btn-txt" id="escala" aria-label="Tamaño del texto">1×</button>
+    <button class="nav-btn" id="pantalla" aria-label="Pantalla completa" title="Pantalla completa (F)">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 5V1h4M13 5V1H9M1 9v4h4M13 9v4H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
     <button class="nav-btn" id="prev" aria-label="Anterior">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
@@ -120,6 +124,10 @@ ${barraOperador}
 <div class="prog"><div class="prog-fill" id="progFill"></div></div>
 <div class="deck" id="deck">${paneles}</div>
 <div class="dots" id="dots"></div>
+<div class="mas" id="mas">
+  <span>Sigue abajo</span>
+  <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2 5l5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</div>
 <div class="hint">
   <span>Desliza</span>
   <svg width="15" height="15" viewBox="0 0 14 14" fill="none"><path d="M5 2l5 5-5 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>

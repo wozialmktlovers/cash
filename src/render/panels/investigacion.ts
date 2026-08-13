@@ -77,9 +77,16 @@ export function panelReconocer(a: Audiencia | null, m: Mercado | null): string {
     ${m.crecimiento ? `<p class="hint" style="margin-top:12px;">${escapar(m.crecimiento)}</p>` : '<p class="hint" style="margin-top:12px;">No hay serie histórica que sustente una cifra de crecimiento.</p>'}
   ` : '<p class="hint" style="margin-top:24px;">Sin datos de mercado: la etapa no produjo resultados.</p>';
 
+  // Audiencia y mercado van en columnas, no apilados. Este panel carga el
+  // contenido de dos (el machote no tiene lámina propia para el mercado) y en
+  // vertical se iba 600px por debajo del corte: en una videollamada la
+  // audiencia no puede desplazarse, así que ese tramo sencillamente no se veía.
   return `<section class="panel"><div class="wrap">
     ${cabecera('03 · Reconocer la audiencia', 'A quién le hablas', 'Cómo se nombra, cómo habla y de qué tamaño es.')}
-    <div style="margin-top:22px;">${bloqueAudiencia}${bloqueMercado}</div>
+    <div class="par" style="margin-top:22px;">
+      <div>${bloqueAudiencia}</div>
+      <div>${bloqueMercado}</div>
+    </div>
     ${listaFuentes(fuentes)}
   </div></section>`;
 }
@@ -88,7 +95,7 @@ export function panelReconocer(a: Audiencia | null, m: Mercado | null): string {
 export function panelDolores(a: Audiencia): string {
   const cita = (c: Audiencia['dolores'][number], color: string) => `
     <div class="card ${color}">
-      <p style="font-size:17px;line-height:1.5;">«${escapar(c.texto)}»</p>
+      <p style="font-size:1.06rem;line-height:1.5;">«${escapar(c.texto)}»</p>
       <p class="tiny" style="margin-top:10px;">${escapar(c.contexto)}</p>
       ${c.anonimizada ? '<div class="badge b-gray" style="margin-top:8px;">Anonimizada</div>' : ''}
     </div>`;
