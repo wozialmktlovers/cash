@@ -1,5 +1,8 @@
 import type { Investigacion } from '@/research/schemas';
-import { ESTILOS, NAVEGACION } from './estilos';
+import { ESTILOS } from './estilos';
+// La navegación no se toma del machote: la suya no funciona en Chrome.
+// Ver el comentario de navegacion.ts.
+import { NAVEGACION } from './navegacion';
 import { LOGO_WOZIAL_SRC } from './marca';
 import { escapar, panelVacio } from './panels/comunes';
 import {
