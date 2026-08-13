@@ -423,6 +423,62 @@ td .secundario {
   margin-bottom: 8px;
 }
 
+/* ── Editores de enlaces y archivos (islas de React) ── */
+
+.lista-enlaces,
+.lista-archivos {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lista-enlaces li,
+.lista-archivos li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--glass);
+  font-size: 14px;
+}
+
+.lista-enlaces a,
+.lista-archivos .nombre {
+  color: var(--mid);
+  text-decoration: none;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lista-enlaces a:hover {
+  color: var(--pink);
+}
+
+.agregar {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.agregar .campo.crece {
+  flex: 1;
+  min-width: 220px;
+}
+
+.agregar .campo {
+  min-width: 150px;
+}
+
 /* ── Listas de definición ───────────────────────────── */
 
 .datos {

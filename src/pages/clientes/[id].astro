@@ -1,6 +1,7 @@
 ---
 import { eq, desc } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
+import LinksEditor from '@/components/LinksEditor';
 import { db, clients, clientLinks, clientFiles, researchJobs, researchResults } from '@/db';
 
 const { id } = Astro.params;
@@ -106,27 +107,7 @@ const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok').length;
   <section class="tarjeta">
     <h2>Enlaces</h2>
     <p class="sub">Sitio, redes y páginas de venta. La investigación los revisa.</p>
-    <div id="editor-enlaces" data-cliente={cliente.id} data-enlaces={JSON.stringify(enlaces)}>
-      {
-        enlaces.length === 0 ? (
-          <div class="vacio">
-            <strong>Sin enlaces</strong>
-            La investigación no podrá revisar los activos del cliente.
-          </div>
-        ) : (
-          <ul class="lista">
-            {enlaces.map((l) => (
-              <li>
-                <span class="etiqueta">{l.tipo}</span>
-                <a href={l.url} target="_blank" rel="noopener noreferrer">
-                  {l.url}
-                </a>
-              </li>
-            ))}
-          </ul>
-        )
-      }
-    </div>
+    <LinksEditor client:load clientId={cliente.id} iniciales={enlaces} />
   </section>
 
   <!-- 3 · Archivos -->
