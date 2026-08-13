@@ -1,4 +1,121 @@
 ---
+import { desc } from 'drizzle-orm';
+import Base from '@/layouts/Base.astro';
+import { db, clients, researchJobs } from '@/db';
+
+const lista = await db.select().from(clients).orderBy(desc(clients.updatedAt));
+const jobs = await db.select().from(researchJobs).orderBy(desc(researchJobs.createdAt));
+
+type Resumen = { ultimo: (typeof jobs)[number] | null; costo: number };
+
+const porCliente = new Map<string, Resumen>();
+for (const j of jobs) {
+  const previo = porCliente.get(j.clientId) ?? { ultimo: null, costo: 0 };
+  porCliente.set(j.clientId, {
+    ultimo: previo.ultimo ?? j,
+    costo: previo.costo + Number(j.costoUsd),
+  });
+}
+
+const dinero = (n: number) =>
+  n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+
+const fecha = (d: Date) =>
+  d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+
+const mostrarBuscador = lista.length > 10;
 ---
 
-<h1>Wozial Studio</h1>
+<Base titulo="Clientes">
+  <div class="encabezado">
+    <div>
+      <h1>Clientes</h1>
+      <p class="sub">
+        {lista.length === 0
+          ? 'Todavía no hay clientes registrados.'
+          : `${lista.length} ${lista.length === 1 ? 'cliente registrado' : 'clientes registrados'}.`}
+      </p>
+    </div>
+    <a href="/clientes/nuevo" class="btn">Nuevo cliente</a>
+  </div>
+
+  {
+    mostrarBuscador && (
+      <div class="campo buscador">
+        <label for="buscar">Buscar por nombre</label>
+        <input id="buscar" type="search" placeholder="Escribe para filtrar…" autocomplete="off" />
+      </div>
+    )
+  }
+
+  {
+    lista.length === 0 ? (
+      <div class="tarjeta">
+        <div class="vacio">
+          <strong>Sin clientes todavía</strong>
+          Da de alta el primero para poder lanzar una investigación.
+        </div>
+      </div>
+    ) : (
+      <div class="tabla-envoltura">
+        <table>
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Producto</th>
+              <th>Última investigación</th>
+              <th>Costo acumulado</th>
+            </tr>
+          </thead>
+          <tbody id="filas">
+            {lista.map((c) => {
+              const r = porCliente.get(c.id);
+              return (
+                <tr data-nombre={c.nombre.toLowerCase()}>
+                  <td>
+                    <a href={`/clientes/${c.id}`} class="principal">
+                      {c.nombre}
+                    </a>
+                    <div class="secundario">{c.giro}{c.ciudad ? ` · ${c.ciudad}` : ''}</div>
+                  </td>
+                  <td>{c.producto}</td>
+                  <td>
+                    {r?.ultimo ? (
+                      <>
+                        <span class={`etiqueta ${r.ultimo.estado}`}>{r.ultimo.estado}</span>
+                        <div class="secundario">{fecha(r.ultimo.createdAt)}</div>
+                      </>
+                    ) : (
+                      <span class="secundario">Nunca</span>
+                    )}
+                  </td>
+                  <td>{r && r.costo > 0 ? dinero(r.costo) : <span class="secundario">—</span>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+</Base>
+
+<script>
+  const buscar = document.getElementById('buscar') as HTMLInputElement | null;
+  const filas = document.getElementById('filas');
+
+  buscar?.addEventListener('input', () => {
+    const q = buscar.value.trim().toLowerCase();
+    for (const fila of filas?.querySelectorAll<HTMLTableRowElement>('tr') ?? []) {
+      const nombre = fila.dataset.nombre ?? '';
+      fila.hidden = q !== '' && !nombre.includes(q);
+    }
+  });
+</script>
+
+<style>
+  .buscador {
+    max-width: 340px;
+    margin-bottom: 22px;
+  }
+</style>

@@ -1,0 +1,464 @@
+:root {
+  --fondo: #08080b;
+  --pink: #d4688a;
+  --blue: #5a6ecc;
+  --yellow: #c8c800;
+  --green: #10b981;
+  --glass: rgba(255, 255, 255, 0.06);
+  --glass-deep: rgba(255, 255, 255, 0.03);
+  --border: rgba(255, 255, 255, 0.12);
+  --border-med: rgba(255, 255, 255, 0.2);
+  --dim: rgba(255, 255, 255, 0.45);
+  --mid: rgba(255, 255, 255, 0.72);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: 'Poppins', -apple-system, sans-serif;
+  background: var(--fondo);
+  color: #fff;
+  line-height: 1.65;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+}
+
+a {
+  color: inherit;
+}
+
+/* ── Estructura ─────────────────────────────────────── */
+
+.sitio {
+  position: relative;
+  z-index: 1;
+}
+
+.barra {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 18px 32px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(8, 8, 11, 0.86);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.barra .marca {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--pink);
+  text-decoration: none;
+}
+
+.barra .migas {
+  font-size: 13.5px;
+  color: var(--dim);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contenido {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 44px 32px 96px;
+}
+
+.encabezado {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 34px;
+}
+
+h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+h2 {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.sub {
+  font-size: 14px;
+  color: var(--dim);
+  margin-top: 6px;
+}
+
+/* ── Tarjetas ───────────────────────────────────────── */
+
+.tarjeta {
+  background: var(--glass-deep);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px;
+}
+
+.tarjeta + .tarjeta {
+  margin-top: 22px;
+}
+
+.tarjeta > h2 {
+  margin-bottom: 4px;
+}
+
+.tarjeta > .sub {
+  margin-bottom: 20px;
+}
+
+/* ── Formularios ────────────────────────────────────── */
+
+.campos {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+}
+
+.campo.ancho {
+  grid-column: 1 / -1;
+}
+
+label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--mid);
+  margin-bottom: 7px;
+}
+
+label .req {
+  color: var(--pink);
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  font-size: 15px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 11px 13px;
+  width: 100%;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 92px;
+  line-height: 1.55;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--pink);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+select option {
+  background: #15151a;
+}
+
+.ayuda {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 6px;
+}
+
+/* ── Botones ────────────────────────────────────────── */
+
+.btn {
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--pink);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 11px 20px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: filter 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  filter: brightness(1.1);
+}
+
+.btn.fantasma {
+  background: transparent;
+  border-color: var(--border-med);
+  color: var(--mid);
+}
+
+.btn.fantasma:hover {
+  filter: none;
+  color: #fff;
+  border-color: var(--pink);
+}
+
+.btn.peligro {
+  background: transparent;
+  border-color: rgba(212, 104, 138, 0.42);
+  color: #ffb3c8;
+}
+
+.btn.peligro:hover {
+  filter: none;
+  background: rgba(212, 104, 138, 0.14);
+}
+
+.btn.chico {
+  font-size: 13px;
+  padding: 7px 13px;
+}
+
+.btn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.acciones {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 26px;
+}
+
+/* ── Tablas ─────────────────────────────────────────── */
+
+.tabla-envoltura {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 620px;
+}
+
+thead th {
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dim);
+  background: rgba(255, 255, 255, 0.045);
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+tbody td {
+  padding: 15px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  vertical-align: middle;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+td .principal {
+  font-weight: 600;
+  text-decoration: none;
+}
+
+td .principal:hover {
+  color: var(--pink);
+}
+
+td .secundario {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+
+/* ── Etiquetas de estado ────────────────────────────── */
+
+.etiqueta {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-med);
+  color: var(--mid);
+  white-space: nowrap;
+}
+
+.etiqueta.encolado {
+  color: #d9d9a0;
+  border-color: rgba(200, 200, 0, 0.4);
+  background: rgba(200, 200, 0, 0.1);
+}
+
+.etiqueta.corriendo {
+  color: #b3bdf0;
+  border-color: rgba(90, 110, 204, 0.5);
+  background: rgba(90, 110, 204, 0.14);
+}
+
+.etiqueta.completado {
+  color: #8ee9c4;
+  border-color: rgba(16, 185, 129, 0.45);
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.etiqueta.fallido {
+  color: #ffb3c8;
+  border-color: rgba(212, 104, 138, 0.45);
+  background: rgba(212, 104, 138, 0.13);
+}
+
+.etiqueta.cancelado {
+  color: var(--dim);
+}
+
+/* ── Avisos ─────────────────────────────────────────── */
+
+.aviso {
+  padding: 13px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  line-height: 1.55;
+  border: 1px solid var(--border-med);
+  background: var(--glass);
+  color: var(--mid);
+}
+
+.aviso + .aviso {
+  margin-top: 10px;
+}
+
+.aviso.rosa {
+  color: #ffd8e2;
+  background: rgba(212, 104, 138, 0.14);
+  border-color: rgba(212, 104, 138, 0.42);
+}
+
+.aviso.amarillo {
+  color: #ececb8;
+  background: rgba(200, 200, 0, 0.1);
+  border-color: rgba(200, 200, 0, 0.36);
+}
+
+.aviso.verde {
+  color: #a9edd0;
+  background: rgba(16, 185, 129, 0.11);
+  border-color: rgba(16, 185, 129, 0.38);
+}
+
+/* ── Vacíos ─────────────────────────────────────────── */
+
+.vacio {
+  text-align: center;
+  padding: 54px 24px;
+  color: var(--dim);
+  font-size: 14.5px;
+}
+
+.vacio strong {
+  display: block;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+/* ── Listas de definición ───────────────────────────── */
+
+.datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px 28px;
+}
+
+.datos div {
+  min-width: 0;
+}
+
+.datos dt {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 4px;
+}
+
+.datos dd {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .barra {
+    padding: 16px 20px;
+  }
+
+  .contenido {
+    padding: 32px 20px 72px;
+  }
+
+  h1 {
+    font-size: 26px;
+  }
+}

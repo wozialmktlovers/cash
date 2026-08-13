@@ -1,0 +1,320 @@
+---
+import { eq, desc } from 'drizzle-orm';
+import Base from '@/layouts/Base.astro';
+import { db, clients, clientLinks, clientFiles, researchJobs, researchResults } from '@/db';
+
+const { id } = Astro.params;
+
+const [cliente] = await db.select().from(clients).where(eq(clients.id, id!)).limit(1);
+if (!cliente) return new Response('Cliente no encontrado', { status: 404 });
+
+const enlaces = await db.select().from(clientLinks).where(eq(clientLinks.clientId, cliente.id));
+const archivos = await db.select().from(clientFiles).where(eq(clientFiles.clientId, cliente.id));
+const jobs = await db
+  .select()
+  .from(researchJobs)
+  .where(eq(researchJobs.clientId, cliente.id))
+  .orderBy(desc(researchJobs.createdAt));
+const resultados = await db
+  .select()
+  .from(researchResults)
+  .where(eq(researchResults.clientId, cliente.id));
+
+const resultadoPorJob = new Map(resultados.map((r) => [r.jobId, r.id]));
+
+const dinero = (n: number) =>
+  n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+
+const fechaHora = (d: Date) =>
+  d.toLocaleString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok').length;
+---
+
+<Base titulo={cliente.nombre} migas={`Clientes › ${cliente.nombre}`}>
+  <div class="encabezado">
+    <div>
+      <h1>{cliente.nombre}</h1>
+      <p class="sub">{cliente.giro} · {cliente.producto}</p>
+    </div>
+    <div class="acciones" style="margin-top:0">
+      <a href={`/clientes/${cliente.id}/investigar`} class="btn">Investigar</a>
+      <button type="button" class="btn peligro" id="borrar">Eliminar</button>
+      <span id="confirmar-borrado" class="confirmar" hidden>
+        <span class="ayuda">Se borran también enlaces, archivos e investigaciones.</span>
+        <button type="button" class="btn peligro chico" id="borrar-de-verdad">
+          Sí, eliminar
+        </button>
+        <button type="button" class="btn fantasma chico" id="cancelar-borrado">Cancelar</button>
+      </span>
+    </div>
+  </div>
+
+  <!-- 1 · Datos -->
+  <section class="tarjeta">
+    <h2>Datos del cliente</h2>
+    <p class="sub">Se envían íntegros al pipeline de investigación.</p>
+
+    <form id="forma">
+      <div class="aviso rosa" id="errores" hidden></div>
+
+      <div class="campos">
+        <div class="campo">
+          <label for="nombre">Nombre <span class="req">*</span></label>
+          <input id="nombre" name="nombre" value={cliente.nombre} required />
+        </div>
+        <div class="campo">
+          <label for="giro">Giro <span class="req">*</span></label>
+          <input id="giro" name="giro" value={cliente.giro} required />
+        </div>
+        <div class="campo ancho">
+          <label for="producto">Producto o servicio <span class="req">*</span></label>
+          <input id="producto" name="producto" value={cliente.producto} required />
+        </div>
+        <div class="campo">
+          <label for="ciudad">Ciudad</label>
+          <input id="ciudad" name="ciudad" value={cliente.ciudad ?? ''} />
+        </div>
+        <div class="campo">
+          <label for="ticket">Ticket</label>
+          <input id="ticket" name="ticket" value={cliente.ticket ?? ''} />
+        </div>
+        <div class="campo ancho">
+          <label for="contacto">Contacto</label>
+          <input id="contacto" name="contacto" value={cliente.contacto ?? ''} />
+        </div>
+        <div class="campo ancho">
+          <label for="notas">Notas del operador</label>
+          <textarea id="notas" name="notas">{cliente.notas ?? ''}</textarea>
+        </div>
+      </div>
+
+      <div class="acciones">
+        <button type="submit" class="btn" id="guardar">Guardar cambios</button>
+        <span class="ayuda" id="estado"></span>
+      </div>
+    </form>
+  </section>
+
+  <!-- 2 · Enlaces -->
+  <section class="tarjeta">
+    <h2>Enlaces</h2>
+    <p class="sub">Sitio, redes y páginas de venta. La investigación los revisa.</p>
+    <div id="editor-enlaces" data-cliente={cliente.id} data-enlaces={JSON.stringify(enlaces)}>
+      {
+        enlaces.length === 0 ? (
+          <div class="vacio">
+            <strong>Sin enlaces</strong>
+            La investigación no podrá revisar los activos del cliente.
+          </div>
+        ) : (
+          <ul class="lista">
+            {enlaces.map((l) => (
+              <li>
+                <span class="etiqueta">{l.tipo}</span>
+                <a href={l.url} target="_blank" rel="noopener noreferrer">
+                  {l.url}
+                </a>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </div>
+  </section>
+
+  <!-- 3 · Archivos -->
+  <section class="tarjeta">
+    <h2>Archivos</h2>
+    <p class="sub">
+      PDF, DOCX, TXT e imágenes. Se extrae el texto para alimentar la investigación.
+    </p>
+    <div id="editor-archivos" data-cliente={cliente.id}>
+      {
+        archivos.length === 0 ? (
+          <div class="vacio">
+            <strong>Sin archivos</strong>
+            Se perderá el detalle del producto que solo está en los documentos.
+          </div>
+        ) : (
+          <ul class="lista">
+            {archivos.map((a) => (
+              <li>
+                <span class={`etiqueta ${a.estadoExtraccion === 'ok' ? 'completado' : ''}`}>
+                  {a.estadoExtraccion}
+                </span>
+                <span>{a.nombreOriginal}</span>
+                <span class="secundario">{Math.round(a.bytes / 1024)} KB</span>
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </div>
+  </section>
+
+  <!-- 4 · Investigaciones -->
+  <section class="tarjeta">
+    <h2>Investigaciones</h2>
+    <p class="sub">
+      {
+        jobs.length === 0
+          ? 'Este cliente no tiene investigaciones todavía.'
+          : `${jobs.length} ${jobs.length === 1 ? 'investigación' : 'investigaciones'}. ${conTexto} ${conTexto === 1 ? 'archivo aporta' : 'archivos aportan'} texto.`
+      }
+    </p>
+
+    {
+      jobs.length === 0 ? (
+        <div class="vacio">
+          <strong>Todavía no investigas a este cliente</strong>
+          Revisa que los enlaces y archivos estén completos antes de lanzar.
+        </div>
+      ) : (
+        <div class="tabla-envoltura">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Estado</th>
+                <th>Costo</th>
+                <th>Resultado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {jobs.map((j) => (
+                <tr>
+                  <td>{fechaHora(j.createdAt)}</td>
+                  <td>
+                    <span class={`etiqueta ${j.estado}`}>{j.estado}</span>
+                    {j.error && <div class="secundario">{j.error}</div>}
+                  </td>
+                  <td>{dinero(Number(j.costoUsd))}</td>
+                  <td>
+                    {resultadoPorJob.has(j.id) ? (
+                      <a href={`/resultados/${resultadoPorJob.get(j.id)}`} class="principal">
+                        Ver presentación
+                      </a>
+                    ) : (
+                      <a href={`/jobs/${j.id}`} class="secundario">
+                        Ver progreso
+                      </a>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+  </section>
+</Base>
+
+<script>
+  const forma = document.getElementById('forma') as HTMLFormElement;
+  const errores = document.getElementById('errores') as HTMLElement;
+  const guardar = document.getElementById('guardar') as HTMLButtonElement;
+  const estado = document.getElementById('estado') as HTMLElement;
+  const borrar = document.getElementById('borrar') as HTMLButtonElement;
+  const id = window.location.pathname.split('/').pop();
+
+  forma.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errores.hidden = true;
+    estado.textContent = '';
+    guardar.disabled = true;
+
+    const datos = Object.fromEntries(new FormData(forma).entries());
+
+    try {
+      const res = await fetch(`/api/clientes/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(datos),
+      });
+      const cuerpo = await res.json();
+
+      if (cuerpo.ok) {
+        estado.textContent = 'Guardado.';
+      } else {
+        errores.textContent = (cuerpo.errores ?? ['No se pudo guardar.']).join(' · ');
+        errores.hidden = false;
+      }
+    } catch {
+      errores.textContent = 'No se pudo contactar al servidor.';
+      errores.hidden = false;
+    }
+
+    guardar.disabled = false;
+  });
+
+  const confirmar = document.getElementById('confirmar-borrado') as HTMLElement;
+
+  borrar.addEventListener('click', () => {
+    confirmar.hidden = false;
+    borrar.hidden = true;
+  });
+
+  document.getElementById('cancelar-borrado')?.addEventListener('click', () => {
+    confirmar.hidden = true;
+    borrar.hidden = false;
+  });
+
+  document.getElementById('borrar-de-verdad')?.addEventListener('click', async () => {
+    const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+    if (res.ok) window.location.href = '/';
+  });
+</script>
+
+<style>
+  .lista {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .lista li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--glass);
+    font-size: 14px;
+    overflow-wrap: anywhere;
+  }
+
+  .lista a {
+    color: var(--mid);
+    text-decoration: none;
+  }
+
+  .lista a:hover {
+    color: var(--pink);
+  }
+
+  .encabezado .acciones {
+    margin-top: 0;
+  }
+
+  .confirmar {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .confirmar .ayuda {
+    margin-top: 0;
+    max-width: 260px;
+  }
+</style>

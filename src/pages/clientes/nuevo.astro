@@ -1,0 +1,99 @@
+---
+import Base from '@/layouts/Base.astro';
+---
+
+<Base titulo="Nuevo cliente" migas="Clientes › Nuevo">
+  <div class="encabezado">
+    <div>
+      <h1>Nuevo cliente</h1>
+      <p class="sub">Nombre, giro y producto son obligatorios. Lo demás mejora la investigación.</p>
+    </div>
+  </div>
+
+  <form class="tarjeta" id="forma">
+    <div class="aviso rosa" id="errores" hidden></div>
+
+    <div class="campos">
+      <div class="campo">
+        <label for="nombre">Nombre <span class="req">*</span></label>
+        <input id="nombre" name="nombre" required autofocus />
+      </div>
+
+      <div class="campo">
+        <label for="giro">Giro <span class="req">*</span></label>
+        <input id="giro" name="giro" required placeholder="Cosmetología, gimnasio, repostería…" />
+      </div>
+
+      <div class="campo ancho">
+        <label for="producto">Producto o servicio <span class="req">*</span></label>
+        <input id="producto" name="producto" required placeholder="Diplomado presencial de 6 meses" />
+      </div>
+
+      <div class="campo">
+        <label for="ciudad">Ciudad</label>
+        <input id="ciudad" name="ciudad" placeholder="Guadalajara" />
+        <p class="ayuda">Sin ciudad, el foco geográfico será nacional.</p>
+      </div>
+
+      <div class="campo">
+        <label for="ticket">Ticket</label>
+        <input id="ticket" name="ticket" placeholder="$36,792" />
+        <p class="ayuda">Determina si el ciclo de compra es largo.</p>
+      </div>
+
+      <div class="campo ancho">
+        <label for="contacto">Contacto</label>
+        <input id="contacto" name="contacto" placeholder="Nombre, teléfono o correo" />
+      </div>
+
+      <div class="campo ancho">
+        <label for="notas">Notas del operador</label>
+        <textarea id="notas" name="notas" placeholder="Lo que sepas y no esté en los documentos."
+        ></textarea>
+      </div>
+    </div>
+
+    <div class="acciones">
+      <button type="submit" class="btn" id="guardar">Guardar cliente</button>
+      <a href="/" class="btn fantasma">Cancelar</a>
+    </div>
+  </form>
+</Base>
+
+<script>
+  const forma = document.getElementById('forma') as HTMLFormElement;
+  const errores = document.getElementById('errores') as HTMLElement;
+  const guardar = document.getElementById('guardar') as HTMLButtonElement;
+
+  forma.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errores.hidden = true;
+    guardar.disabled = true;
+    guardar.textContent = 'Guardando…';
+
+    const datos = Object.fromEntries(new FormData(forma).entries());
+
+    try {
+      const res = await fetch('/api/clientes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(datos),
+      });
+      const cuerpo = await res.json();
+
+      if (cuerpo.ok) {
+        window.location.href = `/clientes/${cuerpo.id}`;
+        return;
+      }
+
+      errores.textContent = (cuerpo.errores ?? ['No se pudo guardar el cliente.']).join(' · ');
+      errores.hidden = false;
+    } catch {
+      errores.textContent = 'No se pudo contactar al servidor. Revisa tu conexión.';
+      errores.hidden = false;
+    }
+
+    guardar.disabled = false;
+    guardar.textContent = 'Guardar cliente';
+  });
+</script>
