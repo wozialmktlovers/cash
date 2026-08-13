@@ -15,6 +15,9 @@ const { titulo, migas } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex,nofollow" />
     <title>{titulo} · Wozial Studio</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#d4688a" />
+    <meta name="theme-color" content="#08080b" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -25,7 +28,10 @@ const { titulo, migas } = Astro.props;
   <body>
     <div class="sitio">
       <header class="barra">
-        <a href="/" class="marca">Wozial Studio</a>
+        <a href="/" class="marca" aria-label="Wozial Studio · inicio">
+          <img src="/logo-wozial.svg" alt="Wozial" width="446" height="127" />
+          <span>Studio</span>
+        </a>
         <span class="migas">{migas}</span>
         <form method="POST" action="/api/logout">
           <button type="submit" class="btn fantasma chico">Salir</button>

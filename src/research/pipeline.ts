@@ -59,10 +59,22 @@ export async function ejecutarJob(jobId: string): Promise<void> {
     }).where(eq(researchJobs.id, jobId));
   };
 
+  /**
+   * Publica el avance en cuanto cambia, sin bloquear al agente.
+   * Las cuatro etapas paralelas escriben la misma columna, así que una
+   * escritura puede pisar a otra; da igual, cada una guarda el objeto completo
+   * y el guardado final es el autoritativo. Sin esto, la página de progreso se
+   * queda en blanco hasta que terminan las cuatro.
+   */
+  const publicar = () => {
+    void guardarProgreso().catch((e) => console.error(`[${jobId}] guardar progreso:`, e));
+  };
+
   // Las cuatro de investigación corren en paralelo
   await Promise.all(paralelas.map(async (etapa) => {
-    if (superaTope(costo, tope)) { estado[etapa] = 'omitido_por_costo'; return; }
+    if (superaTope(costo, tope)) { estado[etapa] = 'omitido_por_costo'; publicar(); return; }
     estado[etapa] = 'corriendo';
+    publicar();
     try {
       const r = await corredores[etapa]();
       resultados[etapa] = r.datos;
@@ -73,6 +85,7 @@ export async function ejecutarJob(jobId: string): Promise<void> {
       estado[etapa] = 'fallo';
       console.error(`[${jobId}] etapa ${etapa}:`, e);
     }
+    publicar();
   }));
   await guardarProgreso();
 

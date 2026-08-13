@@ -1,9 +1,11 @@
 import type { Audiencia, Canales, Competencia, Mercado, Fuente, Persona } from '@/research/schemas';
+import { LOGO_WOZIAL } from '../marca';
 import { cabecera, escapar, lista, listaFuentes, siVacio, tabla, tarjeta } from './comunes';
 
 // ── 01 · Portada ─────────────────────────────────────────────────────
 export function panelPortada(meta: { cliente: string; giro: string; fecha: string }): string {
   return `<section class="panel"><div class="wrap">
+    <div style="width:100%;max-width:340px;margin-bottom:30px;">${LOGO_WOZIAL}</div>
     <div class="pnum">01 · Social Research</div>
     <h2>${escapar(meta.cliente)}</h2>
     <p class="lead">${escapar(meta.giro)}</p>

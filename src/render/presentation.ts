@@ -90,6 +90,9 @@ export function renderizarPresentacion(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Social Research Wozial | ${escapar(meta.cliente)} · ${escapar(meta.giro)}</title>
 <meta name="robots" content="noindex,nofollow">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="mask-icon" href="/favicon.svg" color="#d4688a">
+<meta name="theme-color" content="#0a0a0a">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>${ESTILOS}</style>
 </head><body>

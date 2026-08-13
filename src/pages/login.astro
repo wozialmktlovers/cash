@@ -16,6 +16,9 @@ const mensaje =
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex,nofollow" />
     <title>Entrar · Wozial Studio</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#d4688a" />
+    <meta name="theme-color" content="#08080b" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -26,7 +29,7 @@ const mensaje =
   <body>
     <main class="pantalla">
       <form class="acceso" method="POST" action="/api/login">
-        <p class="marca">Wozial</p>
+        <img class="logo" src="/logo-wozial.svg" alt="Wozial" width="446" height="127" />
         <h1>Studio</h1>
         <p class="sub">Investigación de mercado asistida. Acceso restringido.</p>
 
@@ -77,17 +80,36 @@ const mensaje =
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
   }
 
-  .marca {
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.22em;
-    text-transform: uppercase;
-    color: var(--pink);
+  .acceso {
+    max-width: 440px;
+    padding: 46px 38px 38px;
+  }
+
+  .logo {
+    width: 100%;
+    max-width: 300px;
+    height: auto;
+    display: block;
+    margin-bottom: 22px;
   }
 
   h1 {
-    font-size: 34px;
-    margin-top: 2px;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--pink);
+    margin-top: 0;
+  }
+
+  @media (max-width: 480px) {
+    .logo {
+      max-width: 230px;
+    }
+
+    h1 {
+      font-size: 21px;
+    }
   }
 
   .aviso {
