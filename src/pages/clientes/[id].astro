@@ -304,6 +304,10 @@ const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok').length;
     margin-top: 0;
   }
 
+  /* El atributo hidden tiene que ganarle al display propio: sin esto la
+     confirmación de borrado se ve siempre, junto al botón que la dispara. */
+  .confirmar[hidden] { display: none !important; }
+
   .confirmar {
     display: inline-flex;
     align-items: center;

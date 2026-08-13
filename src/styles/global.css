@@ -657,3 +657,8 @@ table thead { background: rgba(255, 255, 255, 0.028); }
   .barra { padding: 16px 20px 17px; gap: 14px; }
   .barra .migas { font-size: 0.72rem; }
 }
+
+
+/* El atributo hidden debe ganarle a cualquier display de clase. Sin esto un
+   elemento con display propio ignora hidden y se muestra siempre. */
+[hidden] { display: none !important; }
