@@ -50,6 +50,72 @@ export const keywordsSchema = z.object({
   negativas: z.array(z.string().trim().min(1)),
 });
 
+
+/* ── Segmentación de Meta ──────────────────────────────────────────────
+   El machote pide «todos los campos que pide el administrador de anuncios,
+   con el valor exacto a capturar en cada uno». Eso es lo que separa un
+   resumen de un documento que se puede ejecutar sin pensar, así que la
+   estructura de esta sección es tan fija como la de las campañas. */
+
+export const perfilSchema = z.object({
+  inicial: z.string().trim().length(1),
+  nombre: z.string().trim().min(1),
+  edad: z.number().int().min(16).max(90),
+  ciudad: z.string().trim().min(1),
+  titular: z.string().trim().min(1),
+  etiqueta: z.string().trim().min(1),
+  campos: z.array(z.object({
+    campo: z.string().trim().min(1),
+    valor: z.string().trim().min(1),
+  })).min(6).max(10),
+});
+
+export const capaSchema = z.object({
+  nombre: z.string().trim().min(1),
+  proposito: z.string().trim().min(1),
+  intereses: z.array(z.string().trim().min(1)).min(3).max(14),
+  nota: z.string().trim().optional(),
+});
+
+export const audienciaPersonalizadaSchema = z.object({
+  audiencia: z.string().trim().min(1),
+  fuente: z.string().trim().min(1),
+  ventana: z.string().trim().min(1),
+  usarEn: z.string().trim().min(1),
+  nombreSugerido: z.string().trim().min(1),
+});
+
+export const segmentacionSchema = z.object({
+  perfiles: z.array(perfilSchema).length(2),
+  notaSegmentacion: z.string().trim().min(1),
+  // Una fila por campo del administrador, con su valor para cada campaña.
+  configuracion: z.array(z.object({
+    campo: z.string().trim().min(1),
+    m1: z.string().trim().min(1),
+    m2: z.string().trim().min(1),
+    m3: z.string().trim().min(1),
+  })).min(8).max(14),
+  capas: z.array(capaSchema).length(3),
+  combinaciones: z.array(z.object({
+    conjunto: z.string().trim().min(1),
+    combinacion: z.string().trim().min(1),
+  })).min(3).max(6),
+  noSegmentar: z.array(z.string().trim().min(1)).min(3).max(8),
+  audienciasPersonalizadas: z.array(audienciaPersonalizadaSchema).min(5).max(10),
+  audienciasSimilares: z.array(z.object({
+    semilla: z.string().trim().min(1),
+    porcentaje: z.string().trim().min(1),
+    cuando: z.string().trim().min(1),
+  })).min(2).max(6),
+  geografia: z.array(z.object({
+    zona: z.string().trim().min(1),
+    detalle: z.string().trim().min(1),
+  })).min(1).max(6),
+});
+
+export type Segmentacion = z.infer<typeof segmentacionSchema>;
+export type Perfil = z.infer<typeof perfilSchema>;
+
 export const growthSchema = z.object({
   // Lo único variable de la portada. El machote deja [N] Semanas como marcador
   // y fija los demás números.
@@ -74,6 +140,7 @@ export const growthSchema = z.object({
     descripciones: z.array(z.string().trim().min(1).max(90)).length(4),
   }),
 
+  segmentacion: segmentacionSchema.optional(),
   bloqueantes: z.array(z.string().trim().min(1)).min(1),
   reglasCopy: z.array(z.string().trim().min(1)).min(1),
 });
@@ -94,8 +161,10 @@ export const estructuraSchema = growthSchema.pick({
 export const creativosSchema = growthSchema.pick({ creativos: true });
 export const googleSchema = growthSchema.pick({ googleKeywords: true, rsa: true });
 export const promptsSchema = growthSchema.pick({ promptsImagen: true });
+export const segmentacionAgenteSchema = z.object({ segmentacion: segmentacionSchema });
 
 export type Estructura = z.infer<typeof estructuraSchema>;
 export type Creativos = z.infer<typeof creativosSchema>;
 export type GoogleDatos = z.infer<typeof googleSchema>;
 export type Prompts = z.infer<typeof promptsSchema>;
+export type SegmentacionAgente = z.infer<typeof segmentacionAgenteSchema>;

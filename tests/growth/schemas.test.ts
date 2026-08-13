@@ -77,3 +77,40 @@ describe('growthSchema', () => {
     expect(new Set(combos).size).toBe(9);
   });
 });
+
+describe('segmentación de Meta', () => {
+  it('el fixture de Yessica valida contra el esquema completo', async () => {
+    const { segmentacionSchema } = await import('@/growth/schemas');
+    const r = segmentacionSchema.safeParse((completo as any).segmentacion);
+    if (!r.success) console.error(r.error.issues.slice(0, 5));
+    expect(r.success).toBe(true);
+  });
+
+  it('exige dos perfiles: uno solo no permite contrastar la segmentación', async () => {
+    const { segmentacionSchema } = await import('@/growth/schemas');
+    const malo = clonar().segmentacion;
+    malo.perfiles = malo.perfiles.slice(0, 1);
+    expect(segmentacionSchema.safeParse(malo).success).toBe(false);
+  });
+
+  it('exige las tres capas de intereses', async () => {
+    const { segmentacionSchema } = await import('@/growth/schemas');
+    const malo = clonar().segmentacion;
+    malo.capas = malo.capas.slice(0, 2);
+    expect(segmentacionSchema.safeParse(malo).success).toBe(false);
+  });
+
+  it('rechaza una tabla de configuración raquítica: es la hoja de captura', async () => {
+    const { segmentacionSchema } = await import('@/growth/schemas');
+    const malo = clonar().segmentacion;
+    malo.configuracion = malo.configuracion.slice(0, 3);
+    expect(segmentacionSchema.safeParse(malo).success).toBe(false);
+  });
+
+  it('no deja apilar veinte intereses en una capa, que es el error que documenta', async () => {
+    const { segmentacionSchema } = await import('@/growth/schemas');
+    const malo = clonar().segmentacion;
+    malo.capas[0].intereses = Array.from({ length: 20 }, (_, i) => `interes ${i}`);
+    expect(segmentacionSchema.safeParse(malo).success).toBe(false);
+  });
+});

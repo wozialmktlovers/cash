@@ -40,7 +40,8 @@ describe('manual de campaña', () => {
     delete g.creativos;
     g._huecos = { creativos: 'El agente no devolvió datos válidos tras dos intentos.' };
     const html = renderizarManual(g, meta);
-    expect((html.match(/class="slot ar-/g) ?? []).length).toBe(9);
+    // 3 grupos × (1 imagen + 5 tarjetas de carrusel + 2 del video) = 24 archivos
+    expect((html.match(/class="slot ar-/g) ?? []).length).toBe(24);
     expect(html).toContain('ar-1x1');
     expect(html).toContain('ar-9x16');
     expect(html).toMatch(/no devolvió datos/i);

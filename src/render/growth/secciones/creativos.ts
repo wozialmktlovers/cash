@@ -6,6 +6,23 @@ const MEDIDAS: Record<string, string> = {
 };
 
 /**
+ * Archivos que hay que producir por cada pieza conceptual.
+ *
+ * Un carrusel no es una imagen: son cinco tarjetas. Un video necesita además
+ * su fotograma de portada, que es lo que se ve en el feed antes de reproducir.
+ * Contar «9 creativos» y entregar 9 huecos deja al diseñador calculando
+ * cuántos archivos son en realidad; el documento existe para evitar eso.
+ */
+const ARCHIVOS: Record<string, { etiqueta: string; ratio: string }[]> = {
+  imagen: [{ etiqueta: 'Pieza', ratio: '1x1' }],
+  carrusel: Array.from({ length: 5 }, (_, i) => ({ etiqueta: `Tarjeta ${i + 1}`, ratio: '1x1' })),
+  video: [
+    { etiqueta: 'Video', ratio: '9x16' },
+    { etiqueta: 'Portada', ratio: '4x5' },
+  ],
+};
+
+/**
  * Los nueve espacios de creativo.
  *
  * Los huecos son deterministas: el ratio y las medidas los dicta el formato, y
@@ -25,16 +42,21 @@ export function seccionCreativos(g: Partial<Growth>, huecos: Record<string, stri
       const c = porClave.get(`${grupo}-${formato}`);
       const ratio = c?.ratio ?? RATIO_POR_FORMATO[formato];
       const medidas = c?.medidas ?? MEDIDAS[ratio];
+      const piezas = ARCHIVOS[formato] ?? [{ etiqueta: 'Pieza', ratio }];
       const copys = c
         ? `<div class="kv"><div class="kv-k">Opción A</div><div class="copy">${escapar(c.copyA)}</div></div>
            <div class="kv"><div class="kv-k">Opción B</div><div class="copy">${escapar(c.copyB)}</div></div>`
         : `<p class="tiny" style="margin-top:8px;">Sin copy: ${escapar(razon)}</p>`;
       return `<div class="fmt">
         <div class="fmt-hd">
-          <div class="slot ar-${escapar(ratio)}">
-            <div class="slot-r">${escapar(ratio.replace('x', ':'))}</div>
-            <div class="slot-p">${escapar(medidas)}</div>
+          <div class="slots">${piezas.map((pz) => `
+            <div class="slot ar-${escapar(pz.ratio)}">
+              <div class="slot-t">${escapar(pz.etiqueta)}</div>
+              <div class="slot-r">${escapar(pz.ratio.replace('x', ':'))}</div>
+              <div class="slot-p">${escapar(MEDIDAS[pz.ratio])}</div>
+            </div>`).join('')}
           </div>
+          <p class="tiny" style="margin-top:8px;">${piezas.length} ${piezas.length === 1 ? 'archivo' : 'archivos'} · ${escapar(medidas)} base</p>
         </div>
         <div class="fmt-bd">
           <h4>${escapar(formato)}</h4>

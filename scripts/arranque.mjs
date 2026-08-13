@@ -17,5 +17,15 @@ if (process.env.SEMBRAR_EJEMPLO === '1') {
   }
 }
 
+// Manual de campaña de demostración con contenido real del entregable hecho
+// a mano. No lo generan los agentes; se siembra para poder enseñar el motor.
+if (process.env.SEED_GROWTH) {
+  try {
+    await import('./sembrar-growth.mjs');
+  } catch (e) {
+    console.error('[seed growth] no se pudo sembrar:', e instanceof Error ? e.message : e);
+  }
+}
+
 console.log('Iniciando servidor...');
 await import('../dist/server/entry.mjs');
