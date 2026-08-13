@@ -3,6 +3,7 @@ import { eq, desc } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import LinksEditor from '@/components/LinksEditor';
 import FilesUploader from '@/components/FilesUploader';
+import { contarEtapasConDatos } from '@/lib/precheck';
 import { db, clients, clientLinks, clientFiles, researchJobs, researchResults, growthResults } from '@/db';
 
 const { id } = Astro.params;
@@ -34,7 +35,7 @@ const manualPorJob = new Map(manuales.map((m) => [m.jobId, m.id]));
 // El manual de campaña parte de la investigación: sin una completada no hay
 // nada sobre lo que razonar, así que el botón se ofrece deshabilitado con su
 // razón en vez de dejar encolar un job que va a fallar.
-const puedeGrowth = resultados.length > 0;
+const puedeGrowth = resultados.some((r) => contarEtapasConDatos(r.datos) > 0);
 
 const dinero = (n: number) =>
   n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
@@ -63,7 +64,7 @@ const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok').length;
         <button type="button" class="btn" id="generar-growth">Generar manual de campaña</button>
       ) : (
         <button type="button" class="btn" disabled
-          title="Este cliente aún no tiene una investigación completada. El manual de campaña parte de ella.">
+          title="Este cliente aún no tiene una investigación con datos. El manual de campaña parte de ella, y una investigación que falló entera no sirve de base.">
           Generar manual de campaña
         </button>
       )}
