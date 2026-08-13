@@ -1,5 +1,8 @@
 import { defineMiddleware } from 'astro:middleware';
 import { validarSesion } from '@/lib/auth';
+import { arrancarWorker } from '@/research/worker';
+
+arrancarWorker();
 
 const PUBLICAS = [/^\/login$/, /^\/api\/login$/, /^\/p\//];
 
