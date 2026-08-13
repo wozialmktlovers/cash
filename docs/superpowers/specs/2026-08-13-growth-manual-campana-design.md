@@ -172,8 +172,14 @@ la ficha cruda del cliente.
 - **Implementación técnica**, **tabla de medición** y **contadores de
   portada**: plantilla con los nombres del cliente sustituidos.
 
-- **Bloqueantes y reglas de copy**: derivados de los hallazgos de la síntesis
-  y de `mercado.regulacion`, que la investigación ya trae con fuente.
+**Corrección sobre bloqueantes y reglas de copy.** Una primera versión de este
+diseño los ponía aquí, entre lo determinista. Es falso: en el documento real
+dicen cosas como «Precios corregidos y publicados — pagar en 12 meses sale más
+barato que en 8; está invertido», o «El aval no es titular: IMNAS lo tiene por
+$3,450, va en el cuerpo como objeción resuelta». Eso es prosa que exige juicio
+sobre los hallazgos, no una sustitución de plantilla. Los escribe el agente de
+`estructura`, apoyado en la síntesis y en `mercado.regulacion`, y viajan en el
+esquema como listas validadas.
 
 ### Tope de costo
 
