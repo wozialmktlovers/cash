@@ -167,7 +167,7 @@ body{padding-top:64px; overflow-y:auto; overflow-x:hidden; min-height:100vh;}
 }
 @media (max-width:768px){
   body{padding-top:56px;}.nav{height:56px;}.prog{top:56px;}
-  .sec{padding:46px 0;}
+  .sec{padding:var(--e4) 0;}
   .g2,.g3,.g4{grid-template-columns:1fr;}.g5{grid-template-columns:repeat(2,1fr);}
   .kv{grid-template-columns:1fr;gap:5px;padding:11px 0;}.kv-k{padding-top:0;}
   .shead{gap:14px;margin-bottom:24px;}.shead-n{width:42px;height:42px;border-radius:12px;}
@@ -270,6 +270,36 @@ body{padding-top:64px; overflow-y:auto; overflow-x:hidden; min-height:100vh;}
 .skicker{
   font-family:var(--mono);
   letter-spacing:.16em;text-transform:uppercase;
+}
+
+/* ── Ritmo vertical ──────────────────────────────────── */
+/* El manual se lee de corrido y de una sentada: sin aire entre apartados,
+   nueve secciones densas se convierten en un muro. El salto de sección tiene
+   que notarse sin leer, y el de apartado también. */
+.sec{padding:var(--e5) 0;}
+.shead{margin-bottom:var(--e4);}
+/* Un h3 abre apartado: se separa de lo anterior mucho más de lo que se acerca
+   a lo suyo. Es la señal de que empieza algo nuevo. */
+.sec h3{margin-top:var(--e4);margin-bottom:var(--e2);}
+.sec h3:first-child{margin-top:0;}
+.sec .card h3,.sec .card h4{margin-top:0;}
+.card{padding:26px 26px 24px;}
+.card-sm{padding:20px;}
+.kv{padding:16px 0;gap:18px;}
+.chips{gap:9px;}
+.grp{margin-top:var(--e3);}
+.grp-bd{padding:26px;}
+.fmt-bd{padding:20px 18px;}
+.copy{padding:15px 17px;}
+.g2,.g3,.g4{gap:22px;}
+.spec{margin-top:var(--e4)!important;}
+/* Las tarjetas de un grupo respiran entre sí dentro de su rejilla. */
+.grp-bd .g3{gap:20px;}
+
+@media (max-width:900px){
+  .sec{padding:var(--e4) 0;}
+  .shead{margin-bottom:var(--e3);}
+  .sec h3{margin-top:var(--e3);}
 }
 
 @media (max-width:768px){

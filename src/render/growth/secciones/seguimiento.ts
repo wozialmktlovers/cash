@@ -11,7 +11,7 @@ export function seccionSeguimiento(g: Partial<Growth>): string {
       lead: 'Decidido por adelantado, para que la decisión no dependa del ánimo del día.',
     })}
 
-    <h3 style="margin-top:22px;">Calendario de ${semanas} semanas</h3>
+    <h3 style="margin-top:var(--e3);">Calendario de ${semanas} semanas</h3>
     ${tablaGrowth(['Momento', 'Qué se mira', 'Qué se hace'], [
       ['<strong>Días 1 a 3</strong>', 'Que las URLs registren y que los eventos lleguen', 'No se toca nada más. Optimizar con tres días de datos es leer ruido'],
       ['<strong>Día 4</strong>', 'Costo por resultado de cada ángulo', 'Se pausa el ángulo más caro solo si dobla al mejor'],
@@ -20,14 +20,14 @@ export function seccionSeguimiento(g: Partial<Growth>): string {
       [`<strong>Semana ${semanas}</strong>`, 'Costo por registro frente al valor del cliente', 'Se decide si se escala, se ajusta la oferta o se para'],
     ])}
 
-    <h3 style="margin-top:26px;">Señales de cortar antes de tiempo</h3>
+    <h3 style="margin-top:var(--e3);">Señales de cortar antes de tiempo</h3>
     ${listaGrowth([
       'Tráfico que llega y rebota en menos de diez segundos: el problema está en la página, no en la campaña. Más presupuesto lo amplifica en vez de resolverlo.',
       'Registros que nadie contesta en menos de una hora: el cuello no es el anuncio.',
       'Costo por registro por encima de lo que deja el margen, dos semanas seguidas.',
     ], 'lst lst-x')}
 
-    <div class="alert alert-green" style="margin-top:18px;">
+    <div class="alert alert-green" style="margin-top:var(--e2);">
       <strong>Lo que no se mide en la primera vuelta.</strong> El retorno real no se conoce hasta que cierra el ciclo de compra completo. Juzgar la campaña por la venta del primer día castiga a los ángulos que trabajan arriba del embudo, que suelen ser los que sostienen el volumen después.
     </div>`;
 }

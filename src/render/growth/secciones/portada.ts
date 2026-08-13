@@ -31,7 +31,7 @@ export function seccionPortada(
     `<div class="spec-i"><div class="spec-v">${escapar(v)}</div><div class="spec-l">${escapar(l)}</div></div>`;
 
   const aviso = meta.investigacionParcial
-    ? `<div class="alert alert-yellow" style="margin-top:18px;"><strong>La investigación de origen venía incompleta.</strong> Esta campaña se construyó sobre los datos que sí había. Los apartados afectados lo declaran, y lo que falta por averiguar está en los bloqueantes.</div>`
+    ? `<div class="alert alert-yellow" style="margin-top:var(--e2);"><strong>La investigación de origen venía incompleta.</strong> Esta campaña se construyó sobre los datos que sí había. Los apartados afectados lo declaran, y lo que falta por averiguar está en los bloqueantes.</div>`
     : '';
 
   return `
@@ -39,24 +39,24 @@ export function seccionPortada(
     <h1 class="portada-ttl"><span class="grad">${escapar(meta.producto)}</span></h1>
     <p class="portada-tesis">Todo lo necesario para montar, etiquetar y medir. <strong>Sin relleno.</strong></p>
     ${aviso}
-    <div class="spec" style="margin-top:30px;">
+    <div class="spec" style="margin-top:var(--e4);">
       ${stat(`${nMeta}+${nGoogle}`, 'Campañas Meta + Google')}
       ${stat(String(nCre), 'Creativos Meta')}
       ${stat(String(totalUrls), 'URLs etiquetadas')}
       ${stat(String(g.semanas ?? '—'), 'Semanas')}
     </div>
 
-    <h3 style="margin-top:30px;">Bloqueantes · sin esto no se arranca</h3>
+    <h3 style="margin-top:var(--e4);">Bloqueantes · sin esto no se arranca</h3>
     ${g.bloqueantes?.length
       ? listaGrowth(g.bloqueantes, 'lst lst-x')
       : hueco(huecos.estructura ?? 'No se determinaron los bloqueantes.')}
 
-    <h3 style="margin-top:24px;">Reglas de copy · aplican a todo</h3>
+    <h3 style="margin-top:var(--e3);">Reglas de copy · aplican a todo</h3>
     ${g.reglasCopy?.length
       ? listaGrowth(g.reglasCopy, 'lst lst-yellow')
       : hueco(huecos.estructura ?? 'No se determinaron las reglas de copy.')}
 
-    <div style="margin-top:24px;">
+    <div style="margin-top:var(--e3);">
       ${filas([['Cliente', meta.cliente], ['Fecha de corte', meta.fecha]])}
     </div>`;
 }

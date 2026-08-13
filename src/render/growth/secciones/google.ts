@@ -27,13 +27,13 @@ export function seccionGoogle(
   if (!a) {
     const basico = g.googleKeywords?.length
       ? g.googleKeywords.map((k) => `
-          <div class="grp" style="margin-top:14px;">
+          <div class="grp" style="margin-top:var(--e2);">
             <div class="grp-hd"><span class="chip chip-k">${escapar(k.clave)}</span></div>
             <div class="grp-bd">${chips(k.keywords)}
               <div class="tiny" style="margin:12px 0 6px;">Negativas</div>${chips(k.negativas, 'chip chip-x')}</div>
           </div>`).join('')
       : hueco(huecos.google ?? 'Las campañas de Search no se generaron.');
-    return `${cab}<div style="margin-top:20px;">${basico}</div>`;
+    return `${cab}<div style="margin-top:var(--e3);">${basico}</div>`;
   }
 
   const contar = (t: string, max: number) =>
@@ -42,7 +42,7 @@ export function seccionGoogle(
   const campanas = [...a.campanas]
     .sort((x, y) => ORDEN[x.clave] - ORDEN[y.clave])
     .map((c) => `
-      <div class="grp" style="margin-top:18px;">
+      <div class="grp" style="margin-top:var(--e2);">
         <div class="grp-hd">
           <span class="chip chip-k">G${ORDEN[c.clave]} · ${escapar(NOMBRE[c.clave])}</span>
           <span class="badge b-gray" style="margin-left:8px;">${escapar(c.presupuesto)}</span>
@@ -67,14 +67,14 @@ export function seccionGoogle(
       </div>`).join('');
 
   return `${cab}
-    <div class="g2" style="margin-top:20px;">
+    <div class="g2" style="margin-top:var(--e3);">
       <div class="card card-yellow">
         <h4>Los dos datos que ordenan la puja</h4>
-        <div style="margin-top:10px;">${listaGrowth(a.hallazgos, 'lst lst-yellow')}</div>
+        <div style="margin-top:var(--e1);">${listaGrowth(a.hallazgos, 'lst lst-yellow')}</div>
       </div>
       <div class="card">
         <h4>Configuración obligatoria</h4>
-        <div style="margin-top:10px;">${listaGrowth(a.configuracionObligatoria, 'lst lst-blue')}</div>
+        <div style="margin-top:var(--e1);">${listaGrowth(a.configuracionObligatoria, 'lst lst-blue')}</div>
       </div>
     </div>
     ${campanas}`;

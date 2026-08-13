@@ -15,7 +15,7 @@ export function cabeceraSeccion(opts: {
     <div class="shead-x">
       <span class="skicker">${escapar(opts.kicker)}</span>
       <h2>${escapar(opts.titulo)}</h2>
-      ${opts.lead ? `<p class="lead" style="margin-top:8px;">${escapar(opts.lead)}</p>` : ''}
+      ${opts.lead ? `<p class="lead" style="margin-top:var(--e1);">${escapar(opts.lead)}</p>` : ''}
     </div>
   </div>`;
 }

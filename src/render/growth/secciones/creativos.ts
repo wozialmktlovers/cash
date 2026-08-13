@@ -55,7 +55,7 @@ export function seccionCreativos(
       const copys = c
         ? `<div class="kv"><div class="kv-k">Opción A</div><div class="copy">${escapar(c.copyA)}</div></div>
            <div class="kv"><div class="kv-k">Opción B</div><div class="copy">${escapar(c.copyB)}</div></div>`
-        : `<p class="tiny" style="margin-top:8px;">Sin copy: ${escapar(razon)}</p>`;
+        : `<p class="tiny" style="margin-top:var(--e1);">Sin copy: ${escapar(razon)}</p>`;
       const url = urlPorClave.get(`g${grupo}_${formato}`);
       return `<div class="fmt">
         <div class="fmt-hd">
@@ -66,13 +66,13 @@ export function seccionCreativos(
               <div class="slot-p">${escapar(MEDIDAS[pz.ratio])}</div>
             </div>`).join('')}
           </div>
-          <p class="tiny" style="margin-top:8px;">${piezas.length} ${piezas.length === 1 ? 'archivo' : 'archivos'} · ${escapar(medidas)} base</p>
+          <p class="tiny" style="margin-top:var(--e1);">${piezas.length} ${piezas.length === 1 ? 'archivo' : 'archivos'} · ${escapar(medidas)} base</p>
         </div>
         <div class="fmt-bd">
           <h4>${escapar(formato)}</h4>
           ${copys}
           ${url
-            ? `<div class="kv" style="margin-top:10px;"><div class="kv-k">URL</div><div class="pre">${escapar(url)}</div></div>`
+            ? `<div class="kv" style="margin-top:var(--e1);"><div class="kv-k">URL</div><div class="pre">${escapar(url)}</div></div>`
             : ''}
         </div>
       </div>`;
@@ -92,6 +92,6 @@ export function seccionCreativos(
     numero: '02', kicker: 'Producción', titulo: 'Creativos, copy y espacios',
     lead: 'Nueve piezas: tres ángulos por tres formatos. Cada hueco trae su medida exacta.',
   })}
-  ${g.creativos?.length ? '' : `<div style="margin-top:18px;">${hueco(razon)}</div>`}
-  <div style="margin-top:20px;">${grupos}</div>`;
+  ${g.creativos?.length ? '' : `<div style="margin-top:var(--e2);">${hueco(razon)}</div>`}
+  <div style="margin-top:var(--e3);">${grupos}</div>`;
 }

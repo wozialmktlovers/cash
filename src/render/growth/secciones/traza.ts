@@ -34,7 +34,7 @@ export function seccionTraza(urls: UrlEtiquetada[]): string {
       lead: 'Sin esto, el reporte no dice qué funcionó. Con esto, lo dice al tercer día.',
     })}
 
-    <div class="alert alert-red" style="margin-top:20px;">
+    <div class="alert alert-red" style="margin-top:var(--e3);">
       <strong>Antes de escribir una sola URL.</strong> Verificar que las páginas de destino existan y respondan 200. Es la comprobación que más se salta y la que más caro sale: una URL rota consume presupuesto sin poder convertir.
     </div>
 
@@ -44,10 +44,10 @@ export function seccionTraza(urls: UrlEtiquetada[]): string {
       'Comprobar que la plataforma conserve los UTM al pasar de una página a otra. Varias los pierden en el salto, y ahí se rompe toda la medición.',
     ], 'lst lst-blue')}
 
-    <h3 style="margin-top:26px;">Parámetros</h3>
+    <h3 style="margin-top:var(--e3);">Parámetros</h3>
     ${parametros}
 
-    <h3 style="margin-top:26px;">Reglas de escritura</h3>
+    <h3 style="margin-top:var(--e3);">Reglas de escritura</h3>
     ${listaGrowth([
       'Todo en minúsculas. Meta y meta son dos fuentes distintas en el reporte.',
       'Guion bajo para separar, nunca espacios ni guiones medios.',
@@ -56,10 +56,10 @@ export function seccionTraza(urls: UrlEtiquetada[]): string {
       'En Meta se pega en el campo «Parámetros de URL» de cada anuncio.',
     ], 'lst lst-yellow')}
 
-    <h3 style="margin-top:26px;">Las ${urls.length} URLs</h3>
+    <h3 style="margin-top:var(--e3);">Las ${urls.length} URLs</h3>
     ${tabla}
 
-    <div class="alert alert-green" style="margin-top:18px;">
+    <div class="alert alert-green" style="margin-top:var(--e2);">
       <strong>Por qué ángulo y formato van separados.</strong> Con utm_content y utm_term en campos distintos se responden tres preguntas por separado: qué mensaje convence, qué formato rinde y qué combinación gana. Mezclarlos en un solo parámetro haría imposible aislar cuál de los dos explica el resultado.
     </div>`;
 }

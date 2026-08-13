@@ -19,30 +19,30 @@ export function seccionTecnico(meta: MetaManual, g: Partial<Growth> = {}): strin
       lead: 'Todo pasa por un solo contenedor de Tag Manager. Nada se instala directo en el código: así se cambia sin tocar el sitio.',
     })}
 
-    <h3 style="margin-top:22px;">Arquitectura de medición</h3>
+    <h3 style="margin-top:var(--e3);">Arquitectura de medición</h3>
     ${tablaGrowth(['Capa', 'Herramienta', 'Función', 'Identificador'],
       t.arquitectura.map((c) => [
         `<strong>${escapar(c.capa)}</strong>`, escapar(c.herramienta), escapar(c.funcion),
         `<code class="pre">${escapar(c.identificador)}</code>`]))}
 
-    <div class="g2" style="margin-top:22px;">
+    <div class="g2" style="margin-top:var(--e3);">
       <div class="card">
         <h4>Etiquetas a crear en GTM</h4>
-        <div style="margin-top:10px;">
+        <div style="margin-top:var(--e1);">
           ${tablaGrowth(['Etiqueta', 'Activador'],
             t.etiquetas.map((e) => [`<strong>${escapar(e.etiqueta)}</strong>`, escapar(e.activador)]))}
         </div>
       </div>
       <div class="card">
         <h4>Variables a activar</h4>
-        <div style="margin-top:10px;">${chips(t.variables, 'chip chip-k')}</div>
-        <div class="alert alert-red" style="margin-top:14px;">
+        <div style="margin-top:var(--e1);">${chips(t.variables, 'chip chip-k')}</div>
+        <div class="alert alert-red" style="margin-top:var(--e2);">
           <strong>Esto va antes que el primer peso invertido.</strong> Una campaña que corre sin medición no se puede optimizar, y lo gastado esos días no se recupera con datos.
         </div>
       </div>
     </div>
 
-    <h3 style="margin-top:24px;">Lo que se rompe más a menudo</h3>
+    <h3 style="margin-top:var(--e3);">Lo que se rompe más a menudo</h3>
     ${listaGrowth([
       'El contenedor se crea pero no se publica: el sitio no carga ninguna etiqueta y el reporte queda a cero.',
       'El píxel se pega en el sitio y también en GTM: cada visita se cuenta dos veces y el costo por resultado aparece a la mitad.',
@@ -57,11 +57,11 @@ export function seccionTecnico(meta: MetaManual, g: Partial<Growth> = {}): strin
       lead: 'El orden importa: sin el contenedor publicado, todo lo demás mide en el vacío.',
     })}
 
-    <div class="alert alert-red" style="margin-top:20px;">
+    <div class="alert alert-red" style="margin-top:var(--e3);">
       <strong>Esto va antes que el primer peso invertido.</strong> Una campaña que corre sin medición no se puede optimizar, y lo gastado esos días no se recupera con datos.
     </div>
 
-    <h3 style="margin-top:26px;">Orden de instalación</h3>
+    <h3 style="margin-top:var(--e3);">Orden de instalación</h3>
     ${tablaGrowth(['Paso', 'Qué se hace', 'Cómo se comprueba'], [
       ['<strong>1</strong>', 'Crear el contenedor de Google Tag Manager y publicarlo', 'La vista previa de GTM carga en el sitio de ' + escapar(meta.cliente)],
       ['<strong>2</strong>', 'Crear la propiedad de GA4 y conectarla desde GTM', 'El informe en tiempo real registra tu propia visita'],
@@ -70,7 +70,7 @@ export function seccionTecnico(meta: MetaManual, g: Partial<Growth> = {}): strin
       ['<strong>5</strong>', 'Marcar el evento de registro como conversión en las tres', 'Una prueba real de punta a punta aparece en GA4, Meta y Ads'],
     ])}
 
-    <h3 style="margin-top:26px;">Lo que se rompe más a menudo</h3>
+    <h3 style="margin-top:var(--e3);">Lo que se rompe más a menudo</h3>
     ${listaGrowth([
       'El contenedor se crea pero no se publica: el sitio no carga ninguna etiqueta y el reporte queda a cero.',
       'El píxel se pega en el sitio y también en GTM: cada visita se cuenta dos veces y el costo por resultado aparece a la mitad.',

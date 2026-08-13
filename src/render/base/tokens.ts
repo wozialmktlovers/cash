@@ -28,6 +28,15 @@ export const TOKENS = `
      al recomprimirse la pantalla compartida. */
   --dim:rgba(255,255,255,.6); --mid:rgba(255,255,255,.82);
   --radius:16px; --radius-sm:10px;
+
+  /* Escala vertical. Antes los márgenes eran valores sueltos entre 6 y 30px
+     sin relación entre sí, y todos cortos: el documento se leía apretado y
+     nada indicaba qué separaba de qué. Cinco pasos, y cada salto se nota. */
+  --e1:12px;   /* dentro de un bloque */
+  --e2:20px;   /* entre elementos hermanos */
+  --e3:34px;   /* entre bloques */
+  --e4:58px;   /* entre apartados con título propio */
+  --e5:110px;  /* aire de sección */
   /* Escala tipográfica global. La cambia el botón de la barra. */
   --esc:1;
 }
