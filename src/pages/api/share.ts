@@ -28,10 +28,15 @@ export const POST: APIRoute = async ({ request }) => {
 
   const tipo = crudo.tipo === 'growth' ? 'growth' : 'research';
 
+  // La tabla se elige una sola vez. Tenerla en tres ternarios separados dejó
+  // la proyección apuntando a research_results mientras el FROM iba a
+  // growth_results, y Drizzle revienta: «references a column ... but the table
+  // is not part of the query». El botón de crear link del manual fallaba.
+  const tabla = tipo === 'growth' ? growthResults : researchResults;
   const [resultado] = await db
-    .select({ id: researchResults.id })
-    .from(tipo === 'growth' ? growthResults : researchResults)
-    .where(eq(tipo === 'growth' ? growthResults.id : researchResults.id, resultId))
+    .select({ id: tabla.id })
+    .from(tabla)
+    .where(eq(tabla.id, resultId))
     .limit(1);
   if (!resultado) return json({ ok: false, errores: ['El resultado no existe'] }, 404);
 

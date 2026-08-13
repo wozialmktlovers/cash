@@ -23,7 +23,10 @@ html{
 body{
   font-family:'Poppins',-apple-system,sans-serif;
   background:var(--black); color:var(--white);
-  line-height:1.65; overflow:hidden; height:100vh; height:100dvh;
+  line-height:1.65;
+  /* El alto y el overflow NO van aquí: el deck bloquea el scroll del body
+     porque desplaza láminas, y el manual de campaña se lee de corrido y tiene
+     que poder desplazarse. Cada envase pone el suyo. */
 }
 body::before{
   content:''; position:fixed; inset:0; z-index:0; pointer-events:none;

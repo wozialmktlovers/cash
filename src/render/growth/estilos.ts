@@ -28,8 +28,9 @@ const CSS_GROWTH = `
 /* El envase del deck traía estas dos; el manual las necesita igual. */
 .nav-logo{height:23px;flex-shrink:0;filter:brightness(0) invert(1);opacity:.95;}
 main{position:relative;z-index:1;}
-/* La nav es fija: sin este hueco, la primera sección arranca debajo de ella. */
-body{padding-top:64px;}
+/* El manual se lee de corrido: el body SÍ se desplaza. La nav es fija, así
+   que hace falta el hueco para que la primera sección no arranque debajo. */
+body{padding-top:64px; overflow-y:auto; overflow-x:hidden; min-height:100vh;}
 
 /* ── Barra de anclas ─────────────────────────────────── */
 .prog{position:fixed;top:54px;left:0;right:0;height:2px;background:rgba(255,255,255,.08);z-index:100;}
@@ -173,9 +174,25 @@ body{padding-top:64px;}
   .shead-n span{font-size:0.938rem;}
   .card{padding:18px;}.grp-bd,.grp-hd{padding:16px;}
 }
-/* Los tamaños de .ar-* son los del machote y se respetan en pantalla ancha.
-   Aquí solo se impide que desborden su columna cuando no caben. */
+/* Los tamaños fijos de .ar-* (390px) son los del machote y valen cuando la
+   pieza va sola. Dentro de una columna estrecha no: un carrusel son cinco
+   tarjetas de 390px metidas en 390px, así que se desbordaban y pisaban la
+   columna vecina. Dentro del grupo de formatos mandan la proporción y el
+   ancho disponible, nunca el píxel fijo. */
 .slot{max-width:100%;}
+.fmt-hd .slots,.fmt-hd .slots-car{
+  display:grid;gap:8px;width:100%;
+  grid-template-columns:repeat(auto-fill,minmax(84px,1fr));
+}
+.fmt-hd .slots{grid-template-columns:1fr;}
+.fmt-hd .slot{width:auto!important;height:auto!important;padding:10px 6px;gap:3px;}
+.fmt-hd .ar-1x1{aspect-ratio:1/1;}
+.fmt-hd .ar-4x5{aspect-ratio:4/5;}
+.fmt-hd .ar-9x16{aspect-ratio:9/16;}
+/* En las tarjetas pequeñas del carrusel el texto del machote no cabe. */
+.fmt-hd .slots-car .slot-r{font-size:1rem;}
+.fmt-hd .slots-car .slot-p{font-size:0.75rem;}
+.fmt-hd .slots-car .slot-t{font-size:0.75rem;}
 
 @media (max-width:768px){
   .nav-links{display:none;}

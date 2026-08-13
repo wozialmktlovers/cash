@@ -49,7 +49,7 @@ export function seccionCreativos(g: Partial<Growth>, huecos: Record<string, stri
         : `<p class="tiny" style="margin-top:8px;">Sin copy: ${escapar(razon)}</p>`;
       return `<div class="fmt">
         <div class="fmt-hd">
-          <div class="slots">${piezas.map((pz) => `
+          <div class="${piezas.length > 1 ? 'slots-car' : 'slots'}">${piezas.map((pz) => `
             <div class="slot ar-${escapar(pz.ratio)}">
               <div class="slot-t">${escapar(pz.etiqueta)}</div>
               <div class="slot-r">${escapar(pz.ratio.replace('x', ':'))}</div>

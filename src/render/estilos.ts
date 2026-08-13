@@ -8,6 +8,8 @@
 import { TOKENS, CSS_COMUN } from './base';
 
 const CSS_DECK = `
+/* El deck desplaza láminas: el body no se desplaza. */
+body{overflow:hidden; height:100vh; height:100dvh;}
 /* ── DECK: scroll horizontal ─────────────────────────── */
 .deck{
   display:flex; height:100vh; height:100dvh;
