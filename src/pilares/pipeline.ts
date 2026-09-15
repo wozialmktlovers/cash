@@ -164,7 +164,10 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
   }
 
   await db.update(researchJobs).set({
-    estado: 'completado', etapas: estado, etapaActual: null, finishedAt: new Date(),
-    tokensEntrada: tIn, tokensSalida: tOut, costoUsd: String(gasto.valor), error: null,
+    // Sin un solo tema el mapa no sirve: el job cuenta como fallido para que
+    // quien lo lanzó reciba el aviso en lugar de un «completado» vacío.
+    estado: finales.length > 0 ? 'completado' : 'fallido', etapas: estado, etapaActual: null, finishedAt: new Date(),
+    tokensEntrada: tIn, tokensSalida: tOut, costoUsd: String(gasto.valor),
+    error: finales.length > 0 ? null : 'Ningún pilar se pudo generar. Intenta de nuevo.',
   }).where(eq(researchJobs.id, jobId));
 }

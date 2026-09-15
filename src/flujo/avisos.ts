@@ -150,8 +150,8 @@ export type ContextoAviso = ContextoDestinatarios & { datos: DatosAviso };
 
 /**
  * Calcula destinatarios y texto, inserta una fila por destinatario en
- * `notificaciones` (un solo insert multi-fila) y manda el correo con
- * `enviarCorreo` agrupado por destino. Nunca lanza: un fallo de la base o del
+ * `notificaciones` (un solo insert multi-fila) y manda un correo por
+ * destinatario con `enviarCorreo`. Nunca lanza: un fallo de la base o del
  * correo se registra y sigue, para no tumbar la acción que originó el aviso.
  * Quien llama debe hacerlo después de que su transacción cerró, sin esperar:
  * `void notificar(...).catch((e) => console.error('[avisos] …', e))`.
@@ -175,27 +175,22 @@ export async function notificar(evento: EventoAviso, ctx: ContextoAviso, enlace:
     console.error('[avisos] no se pudo guardar la notificación:', e);
   }
 
-  // Un enviarCorreo por destino distinto (interno vs. portal), agrupando los
-  // correos de cada grupo con `para: string[]` en vez de una llamada por persona.
+  // Un correo por persona: con varios destinatarios en `to` cada uno vería los
+  // correos de los demás (por ejemplo, todos los admins o todos los usuarios de
+  // un cliente). Los envíos van en paralelo y enviarCorreo nunca lanza.
   const base = (process.env.PUBLIC_BASE_URL ?? '').replace(/\/+$/, '');
-  const grupos = new Map<string, string[]>();
-  for (const u of lista) {
-    const destino = enlaceDe(u);
-    grupos.set(destino, [...(grupos.get(destino) ?? []), u.email]);
-  }
-
-  for (const [destino, correos] of grupos) {
+  await Promise.all(lista.map((u) => {
     // Sin PUBLIC_BASE_URL no hay a dónde apuntar el botón (una ruta relativa
     // no sirve en un correo): se manda solo el título y el texto, sin botón.
-    const url = base ? `${base}${destino}` : '';
-    await enviarCorreo({
-      para: correos,
+    const url = base ? `${base}${enlaceDe(u)}` : '';
+    return enviarCorreo({
+      para: u.email,
       asunto: titulo,
       titulo,
       texto,
       boton: url ? { texto: 'Ver en Wozial Studio', url } : undefined,
     });
-  }
+  }));
 }
 
 /** Aviso de un job de pipeline: entregable generado o job fallido, solo a quien lo lanzó. */
