@@ -26,6 +26,10 @@ const PARES: Array<[string, string]> = [
   ['amarillo', 'fondo'], ['amarillo', 'amarillo-s'],
   ['verde', 'fondo'], ['verde', 'verde-s'],
   ['rojo', 'fondo'], ['rojo', 'rojo-s'],
+  // Cabecera de pilar en el banco de temas (banco.ts): el eyebrow «Pilar N»
+  // del quinto pilar usa --tinta sobre --gris (su --color-pilar-s, ya que
+  // tinta no tiene tinte -s propio).
+  ['tinta', 'gris'],
 ];
 
 describe('contraste', () => {

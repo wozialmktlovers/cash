@@ -11,6 +11,14 @@ function listaEditable(items: string[], editable: boolean, ruta: (indice: number
 /** Color por número de pilar (1–5), en el orden que fija el spec. */
 export const COLOR_PILAR = ['var(--rosa)', 'var(--azul)', 'var(--amarillo)', 'var(--verde)', 'var(--tinta)'];
 
+/**
+ * Versión suave (tinte de fondo) de cada color de pilar, mismo orden que
+ * `COLOR_PILAR`. Sale de los tokens `--*-s` ya probados en
+ * `tests/lib/ui/contraste.test.ts`; `tinta` no tiene tinte propio, así que
+ * usa `--gris` (el neutro de fondo secundario).
+ */
+export const COLOR_PILAR_SUAVE = ['var(--rosa-s)', 'var(--azul-s)', 'var(--amarillo-s)', 'var(--verde-s)', 'var(--gris)'];
+
 /** Color y etiqueta por función, también en el orden del spec. */
 export const COLOR_FUNCION: Record<Funcion, string> = {
   autoridad: 'var(--azul)',

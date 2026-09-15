@@ -3,7 +3,7 @@ import type { AvanceTema } from '@/pilares/avance';
 import { escapar, encabezadoSeccion } from '@/render/editorial/comunes';
 import { rutaEditable, rutaAncla } from '@/render/editorial/flujo-cliente';
 import { normalizar } from '@/lib/ui/buscar';
-import { COLOR_PILAR, ETIQUETA_FUNCION, ETIQUETA_FORMATO } from './secciones';
+import { COLOR_PILAR, COLOR_PILAR_SUAVE, ETIQUETA_FUNCION, ETIQUETA_FORMATO } from './secciones';
 
 // SCRIPT_PILARES (script.ts) trae su propia copia de este mapa en JS puro,
 // porque el estado cambia de nombre en el navegador sin volver a pasar por
@@ -91,10 +91,14 @@ function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: bool
  */
 function bloquePilarOk(p: Extract<PilarMapa, { estado: 'ok' }>, indicePilar: number, ep: Estrategia['pilares'][number], interna: boolean, avance?: Record<string, AvanceTema>, editable = false, anclas = false): string {
   const temas = p.subcategorias.flatMap((s) => s.temas);
-  return `<details class="pilar-bloque" open data-pilar="${p.numero}" style="--color-pilar:${COLOR_PILAR[p.numero - 1]}">
+  return `<details class="pilar-bloque" open data-pilar="${p.numero}" style="--color-pilar:${COLOR_PILAR[p.numero - 1]};--color-pilar-s:${COLOR_PILAR_SUAVE[p.numero - 1]}">
     <summary class="pilar-cabecera">
       <span class="pilar-num">${p.numero}</span>
-      <div class="pilar-info"><h3>${escapar(ep.nombre)}</h3><p class="suave">${escapar(ep.objetivo)}</p></div>
+      <div class="pilar-info">
+        <p class="pilar-eyebrow">Pilar ${p.numero}</p>
+        <h3>${escapar(ep.nombre)}</h3>
+        <p class="suave pilar-objetivo">${escapar(ep.objetivo)}</p>
+      </div>
       <span class="pilar-conteo">${temas.length} temas</span>
     </summary>
     <div class="pestanas" role="tablist" aria-label="Subcategorías del pilar ${p.numero}, ${escapar(ep.nombre)}">
@@ -108,10 +112,13 @@ function bloquePilarOk(p: Extract<PilarMapa, { estado: 'ok' }>, indicePilar: num
 }
 
 function bloquePilarVacio(p: Extract<PilarMapa, { estado: 'vacio' }>, ep: Estrategia['pilares'][number], interna: boolean, clienteId?: string): string {
-  return `<details class="pilar-bloque vacio" open data-pilar="${p.numero}" style="--color-pilar:${COLOR_PILAR[p.numero - 1]}">
+  return `<details class="pilar-bloque vacio" open data-pilar="${p.numero}" style="--color-pilar:${COLOR_PILAR[p.numero - 1]};--color-pilar-s:${COLOR_PILAR_SUAVE[p.numero - 1]}">
     <summary class="pilar-cabecera">
       <span class="pilar-num">${p.numero}</span>
-      <div class="pilar-info"><h3>${escapar(ep.nombre)}</h3></div>
+      <div class="pilar-info">
+        <p class="pilar-eyebrow">Pilar ${p.numero}</p>
+        <h3>${escapar(ep.nombre)}</h3>
+      </div>
     </summary>
     <div class="pilar-vacio-cuerpo">
       <p>Este pilar no se generó.</p>

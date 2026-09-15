@@ -132,12 +132,29 @@ const PILARES = `
 
 .pilares-bloques{display:grid;gap:18px;}
 .pilar-bloque{border-radius:var(--r);border:1px solid var(--linea);background:var(--tarjeta);box-shadow:var(--sombra);overflow:hidden;}
-.pilar-cabecera{list-style:none;cursor:pointer;display:flex;align-items:center;gap:16px;padding:18px 22px;
-  border-left:6px solid var(--color-pilar);}
+/* Cabecera resaltada (pedido: «cada pilar debe destacar más en el banco»):
+   banda de color suave de fondo (--color-pilar-s, un tinte AA-probado por
+   ver tests/lib/ui/contraste.test.ts, nunca color-mix) más el filo de 6px que
+   ya traía. La línea inferior separa la cabecera de las pestañas; el pilar
+   vacío no tiene pestañas debajo, así que no lleva esa línea. */
+.pilar-cabecera{list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:16px;padding:18px 22px;
+  background:var(--color-pilar-s);border-left:6px solid var(--color-pilar);border-bottom:1px solid var(--linea);}
+.pilar-bloque.vacio .pilar-cabecera{border-bottom:none;}
 .pilar-cabecera::-webkit-details-marker{display:none;}
-.pilar-cabecera .pilar-num{flex-shrink:0;}
-.pilar-info{flex:1;min-width:0;display:grid;gap:2px;}
-.pilar-conteo{flex-shrink:0;font:var(--t-small);color:var(--suave);}
+.pilar-cabecera .pilar-num{flex-shrink:0;width:48px;height:48px;font-size:1.15rem;}
+.pilar-info{flex:1;min-width:0;display:grid;gap:4px;}
+/* Eyebrow «Pilar N» en el color del pilar: mismo token que ya pinta el
+   círculo y el filo, así que el par de contraste (color-pilar sobre
+   color-pilar-s) es el mismo que ya cubre contraste.test.ts para cada
+   tono (rosa/azul/amarillo/verde sobre su -s; tinta sobre gris). */
+.pilar-eyebrow{font:var(--t-micro);letter-spacing:.06em;text-transform:uppercase;color:var(--color-pilar);}
+.pilar-info h3{font:var(--t-h2);}
+.pilar-objetivo{max-width:70ch;}
+/* Conteo como píldora, alineado a la derecha con margin-left:auto (no hay
+   margen entre hermanos: la separación del resto de la fila sigue siendo
+   gap). En angosto, flex-wrap la baja a su propia línea sin desbordar. */
+.pilar-conteo{flex-shrink:0;margin-left:auto;padding:6px 12px;border-radius:var(--r-pill);
+  background:var(--tarjeta);font:var(--t-small);color:var(--suave);}
 .pilar-bloque > .pestanas,.pilar-bloque > .panel-tema{margin:0 22px;}
 .pilar-bloque > .panel-tema:last-child{padding-bottom:22px;}
 .pilar-bloque.vacio{border-style:dashed;}

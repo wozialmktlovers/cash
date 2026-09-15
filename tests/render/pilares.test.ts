@@ -40,6 +40,16 @@ describe('mapa de pilares · vista interna', () => {
     expect((html.match(/role="tab"(?=[\s>])/g) ?? []).length).toBe(15);
   });
 
+  // Pedido: la cabecera de cada pilar debe destacar más (banda de color
+  // suave) y dejar claro a qué pilar pertenece con un eyebrow «Pilar N».
+  it('la cabecera de cada pilar lleva --color-pilar-s y el eyebrow «Pilar N»', () => {
+    const iP3 = html.indexOf('data-pilar="3" style="--color-pilar:');
+    const bloqueP3 = html.slice(iP3, html.indexOf('</summary>', iP3));
+    expect(bloqueP3).toContain('--color-pilar-s:');
+    expect(bloqueP3).toContain('class="pilar-eyebrow"');
+    expect(bloqueP3).toContain('>Pilar 3<');
+  });
+
   // Pedido: «en el banco de temas, los tópicos se puedan elegir y tachar»
   // (Casilla + tachado, guardado con los estados existentes).
   it('trae una casilla «Elegir tema» por tarjeta, checada solo si el estado no es pendiente', () => {
