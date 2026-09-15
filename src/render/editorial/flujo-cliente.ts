@@ -494,10 +494,20 @@ export const SCRIPT_FLUJO = `(function () {
     return String(iso).slice(0, 10);
   }
 
+  // 'rol' llega null cuando el autor es del equipo y quien mira es el
+  // cliente (fix wave, punto 7): el GET ya le quita el rol real, así que
+  // aquí no hay nada que etiquetar - vacío, no 'Cliente' por omisión, que
+  // sería una etiqueta falsa para un comentario de un admin u operador.
   function etiquetaRol(rol) {
     if (rol === 'admin') return 'Admin';
     if (rol === 'operador') return 'Operador';
-    return 'Cliente';
+    if (rol === 'cliente') return 'Cliente';
+    return '';
+  }
+
+  function textoAutor(nombre, rol) {
+    var etiqueta = etiquetaRol(rol);
+    return etiqueta ? nombre + ' · ' + etiqueta : nombre;
   }
 
   function crearBotonComentario(texto, claseExtra, alClic) {
@@ -527,7 +537,7 @@ export const SCRIPT_FLUJO = `(function () {
     cabeza.className = 'comentario-cabeza';
     var autor = document.createElement('span');
     autor.className = 'comentario-autor';
-    autor.textContent = c.autor + ' · ' + etiquetaRol(c.autorRol);
+    autor.textContent = textoAutor(c.autor, c.autorRol);
     var fecha = document.createElement('span');
     fecha.className = 'suave';
     fecha.textContent = fechaCortaComentario(c.creadoEn);
@@ -608,7 +618,7 @@ export const SCRIPT_FLUJO = `(function () {
       cabezaR.className = 'comentario-cabeza';
       var autorR = document.createElement('span');
       autorR.className = 'comentario-autor';
-      autorR.textContent = respuestas[r].autor + ' · ' + etiquetaRol(respuestas[r].autorRol);
+      autorR.textContent = textoAutor(respuestas[r].autor, respuestas[r].autorRol);
       var fechaR = document.createElement('span');
       fechaR.className = 'suave';
       fechaR.textContent = fechaCortaComentario(respuestas[r].creadoEn);

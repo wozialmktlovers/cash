@@ -172,22 +172,30 @@ export async function guardarVersion(
   return creada;
 }
 
-/** La fila de `cliente_etapas` para (clientId, etapa); la crea si no existe todavía. */
-async function obtenerOCrearEtapa(tx: Tx, clientId: string, etapa: Etapa): Promise<FilaEtapa> {
-  const [existente] = await tx.select().from(clienteEtapas)
-    .where(and(eq(clienteEtapas.clientId, clientId), eq(clienteEtapas.etapa, etapa))).limit(1);
-  if (existente) return existente;
-
+/**
+ * La fila de `cliente_etapas` para (clientId, etapa), BLOQUEADA (`FOR
+ * UPDATE`) hasta que la transacción de quien llama cierre — la crea primero
+ * si no existe todavía. Mismo candado que ya usan las rutas de edición de
+ * documentos (`api/documentos/[tipo]/[id].ts`) para su propia fila de etapa:
+ * sin él, `registrarEntregable` podía leer el estado con un SELECT suelto y
+ * hacer un UPDATE incondicional después, pisando una transición concurrente
+ * (`solicitar` o `aprobar` cerrando justo cuando el job termina) — fix wave,
+ * punto 1.
+ */
+async function obtenerOCrearEtapaBloqueada(tx: Tx, clientId: string, etapa: Etapa): Promise<FilaEtapa> {
   // El pipeline puede terminar antes de que exista la fila (cliente dado de
   // alta antes de B3, o un hueco en la migración): se crea contratada por
   // omisión, igual que `etapasDelCliente`, para no perder el entregable.
+  // `onConflictDoNothing` la deja intacta si ya existía — el candado real es
+  // el SELECT ... FOR UPDATE de abajo, no este insert.
   await tx.insert(clienteEtapas).values({ clientId, etapa, contratada: true, interna: false })
     .onConflictDoNothing({ target: [clienteEtapas.clientId, clienteEtapas.etapa] });
 
-  const [creada] = await tx.select().from(clienteEtapas)
-    .where(and(eq(clienteEtapas.clientId, clientId), eq(clienteEtapas.etapa, etapa))).limit(1);
-  if (!creada) throw new Error(`No se pudo crear la etapa ${etapa} para el cliente ${clientId}`);
-  return creada;
+  const [fila] = await tx.select().from(clienteEtapas)
+    .where(and(eq(clienteEtapas.clientId, clientId), eq(clienteEtapas.etapa, etapa)))
+    .for('update').limit(1);
+  if (!fila) throw new Error(`No se pudo crear la etapa ${etapa} para el cliente ${clientId}`);
+  return fila;
 }
 
 /**
@@ -196,6 +204,18 @@ async function obtenerOCrearEtapa(tx: Tx, clientId: string, etapa: Etapa): Promi
  * una versión `generado`, inserta el evento y avisa al autor (no-op en B3).
  * Quien llama debe envolver esto en try/catch: un fallo aquí nunca debe
  * tumbar el job.
+ *
+ * La fila de etapa se lee con `FOR UPDATE` (`obtenerOCrearEtapaBloqueada`)
+ * ANTES de calcular `estadoTrasGenerar`, y todo — lectura, cálculo y UPDATE —
+ * ocurre dentro de la misma transacción, sobre esa fila bloqueada: si
+ * `solicitar` o `aprobar` está a la mitad de su propia transacción sobre la
+ * misma fila, esta espera a que termine (y lee el estado ya actualizado);
+ * si esta corre primero, la otra transición espera al revés. Sin el candado,
+ * un SELECT suelto seguido de un UPDATE incondicional podía leer el estado
+ * de antes de una transición concurrente y luego pisarla sin condición
+ * alguna — por ejemplo, un `aprobar` que cierra justo cuando este job
+ * termina quedaría sobreescrito a `con_cambios` aunque el admin ya hubiera
+ * aprobado el documento anterior (fix wave, punto 1).
  */
 export async function registrarEntregable(
   clientId: string,
@@ -206,7 +226,7 @@ export async function registrarEntregable(
   const etapa = etapaDeTipo(tipo);
 
   await db.transaction(async (tx) => {
-    const fila = await obtenerOCrearEtapa(tx, clientId, etapa);
+    const fila = await obtenerOCrearEtapaBloqueada(tx, clientId, etapa);
     const nuevoEstado = estadoTrasGenerar(fila.estado);
 
     await tx.update(clienteEtapas)
@@ -250,8 +270,14 @@ export async function registrarEntregable(
  * El resultado trae una entrada en 0 para cada etapa recibida, aunque no
  * tenga comentarios, para que el llamador pueda indexar con `.get(etapaId)!`
  * sin comprobar `undefined`.
+ *
+ * Solo necesita el `id` de cada etapa (fix wave, punto 6): el tipo del
+ * parámetro es deliberadamente más angosto que `FilaEtapa[]` para que
+ * también sirva con proyecciones parciales de `cliente_etapas` — como la
+ * lista `conCambios` de `/pendientes`, que no trae `contratada`/`interna` —
+ * sin forzar a quien llama a pedir la fila completa solo para este conteo.
  */
-export async function comentariosAbiertosPorEtapa(filas: FilaEtapa[], ejecutor: Ejecutor = db): Promise<Map<string, number>> {
+export async function comentariosAbiertosPorEtapa(filas: { id: string }[], ejecutor: Ejecutor = db): Promise<Map<string, number>> {
   const resultado = new Map<string, number>(filas.map((f) => [f.id, 0]));
   if (filas.length === 0) return resultado;
 
@@ -289,6 +315,12 @@ export async function ejecutarTransicion(o: {
   comentario?: string;
 }): Promise<ResultadoTransicion> {
   const { etapaId, accion, usuario, comentario } = o;
+
+  // Un id sin forma de UUID nunca va a existir (fix wave, punto 4): cortar
+  // aquí da 404, igual que el resto de estas funciones (`crearComentarioInterno`,
+  // `listarComentarios`…) — sin esto, Postgres tira un error de tipo y la
+  // ruta responde 500 en vez del 404 que le toca a un id inventado.
+  if (!esUuid(etapaId)) return { ok: false, status: 404, razon: 'La etapa no existe' };
 
   const [fila] = await db.select().from(clienteEtapas).where(eq(clienteEtapas.id, etapaId)).limit(1);
   if (!fila) return { ok: false, status: 404, razon: 'La etapa no existe' };
@@ -624,7 +656,15 @@ export type ComentarioSalida = {
   texto: string;
   estado: EstadoComentario;
   respuestaDe: string | null;
-  autorRol: Rol;
+  /**
+   * `null` cuando quien lo ve es el cliente y el autor es del equipo (fix
+   * wave, punto 7): `autor` ya se anonimiza como «Equipo Wozial», pero
+   * mandar el rol real dejaba que el panel del portal pintara «Equipo
+   * Wozial · Admin» o «Equipo Wozial · Operador» — la misma fuga de
+   * identidad que el punto 2 le cerró a los avisos. Para el personal (que sí
+   * ve el rol de todos) siempre trae el valor real.
+   */
+  autorRol: Rol | null;
   autor: string;
   versionNumero: number;
   creadoEn: Date;
@@ -704,7 +744,10 @@ export async function listarComentarios(o: {
       ok: true,
       comentarios: visibles.map((f) => ({
         id: f.id, ancla: f.ancla, texto: f.texto, estado: f.estado, respuestaDe: f.respuestaDe,
-        autorRol: f.autorRol, autor: f.autorRol === 'cliente' ? nombreInterno(f.autorNombre, f.autorEmail ?? 'Tú') : 'Equipo Wozial',
+        // Mismo criterio que `autor`: el cliente nunca ve el rol real de un
+        // autor del equipo, solo el suyo propio (fix wave, punto 7).
+        autorRol: f.autorRol === 'cliente' ? f.autorRol : null,
+        autor: f.autorRol === 'cliente' ? nombreInterno(f.autorNombre, f.autorEmail ?? 'Tú') : 'Equipo Wozial',
         versionNumero: f.versionNumero, creadoEn: f.creadoEn, deOtraVersion: false,
       })),
     };

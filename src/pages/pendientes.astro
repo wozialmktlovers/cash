@@ -1,10 +1,11 @@
 ---
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import { db, clienteEtapas, clients, users, comentarios } from '@/db';
 import { NOMBRE_ETAPA, type TipoDocumento } from '@/flujo/reglas';
 import { condicionClientes } from '@/lib/visibilidad';
+import { comentariosAbiertosPorEtapa } from '@/flujo/servicio';
 
 const usuario = Astro.locals.usuario;
 
@@ -89,15 +90,10 @@ if (usuario.rol === 'admin') {
     .orderBy(desc(comentarios.creadoEn))
     .limit(10);
 
-  const idsConCambios = conCambios.map((e) => e.id);
-  if (idsConCambios.length > 0) {
-    const conteos = await db
-      .select({ etapaId: comentarios.etapaId, n: sql<number>`count(*)::int` })
-      .from(comentarios)
-      .where(and(inArray(comentarios.etapaId, idsConCambios), eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe)))
-      .groupBy(comentarios.etapaId);
-    conteoPorEtapa = new Map(conteos.map((c) => [c.etapaId, c.n]));
-  }
+  // Mismo conteo que usa la ficha del cliente (fix wave, punto 6): una sola
+  // consulta agrupada, en vez de reimplementarla aquí con su propio filtro
+  // de ids.
+  conteoPorEtapa = await comentariosAbiertosPorEtapa(conCambios);
 }
 ---
 

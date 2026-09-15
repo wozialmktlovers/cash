@@ -86,13 +86,52 @@ INSERT INTO "cliente_etapas" ("client_id","etapa","contratada","interna","estado
 SELECT c."id", e."etapa"::"etapa_cliente", e."etapa" <> 'desarrollo_mensual', false, 'no_iniciada'
 FROM "clients" c CROSS JOIN (VALUES ('investigacion'),('pilares'),('desarrollo_mensual'),('manual_campana')) AS e("etapa")
 ON CONFLICT DO NOTHING;--> statement-breakpoint
--- Si ya había un documento, la etapa arranca en proceso con el más reciente como vigente.
+-- Si ya había un documento, la etapa arranca en proceso con el más reciente
+-- CON DATOS como vigente — no el más reciente a secas: los tres pipelines
+-- insertan su fila de resultado aunque todo el trabajo haya fallado (para
+-- dejar constancia del intento), y una fila así no sirve de documento
+-- vigente. El filtro de «con datos» de cada UPDATE espeja exactamente la
+-- regla que ya usa el código en TypeScript, para que el respaldo no adopte
+-- como vigente un documento que el propio Studio trataría como vacío:
+--   · research: `contarEtapasConDatos` (src/lib/precheck.ts), usada por
+--     `investigacionUtil` — al menos una etapa de nivel superior de `datos`
+--     con `estado='ok'`;
+--   · growth: el pipeline (`src/growth/pipeline.ts`) arma `datos` con
+--     `_huecos` más lo que cada etapa haya devuelto aplanado en el mismo
+--     nivel — «con datos» es tener alguna llave además de `_huecos`;
+--   · pilares: el pipeline (`src/pilares/pipeline.ts`) decide con
+--     `todosLosTemas(pilares).length > 0` — «con datos» es que algún pilar
+--     tenga alguna subcategoría con al menos un tema.
+-- `jsonb_typeof`/`jsonb_each`/`jsonb_object_keys` exigen un objeto: se
+-- comprueba el tipo antes de usarlos para no reventar la migración con una
+-- fila cuyo `datos` no sea un objeto JSON.
 UPDATE "cliente_etapas" ce SET "estado"='en_proceso', "documento_tipo"='research', "documento_id"=r."id"
-FROM (SELECT DISTINCT ON ("client_id") "id","client_id" FROM "research_results" ORDER BY "client_id","version" DESC) r
+FROM (
+  SELECT DISTINCT ON ("client_id") "id","client_id" FROM "research_results"
+  WHERE jsonb_typeof("datos")='object' AND EXISTS (
+    SELECT 1 FROM jsonb_each("datos") AS etapa(clave,valor)
+    WHERE jsonb_typeof(etapa.valor)='object' AND etapa.valor->>'estado'='ok'
+  )
+  ORDER BY "client_id","version" DESC
+) r
 WHERE ce."client_id"=r."client_id" AND ce."etapa"='investigacion';--> statement-breakpoint
 UPDATE "cliente_etapas" ce SET "estado"='en_proceso', "documento_tipo"='growth', "documento_id"=g."id"
-FROM (SELECT DISTINCT ON ("client_id") "id","client_id" FROM "growth_results" ORDER BY "client_id","version" DESC) g
+FROM (
+  SELECT DISTINCT ON ("client_id") "id","client_id" FROM "growth_results"
+  WHERE jsonb_typeof("datos")='object' AND EXISTS (
+    SELECT 1 FROM jsonb_object_keys("datos") AS llave WHERE llave <> '_huecos'
+  )
+  ORDER BY "client_id","version" DESC
+) g
 WHERE ce."client_id"=g."client_id" AND ce."etapa"='manual_campana';--> statement-breakpoint
 UPDATE "cliente_etapas" ce SET "estado"='en_proceso', "documento_tipo"='pilares', "documento_id"=p."id"
-FROM (SELECT DISTINCT ON ("client_id") "id","client_id" FROM "pilares_results" ORDER BY "client_id","version" DESC) p
+FROM (
+  SELECT DISTINCT ON ("client_id") "id","client_id" FROM "pilares_results"
+  WHERE jsonb_typeof("datos"->'pilares')='array' AND EXISTS (
+    SELECT 1 FROM jsonb_array_elements("datos"->'pilares') AS pilar
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(pilar->'subcategorias')='array' THEN pilar->'subcategorias' ELSE '[]'::jsonb END) AS subcategoria
+    WHERE jsonb_typeof(subcategoria->'temas')='array' AND jsonb_array_length(subcategoria->'temas') > 0
+  )
+  ORDER BY "client_id","version" DESC
+) p
 WHERE ce."client_id"=p."client_id" AND ce."etapa"='pilares';

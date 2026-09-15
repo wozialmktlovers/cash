@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { destinatarios, textoAviso, type ContextoDestinatarios, type Usuario } from '@/flujo/avisos';
+import { destinatarios, textoAviso, datosParaDestinatario, type ContextoDestinatarios, type Usuario } from '@/flujo/avisos';
 
 const u = (id: string, overrides: Partial<Usuario> = {}): Usuario => ({
   id, email: `${id}@wozial.mx`, nombre: id, rol: 'operador', activo: true, ...overrides,
@@ -161,5 +161,48 @@ describe('textoAviso', () => {
     const conAutor = textoAviso('respuesta_cliente', datos);
     const sinAutor = textoAviso('respuesta_cliente', { cliente: 'Ana Villa', etapa: 'Mapa de pilares' });
     expect(conAutor).toEqual(sinAutor);
+  });
+});
+
+// PLAN B, final review: `aprobada` es hoy el único evento cuyos destinatarios
+// mezclan personal (operador) y usuarios `cliente`, y `textoAviso` incluye el
+// nombre de quien aprobó. `datosParaDestinatario` es la pieza pura que le
+// quita esa identidad al destinatario `cliente` antes de armar el texto —
+// `notificar` (con acceso a base de datos, no probado aquí) la usa por cada
+// destinatario en vez de un solo texto para toda la lista.
+describe('datosParaDestinatario', () => {
+  const datosConAutor = { cliente: 'Ana Villa', etapa: 'Mapa de pilares', autor: 'María (operadora)' };
+
+  it('cliente: sustituye el autor por "El equipo de Wozial"', () => {
+    const cliente = u('c1', { rol: 'cliente' });
+    const r = datosParaDestinatario(cliente, datosConAutor);
+    expect(r.autor).toBe('El equipo de Wozial');
+    expect(r.autor).not.toContain('María');
+  });
+
+  it('operador o admin: conserva el autor real, sin tocarlo', () => {
+    const operador = u('op1', { rol: 'operador' });
+    const admin = u('a1', { rol: 'admin' });
+    expect(datosParaDestinatario(operador, datosConAutor)).toEqual(datosConAutor);
+    expect(datosParaDestinatario(admin, datosConAutor)).toEqual(datosConAutor);
+  });
+
+  it('cliente sin `autor` en los datos: no inventa uno', () => {
+    const cliente = u('c1', { rol: 'cliente' });
+    const sinAutor = { cliente: 'Ana Villa', etapa: 'Mapa de pilares' };
+    expect(datosParaDestinatario(cliente, sinAutor)).toEqual(sinAutor);
+  });
+
+  it('integrado con textoAviso: el texto de "aprobada" que ve un cliente nunca menciona a quien aprobó', () => {
+    const cliente = u('c1', { rol: 'cliente' });
+    const { texto } = textoAviso('aprobada', datosParaDestinatario(cliente, datosConAutor));
+    expect(texto).not.toContain('María');
+    expect(texto).toContain('El equipo de Wozial');
+  });
+
+  it('integrado con textoAviso: el mismo evento, para el operador, sí menciona a quien aprobó', () => {
+    const operador = u('op1', { rol: 'operador' });
+    const { texto } = textoAviso('aprobada', datosParaDestinatario(operador, datosConAutor));
+    expect(texto).toContain('María');
   });
 });

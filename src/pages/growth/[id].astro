@@ -38,10 +38,16 @@ if (operable) {
   const etapa = await etapaDelDocumento(c.id, 'growth', r.id);
   if (etapa) {
     const esOperadorAsignado = c.operadorId === usuario.id;
+    // `etapaDelDocumento` cae a la etapa del tipo aunque este documento ya no
+    // sea el vigente (B6: se puede editar una versión vieja igual). Comentar
+    // es distinto (fix wave, punto 8): un ancla sobre un documento que ya no
+    // es el que la etapa muestra no tiene a dónde apuntar de vuelta, así que
+    // aquí se oculta el botón «Comentar» aunque el rol/etapa lo permitirían.
+    const esDocumentoVigente = etapa.documentoTipo === 'growth' && etapa.documentoId === r.id;
     flujo = {
       tipo: 'growth', id: r.id, etapaId: etapa.id,
       puedeEditar: calcularPuedeEditar(usuario.rol, esOperadorAsignado, etapa.estado),
-      puedeComentar: puedeComentar(usuario.rol, esOperadorAsignado, etapa.etapa),
+      puedeComentar: esDocumentoVigente && puedeComentar(usuario.rol, esOperadorAsignado, etapa.etapa),
       rol: usuario.rol, esOperadorAsignado,
     };
   }

@@ -186,7 +186,15 @@ export const SCRIPT_CABECERA_COMPARTIR = `(function () {
     var candidatos = candidatosFoco();
     return candidatos.length ? candidatos[0] : null;
   }
-  function alEscape(e) { if (e.key === 'Escape') cerrar(true); }
+  // stopImmediatePropagation, no solo stopPropagation (que no hace nada
+  // entre listeners del mismo document): SCRIPT_CABECERA_COMPARTIR se
+  // imprime antes que SCRIPT_FLUJO (comunes.ts), así que este listener queda
+  // registrado primero y, sin cortar aquí, el mismo Escape que cierra este
+  // panel seguía su curso hasta el de SCRIPT_FLUJO y también preguntaba
+  // '¿salir sin guardar?' o salía del modo comentar - fix wave, punto 9. El
+  // diálogo de notas de pilares tiene el mismo problema pendiente (se
+  // resuelve después de que aterrice el trabajo concurrente sobre pilares).
+  function alEscape(e) { if (e.key === 'Escape') { e.stopImmediatePropagation(); cerrar(true); } }
   function alClicFuera(e) {
     if (panel.contains(e.target) || boton.contains(e.target)) return;
     cerrar(false);

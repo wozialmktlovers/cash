@@ -37,6 +37,11 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     return json({ ok: false, error: 'operador-invalido' }, 400);
   }
 
+  // Sin cambio real no hay nada que reasignar (fix wave, punto 5): elegir en
+  // el select al mismo operador que ya tenía el cliente no debe avisarle
+  // «Ana es ahora tu cliente» a alguien que ya lo era.
+  if (cliente.operadorId === operadorId) return json({ ok: true });
+
   await db.update(clients).set({ operadorId, updatedAt: new Date() }).where(eq(clients.id, id));
 
   // El aviso va después del UPDATE y sin esperarlo: un fallo aquí no debe romper la reasignación.

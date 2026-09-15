@@ -84,6 +84,27 @@ export function destinatarios(evento: EventoAviso, ctx: ContextoDestinatarios): 
 
 export type DatosAviso = { cliente: string; etapa: string; autor?: string };
 
+/**
+ * Nombre que ve un cliente en vez de la identidad real de quien actuó (spec
+ * §3, «Avisos»: el cliente nunca debe enterarse de qué operador o admin en
+ * particular aprobó, pidió cambios o reabrió su etapa — solo `aprobada`
+ * llega hoy a destinatarios cliente, pero esto cubre cualquier evento futuro
+ * que también les llegue). Mismo criterio que `nombreInterno` en
+ * `servicio.ts` y que `respuesta_cliente`, que ya ignoraba `autor` del todo.
+ */
+const AUTOR_PARA_CLIENTE = 'El equipo de Wozial';
+
+/**
+ * `DatosAviso` ajustado al rol de un destinatario concreto: pura. Si el
+ * destinatario es un usuario `cliente` y el aviso trae `autor`, lo sustituye
+ * por «El equipo de Wozial»; para cualquier otro rol, o si no hay `autor`,
+ * regresa `datos` sin tocar.
+ */
+export function datosParaDestinatario(destinatario: Usuario, datos: DatosAviso): DatosAviso {
+  if (destinatario.rol !== 'cliente' || datos.autor === undefined) return datos;
+  return { ...datos, autor: AUTOR_PARA_CLIENTE };
+}
+
 /** Título y texto del aviso, en español. Pura: `enviarCorreo`/`plantillaCorreo` escapan lo que haga falta al mandarlo por correo. */
 export function textoAviso(evento: EventoAviso, datos: DatosAviso): { titulo: string; texto: string } {
   const { cliente, etapa, autor } = datos;
@@ -179,12 +200,20 @@ export async function notificar(evento: EventoAviso, ctx: ContextoAviso, enlace:
   const lista = destinatarios(evento, ctx);
   if (lista.length === 0) return;
 
-  const { titulo, texto } = textoAviso(evento, ctx.datos);
   const enlaceDe = (u: Usuario) => (u.rol === 'cliente' ? '/portal' : enlace);
+  // Texto por destinatario, no uno solo para toda la lista: `datosParaDestinatario`
+  // le quita el nombre real de quien actuó a los destinatarios `cliente` (fix
+  // wave, punto 2) — sin esto, un aviso de `aprobada` que llega al operador Y a
+  // los usuarios del cliente les mostraría a todos el mismo texto con el nombre
+  // del admin o del operador que aprobó.
+  const textoPara = (u: Usuario) => textoAviso(evento, datosParaDestinatario(u, ctx.datos));
 
   try {
     await db.insert(notificaciones).values(
-      lista.map((u) => ({ usuarioId: u.id, tipo: evento, titulo, texto, enlace: enlaceDe(u) })),
+      lista.map((u) => {
+        const { titulo, texto } = textoPara(u);
+        return { usuarioId: u.id, tipo: evento, titulo, texto, enlace: enlaceDe(u) };
+      }),
     );
   } catch (e) {
     console.error('[avisos] no se pudo guardar la notificación:', e);
@@ -195,6 +224,7 @@ export async function notificar(evento: EventoAviso, ctx: ContextoAviso, enlace:
   // un cliente). Los envíos van en paralelo y enviarCorreo nunca lanza.
   const base = (process.env.PUBLIC_BASE_URL ?? '').replace(/\/+$/, '');
   await Promise.all(lista.map((u) => {
+    const { titulo, texto } = textoPara(u);
     // Sin PUBLIC_BASE_URL no hay a dónde apuntar el botón (una ruta relativa
     // no sirve en un correo): se manda solo el título y el texto, sin botón.
     const url = base ? `${base}${enlaceDe(u)}` : '';
