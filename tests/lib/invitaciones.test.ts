@@ -8,6 +8,7 @@ import {
   validarAceptacion,
   puedeInvitar,
   esPendiente,
+  correoInvitacion,
 } from '@/lib/invitaciones';
 import type { UsuarioSesion } from '@/lib/permisos';
 
@@ -148,5 +149,48 @@ describe('esPendiente (M2 punto 4: lista de invitaciones por revocar)', () => {
   it('una usada o vencida ya no está pendiente', () => {
     expect(esPendiente({ expiraEn: new Date('2026-01-11'), usadaEn: new Date('2026-01-09') }, ahora)).toBe(false);
     expect(esPendiente({ expiraEn: new Date('2026-01-09'), usadaEn: null }, ahora)).toBe(false);
+  });
+});
+
+describe('correoInvitacion (fix round 1: el botón del correo solo apunta a PUBLIC_BASE_URL)', () => {
+  const token = 'tok-real';
+
+  it('con PUBLIC_BASE_URL: se manda con el botón a esa base, aunque la petición traiga otro host', () => {
+    const r = correoInvitacion({ token, email: 'a@b.mx', publicBaseUrl: 'https://studio.wozial.mx', produccion: true });
+    expect(r.enviar).toBe(true);
+    if (r.enviar) {
+      expect(r.correo.boton).toEqual({ texto: 'Crear mi acceso', url: 'https://studio.wozial.mx/invitacion/tok-real' });
+      expect(r.correo.para).toBe('a@b.mx');
+    }
+  });
+
+  it('sin PUBLIC_BASE_URL en producción: no se manda y trae una nota para la interfaz', () => {
+    const r = correoInvitacion({ token, email: 'a@b.mx', publicBaseUrl: undefined, produccion: true });
+    expect(r.enviar).toBe(false);
+    if (!r.enviar) expect(r.nota).toContain('PUBLIC_BASE_URL');
+  });
+
+  it('sin PUBLIC_BASE_URL fuera de producción: se manda sin botón ni enlace ni token', () => {
+    const r = correoInvitacion({ token, email: 'a@b.mx', publicBaseUrl: '', produccion: false });
+    expect(r.enviar).toBe(true);
+    if (r.enviar) {
+      expect(r.correo.boton).toBeUndefined();
+      expect(JSON.stringify(r.correo)).not.toContain('tok-real');
+      expect(r.correo.texto).not.toContain('botón');
+    }
+  });
+
+  it('sin opciones explícitas lee PUBLIC_BASE_URL y NODE_ENV del entorno (como la ruta real)', () => {
+    const previo = { ...process.env };
+    try {
+      process.env.PUBLIC_BASE_URL = 'https://studio.wozial.mx';
+      process.env.NODE_ENV = 'production';
+      const con = correoInvitacion({ token, email: 'a@b.mx' });
+      expect(con.enviar && con.correo.boton?.url).toBe('https://studio.wozial.mx/invitacion/tok-real');
+      delete process.env.PUBLIC_BASE_URL;
+      expect(correoInvitacion({ token, email: 'a@b.mx' }).enviar).toBe(false);
+    } finally {
+      process.env = previo;
+    }
   });
 });

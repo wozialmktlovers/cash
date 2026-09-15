@@ -523,7 +523,9 @@ const historial: ItemHistorial[] = [
           iuError.hidden = false;
           return;
         }
-        iuMensaje.textContent = json.correoEnviado ? 'Invitación creada y enviada por correo.' : 'Invitación creada. Copia el enlace y compártelo a mano.';
+        // `notaCorreo` (fix round 1 de M2): en producción sin PUBLIC_BASE_URL el
+      // servidor no manda el correo y explica por qué; el enlace se copia a mano.
+      iuMensaje.textContent = json.correoEnviado ? 'Invitación creada y enviada por correo.' : (json.notaCorreo ?? 'Invitación creada. Copia el enlace y compártelo a mano.');
         iuEnlace.value = json.enlace;
         iuResultado.hidden = false;
         iuEnviar.hidden = true;

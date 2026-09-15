@@ -7,6 +7,7 @@
 import { and, eq } from 'drizzle-orm';
 import { db, notificaciones, users } from '@/db';
 import { enviarCorreo } from '@/lib/correo';
+import { enlaceCorreo } from '@/lib/base-url';
 import type { Rol } from './reglas';
 
 export type Usuario = { id: string; email: string; nombre: string | null; rol: Rol; activo: boolean };
@@ -236,18 +237,20 @@ export async function notificar(evento: EventoAviso, ctx: ContextoAviso, enlace:
   // Un correo por persona: con varios destinatarios en `to` cada uno vería los
   // correos de los demás (por ejemplo, todos los admins o todos los usuarios de
   // un cliente). Los envíos van en paralelo y enviarCorreo nunca lanza.
-  const base = (process.env.PUBLIC_BASE_URL ?? '').replace(/\/+$/, '');
+  // El botón del correo apunta SOLO a PUBLIC_BASE_URL (`enlaceCorreo`, fix
+  // round 1 de M2). Sin ella: en producción no se manda correo (el aviso ya
+  // quedó en `notificaciones`); fuera de producción se manda sin botón, porque
+  // una ruta relativa no sirve en un correo.
   await Promise.all(lista.map((u) => {
+    const enlaceDelCorreo = enlaceCorreo(enlaceDe(u));
+    if (enlaceDelCorreo.modo === 'no-enviar') return Promise.resolve();
     const { titulo, texto } = textoPara(u);
-    // Sin PUBLIC_BASE_URL no hay a dónde apuntar el botón (una ruta relativa
-    // no sirve en un correo): se manda solo el título y el texto, sin botón.
-    const url = base ? `${base}${enlaceDe(u)}` : '';
     return enviarCorreo({
       para: u.email,
       asunto: titulo,
       titulo,
       texto,
-      boton: url ? { texto: 'Ver en Wozial Studio', url } : undefined,
+      boton: enlaceDelCorreo.modo === 'con-enlace' ? { texto: 'Ver en Wozial Studio', url: enlaceDelCorreo.url } : undefined,
     });
   }));
 }

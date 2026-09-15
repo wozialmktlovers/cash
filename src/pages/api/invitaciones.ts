@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { and, eq, isNull } from 'drizzle-orm';
 import { db, clients, invitaciones, users } from '@/db';
-import { generarInvitacion, vencimiento, puedeInvitar } from '@/lib/invitaciones';
+import { generarInvitacion, vencimiento, puedeInvitar, correoInvitacion } from '@/lib/invitaciones';
 import { baseUrlPublica } from '@/lib/base-url';
 import { esUuid } from '@/lib/visibilidad';
 import { enviarCorreo } from '@/lib/correo';
@@ -90,19 +90,16 @@ export const POST: APIRoute = async ({ request, locals }) => {
     });
   });
 
-  // PUBLIC_BASE_URL o, sin ella, las cabeceras que reenvía el proxy (M2 punto 4).
-  const base = baseUrlPublica(request);
-  const enlace = `${base}/invitacion/${token}`;
+  // El enlace que se devuelve para copiar puede derivarse de las cabeceras
+  // (validadas en `baseUrlPublica`): lo ve solo quien lo creó. El del CORREO
+  // sale únicamente de PUBLIC_BASE_URL (`correoInvitacion`, fix round 1 de M2).
+  const enlace = `${baseUrlPublica(request)}/invitacion/${token}`;
 
-  const { enviado } = await enviarCorreo({
-    para: email,
-    asunto: 'Te invitaron a Wozial Studio',
-    titulo: 'Te invitaron a Wozial Studio',
-    texto: 'Alguien de tu equipo te dio de alta en Wozial Studio. Usa el botón para crear tu acceso; el enlace vence en 7 días.',
-    boton: { texto: 'Crear mi acceso', url: enlace },
-  });
+  const plan = correoInvitacion({ token, email });
+  const enviado = plan.enviar ? (await enviarCorreo(plan.correo)).enviado : false;
+  const notaCorreo = plan.enviar ? undefined : plan.nota;
 
-  return json({ ok: true, enlace, correoEnviado: enviado }, 201);
+  return json({ ok: true, enlace, correoEnviado: enviado, ...(notaCorreo ? { notaCorreo } : {}) }, 201);
 };
 
 /**

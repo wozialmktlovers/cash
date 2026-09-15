@@ -1,5 +1,7 @@
 import { randomBytes, createHash } from 'node:crypto';
 import type { Rol, UsuarioSesion } from '@/lib/permisos';
+import type { EnvioCorreo } from '@/lib/correo';
+import { enlaceCorreo } from '@/lib/base-url';
 
 const DIAS_VENCIMIENTO = 7;
 
@@ -53,6 +55,48 @@ export function invitacionVigente(
  */
 export function esPendiente(inv: { expiraEn: Date; usadaEn: Date | null }, ahora: Date): boolean {
   return estadoInvitacion(inv, ahora) === 'valida';
+}
+
+/** Nota para la interfaz cuando la invitación no se manda por correo en producción. */
+export const NOTA_SIN_PUBLIC_BASE_URL =
+  'No se envió el correo: falta configurar PUBLIC_BASE_URL en el servidor. Copia el enlace y compártelo a mano.';
+
+/**
+ * El correo de una invitación (fix round 1 de M2): el botón «Crear mi acceso»
+ * apunta SOLO a `PUBLIC_BASE_URL` (`enlaceCorreo`), nunca al host de la
+ * petición, que un atacante con sesión puede falsear y recibir el token real
+ * en un correo legítimo de Wozial. Sin `PUBLIC_BASE_URL`:
+ * - en producción no se manda y se devuelve `nota` para que la interfaz
+ *   muestre el enlace para copiar;
+ * - fuera de producción se manda sin botón ni token (solo avisa de la
+ *   invitación), igual que los avisos sin base.
+ */
+export function correoInvitacion(o: {
+  token: string; email: string; publicBaseUrl?: string; produccion?: boolean;
+}): { enviar: true; correo: EnvioCorreo } | { enviar: false; nota: string } {
+  // Sin `publicBaseUrl` explícito (la ruta real), `enlaceCorreo` lee el entorno:
+  // pasar la llave con `undefined` la haría contar como «no configurada».
+  const enlace = enlaceCorreo(`/invitacion/${o.token}`, {
+    ...('publicBaseUrl' in o ? { publicBaseUrl: o.publicBaseUrl } : {}),
+    produccion: o.produccion,
+  });
+  if (enlace.modo === 'no-enviar') return { enviar: false, nota: NOTA_SIN_PUBLIC_BASE_URL };
+
+  const base = { para: o.email, asunto: 'Te invitaron a Wozial Studio', titulo: 'Te invitaron a Wozial Studio' };
+  if (enlace.modo === 'sin-enlace') {
+    return {
+      enviar: true,
+      correo: { ...base, texto: 'Alguien de tu equipo te dio de alta en Wozial Studio. Pídele el enlace para crear tu acceso; vence en 7 días.' },
+    };
+  }
+  return {
+    enviar: true,
+    correo: {
+      ...base,
+      texto: 'Alguien de tu equipo te dio de alta en Wozial Studio. Usa el botón para crear tu acceso; el enlace vence en 7 días.',
+      boton: { texto: 'Crear mi acceso', url: enlace.url },
+    },
+  };
 }
 
 export function validarAceptacion(o: { nombre: string; password: string; confirmacion: string }): { ok: true } | { ok: false; errores: string[] } {
