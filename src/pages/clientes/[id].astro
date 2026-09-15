@@ -151,14 +151,16 @@ const historial: ItemHistorial[] = [
       <h1>{cliente.nombre}</h1>
       <p class="sub">{cliente.giro}{cliente.ciudad ? ` · ${cliente.ciudad}` : ''}</p>
     </div>
-    <div class="menu">
-      <button type="button" class="icono-btn" id="menu-boton" aria-haspopup="true" aria-expanded="false" aria-controls="menu-lista" aria-label="Más acciones">
-        <Icono nombre="puntos" />
-      </button>
-      <ul class="menu-lista" id="menu-lista" hidden>
-        {operable && <li><button type="button" id="borrar">Eliminar cliente</button></li>}
-      </ul>
-    </div>
+    {esAdmin && (
+      <div class="menu">
+        <button type="button" class="icono-btn" id="menu-boton" aria-haspopup="true" aria-expanded="false" aria-controls="menu-lista" aria-label="Más acciones">
+          <Icono nombre="puntos" />
+        </button>
+        <ul class="menu-lista" id="menu-lista" hidden>
+          <li><button type="button" id="borrar">Eliminar cliente</button></li>
+        </ul>
+      </div>
+    )}
   </div>
 
   <div class="rejilla" style="margin-top:20px">
@@ -322,14 +324,16 @@ const historial: ItemHistorial[] = [
     </dialog>
   )}
 
-  <dialog id="dialogo-borrar" aria-labelledby="borrar-titulo">
-    <h2 id="borrar-titulo">¿Eliminar a {cliente.nombre}?</h2>
-    <p class="sub" style="margin:10px 0 0">Se borran también enlaces, archivos e investigaciones. No se puede deshacer.</p>
-    <div class="acciones">
-      <button type="button" class="btn peligro lleno" id="borrar-de-verdad">Sí, eliminar</button>
-      <button type="button" class="btn fantasma" id="cancelar-borrado">Cancelar</button>
-    </div>
-  </dialog>
+  {esAdmin && (
+    <dialog id="dialogo-borrar" aria-labelledby="borrar-titulo">
+      <h2 id="borrar-titulo">¿Eliminar a {cliente.nombre}?</h2>
+      <p class="sub" style="margin:10px 0 0">Se borran también enlaces, archivos e investigaciones. No se puede deshacer.</p>
+      <div class="acciones">
+        <button type="button" class="btn peligro lleno" id="borrar-de-verdad">Sí, eliminar</button>
+        <button type="button" class="btn fantasma" id="cancelar-borrado">Cancelar</button>
+      </div>
+    </dialog>
+  )}
 </Base>
 
 <script>
@@ -384,35 +388,40 @@ const historial: ItemHistorial[] = [
     guardar.disabled = false;
   });
 
-  // ── Menú ⋯ y borrado en dos pasos. Sin permiso de operar, «Eliminar» no se renderiza.
-  const menuBoton = document.getElementById('menu-boton') as HTMLButtonElement;
-  const menuLista = document.getElementById('menu-lista') as HTMLElement;
-  const dialogo = document.getElementById('dialogo-borrar') as HTMLDialogElement;
-  const cerrarMenu = () => { menuLista.hidden = true; menuBoton.setAttribute('aria-expanded', 'false'); };
-  menuBoton.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const abrir = menuLista.hidden;
-    menuLista.hidden = !abrir;
-    menuBoton.setAttribute('aria-expanded', String(abrir));
-  });
-  document.addEventListener('click', cerrarMenu);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarMenu(); });
-  document.getElementById('borrar')?.addEventListener('click', () => { cerrarMenu(); dialogo.showModal(); });
-  document.getElementById('cancelar-borrado')!.addEventListener('click', () => dialogo.close());
-  const borrarDeVerdad = document.getElementById('borrar-de-verdad') as HTMLButtonElement;
-  borrarDeVerdad.addEventListener('click', async () => {
-    // Se bloquea mientras corre el DELETE para que un doble clic (o un doble
-    // tap en móvil) no dispare dos borrados a la vez.
-    borrarDeVerdad.disabled = true;
-    try {
-      const res = await fetch(`/api/clientes/${clientId}`, { method: 'DELETE' });
-      if (res.ok) { window.location.href = '/clientes'; return; }
-      toast('No se pudo eliminar el cliente.', 'error');
-    } catch {
-      toast('No se pudo contactar al servidor.', 'error');
-    }
-    borrarDeVerdad.disabled = false;
-  });
+  // ── Menú ⋯ y borrado en dos pasos. Solo el admin borra clientes (regla del
+  // dueño): ni el botón ni el diálogo se renderizan para nadie más, así que
+  // todo este bloque es opcional — mismo patrón `| null` que ya usa el
+  // diálogo de invitar usuario, más abajo.
+  const menuBoton = document.getElementById('menu-boton') as HTMLButtonElement | null;
+  const menuLista = document.getElementById('menu-lista') as HTMLElement | null;
+  const dialogo = document.getElementById('dialogo-borrar') as HTMLDialogElement | null;
+  if (menuBoton && menuLista && dialogo) {
+    const cerrarMenu = () => { menuLista.hidden = true; menuBoton.setAttribute('aria-expanded', 'false'); };
+    menuBoton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const abrir = menuLista.hidden;
+      menuLista.hidden = !abrir;
+      menuBoton.setAttribute('aria-expanded', String(abrir));
+    });
+    document.addEventListener('click', cerrarMenu);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarMenu(); });
+    document.getElementById('borrar')?.addEventListener('click', () => { cerrarMenu(); dialogo.showModal(); });
+    document.getElementById('cancelar-borrado')!.addEventListener('click', () => dialogo.close());
+    const borrarDeVerdad = document.getElementById('borrar-de-verdad') as HTMLButtonElement;
+    borrarDeVerdad.addEventListener('click', async () => {
+      // Se bloquea mientras corre el DELETE para que un doble clic (o un doble
+      // tap en móvil) no dispare dos borrados a la vez.
+      borrarDeVerdad.disabled = true;
+      try {
+        const res = await fetch(`/api/clientes/${clientId}`, { method: 'DELETE' });
+        if (res.ok) { window.location.href = '/clientes'; return; }
+        toast('No se pudo eliminar el cliente.', 'error');
+      } catch {
+        toast('No se pudo contactar al servidor.', 'error');
+      }
+      borrarDeVerdad.disabled = false;
+    });
+  }
 
   // ── Responsable. Solo se renderiza el select para el admin.
   const responsableSelect = document.getElementById('responsable-select') as HTMLSelectElement | null;

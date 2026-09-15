@@ -38,6 +38,13 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
 export const DELETE: APIRoute = async ({ params, locals }) => {
   const id = params.id!;
 
+  // Solo el admin borra clientes (regla del dueño: el operador crea, modifica
+  // y solicita autorizaciones, nunca borra). Mismo criterio que ya usa PATCH
+  // .../operador para una acción exclusiva de admin: el rol se revisa ANTES
+  // de tocar la base, con 403 — no 404, porque a diferencia de `clienteOperable`
+  // esto no depende de qué cliente sea, sino de quién pregunta.
+  if (locals.usuario.rol !== 'admin') return json({ ok: false, errores: ['Solo un administrador puede eliminar un cliente'] }, 403);
+
   if (!(await clienteOperable(locals.usuario, id))) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
 
   // `documento_versiones` no tiene FK hacia research/growth/pilares_results
