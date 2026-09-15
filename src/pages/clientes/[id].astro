@@ -14,6 +14,7 @@ import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResu
 import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, tipoDocumentoDe, dependenciasCumplidas, type Etapa } from '@/flujo/reglas';
 import { botonesEtapa, marcaEtapa, COLOR_ESTADO } from '@/flujo/ui';
 import { etapasDelCliente, comentariosAbiertosPorEtapa, enlaceDocumento } from '@/flujo/servicio';
+import { fechaHora as fechaHoraMx } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
@@ -52,7 +53,9 @@ const manualPorJob = new Map(manuales.map((m) => [m.jobId, m.id]));
 const mapaPorJob = new Map(mapas.map((m) => [m.jobId, m.id]));
 
 const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
-const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+// Fix menores, punto 2: fechas del Studio en hora de México, igual que el
+// portal (helper centralizado en src/lib/ui/fecha.ts).
+const fechaHora = fechaHoraMx;
 
 // ── Línea de etapas (spec §3, B5) ──────────────────────────────────────
 // `botonesEtapa` ya llama a `aplicarAccion` en modo prueba con estos datos:

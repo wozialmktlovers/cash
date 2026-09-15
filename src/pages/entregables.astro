@@ -5,6 +5,7 @@ import Icono from '@/components/Icono.astro';
 import { db, clients, researchResults, growthResults, pilaresResults, shareLinks } from '@/db';
 import { slugificar } from '@/lib/slug';
 import { condicionClientes } from '@/lib/visibilidad';
+import { fechaCorta } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
 const cond = condicionClientes(usuario);
@@ -35,7 +36,9 @@ const linkPorDocumento = new Map<string, (typeof links)[number]>();
 for (const l of links) if (!linkPorDocumento.has(l.documentoId)) linkPorDocumento.set(l.documentoId, l);
 
 const base = process.env.PUBLIC_BASE_URL?.replace(/\/+$/, '') || Astro.url.origin;
-const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+// Fix menores, punto 2: fechas del Studio en hora de México, igual que el
+// portal (helper centralizado en src/lib/ui/fecha.ts).
+const fecha = fechaCorta;
 ---
 
 <Base titulo="Entregables" activo="entregables">

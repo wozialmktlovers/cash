@@ -6,6 +6,7 @@ import { db, clienteEtapas, clients, users, comentarios } from '@/db';
 import { NOMBRE_ETAPA, type TipoDocumento } from '@/flujo/reglas';
 import { condicionClientes } from '@/lib/visibilidad';
 import { comentariosAbiertosPorEtapa } from '@/flujo/servicio';
+import { fechaCorta } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
 
@@ -23,7 +24,9 @@ function enlaceDocumento(tipo: TipoDocumento | null, documentoId: string | null,
   return `/clientes/${clientId}`;
 }
 
-const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+// Fix menores, punto 2: fechas del Studio en hora de México, igual que el
+// portal (helper centralizado en src/lib/ui/fecha.ts).
+const fecha = fechaCorta;
 
 type FilaEtapa = {
   id: string;

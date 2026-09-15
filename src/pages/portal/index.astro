@@ -6,6 +6,7 @@ import PortalBase from '@/layouts/PortalBase.astro';
 import Icono from '@/components/Icono.astro';
 import { etapasDelCliente } from '@/flujo/servicio';
 import { clientePortal, resumenPortal, actividadPortal, type EtapaClientePortal } from '@/lib/portal';
+import { fechaCorta } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
 const resultado = await clientePortal(usuario, Astro.url.searchParams);
@@ -50,7 +51,10 @@ if (resultado) {
 // que vería el cliente, no el de quien está mirando.
 const saludoNombre = datos ? (datos.vistaPrevia ? datos.cliente.nombre : (usuario.nombre ?? datos.cliente.nombre)) : null;
 
-const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'America/Mexico_City' });
+// Fix menores, punto 2: mismo helper centralizado que ahora usa el Studio
+// (src/lib/ui/fecha.ts), en vez de reimplementar aquí el formato con
+// `timeZone: 'America/Mexico_City'`.
+const fecha = fechaCorta;
 
 // Enlace a un documento del portal, preservando `?cliente=` en vista previa
 // interna (fix wave, #1): sin esto, admin/operador entraban a
