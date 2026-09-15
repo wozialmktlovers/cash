@@ -164,7 +164,10 @@ p{max-width:68ch;}
 .destacado{background:var(--rosa-s);border:0;box-shadow:none;}
 .destacado h3{color:var(--rosa);}
 
-.pestanas{display:flex;gap:6px;overflow-x:auto;border-bottom:1px solid var(--linea);scrollbar-width:none;}
+/* Sin JS los botones no hacen nada (los paneles ya están todos visibles uno
+   tras otro): se ocultan y solo aparecen cuando el script marca <html class="js">. */
+.pestanas{display:none;}
+html.js .pestanas{display:flex;gap:6px;overflow-x:auto;border-bottom:1px solid var(--linea);scrollbar-width:none;}
 .pestanas [role="tab"]{flex-shrink:0;min-height:48px;padding:0 20px;border:0;background:transparent;cursor:pointer;
   font:var(--t-small);font-weight:600;color:var(--suave);border-bottom:3px solid transparent;margin-bottom:-1px;}
 .pestanas [role="tab"][aria-selected="true"]{color:var(--rosa);border-bottom-color:var(--rosa);}

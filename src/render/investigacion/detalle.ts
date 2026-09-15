@@ -74,7 +74,7 @@ const TEMAS = [
   { clave: 'mercado', nombre: 'Mercado' },
 ] as const;
 
-export function seccionDetalle(inv: Investigacion, cliente: string): string {
+export function seccionDetalle(inv: Investigacion, cliente: string, num: string): string {
   const contenido: Record<(typeof TEMAS)[number]['clave'], string> = {
     competencia: panelCompetencia(datos(inv.competencia), cliente),
     audiencia: panelAudiencia(datos(inv.audiencia)),
@@ -83,7 +83,7 @@ export function seccionDetalle(inv: Investigacion, cliente: string): string {
   };
   // Sin JS los cuatro paneles quedan visibles uno tras otro; el script oculta los no elegidos.
   return `<section class="seccion alterna" id="detalle" data-seccion>
-    ${encabezadoSeccion('04', 'Detalle de la investigación', 'Los datos que sostienen todo lo anterior, con sus fuentes.')}
+    ${encabezadoSeccion(num, 'Detalle de la investigación', 'Los datos que sostienen todo lo anterior, con sus fuentes.')}
     <div>
       <div class="pestanas" role="tablist" aria-label="Detalle por tema">
         ${TEMAS.map((t, i) => `<button type="button" role="tab" id="tab-${t.clave}" aria-controls="panel-${t.clave}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${t.nombre}</button>`).join('')}
@@ -97,11 +97,11 @@ export function seccionDetalle(inv: Investigacion, cliente: string): string {
 }
 
 /** Respaldo cuando aún no hay lectura: la síntesis, con el mismo diseño. */
-export function sintesisEditorial(s: Sintesis | null): string {
+export function sintesisEditorial(s: Sintesis | null, num: string): string {
   if (!s) return '';
   const tipos: Record<string, string> = { prioritario: 'Prioridad', expansion: 'Después', descartado: 'Descartado' };
   return `<section class="seccion" id="sintesis" data-seccion>
-    ${encabezadoSeccion('01', 'Lo más importante', 'La síntesis estratégica de la investigación.')}
+    ${encabezadoSeccion(num, 'Lo más importante', 'La síntesis estratégica de la investigación.')}
     <div class="rejilla dos">${s.hallazgos.map((h) => `<article class="tarjeta aparece"><h3>${escapar(h.titulo)}</h3><p>${escapar(h.texto)}</p></article>`).join('')}</div>
     <div class="tarjeta destacado aparece"><h3>${escapar(s.posicionamiento.frase)}</h3><p>${escapar(s.posicionamiento.sustento)}</p></div>
     <div class="rejilla tres">${s.focos.map((f) => `<article class="tarjeta aparece"><p class="eyebrow">${escapar(tipos[f.tipo] ?? f.tipo)}</p><h3>${escapar(f.nombre)}</h3><p>${escapar(f.razon)}</p></article>`).join('')}</div>

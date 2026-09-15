@@ -12,7 +12,7 @@ export function seccionPortada(o: {
   eyebrow: string; titular: string; resumen: string; cifras: Lectura['cifras']; conIndice: boolean;
 }): string {
   const cifras = o.cifras.length
-    ? `<div class="cifras">${o.cifras.map((c) => `<div class="cifra-tarjeta ${c.tono} aparece">
+    ? `<div class="cifras">${o.cifras.map((c) => `<div class="cifra-tarjeta ${escapar(c.tono)} aparece">
         <span class="cifra-valor">${escapar(c.valor)}</span>
         <span class="cifra-etiqueta">${escapar(c.etiqueta)}</span>
       </div>`).join('')}</div>`
@@ -38,7 +38,7 @@ export function seccionDescubrimos(l: Lectura): string {
     ${encabezadoSeccion('01', 'Qué descubrimos', 'Lo más importante de la investigación, en pocas palabras.')}
     <div class="rejilla dos">
       ${l.descubrimos.map((d) => `<article class="tarjeta hallazgo aparece">
-        <span class="etiqueta ${d.tipo}">${ETIQUETA[d.tipo]}</span>
+        <span class="etiqueta ${escapar(d.tipo)}">${ETIQUETA[d.tipo]}</span>
         <h3>${escapar(d.titulo)}</h3>
         <p>${escapar(d.resumen)}</p>
         <details class="mas"><summary>Ver más</summary><p>${escapar(d.detalle)}</p></details>

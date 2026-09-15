@@ -50,4 +50,9 @@ describe('cabecera del documento', () => {
       expect(SCRIPT_CABECERA).toContain(s);
     }
   });
+
+  it('el panel de compartir se alinea con el borde derecho de la cápsula, no con el del viewport', () => {
+    expect(SCRIPT_CABECERA).toContain('window.innerWidth - r.right');
+    expect(SCRIPT_CABECERA).toContain("panel.style.right = Math.max(16, margenDerecho) + 'px'");
+  });
 });

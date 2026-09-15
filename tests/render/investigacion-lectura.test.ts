@@ -63,4 +63,12 @@ describe('secciones de la lectura', () => {
     x.descubrimos[0].titulo = '<script>alert(1)</script>';
     expect(seccionDescubrimos(x)).not.toContain('<script>alert(1)</script>');
   });
+
+  it('escapa el enum de tono y tipo cuando se usa como clase CSS', () => {
+    const h = seccionPortada({ eyebrow: 'e', titular: 'T', resumen: 'R', cifras: [{ valor: '1', etiqueta: 'e', tono: '"><script>x</script>' as any }], conIndice: false });
+    expect(h).not.toContain('<script>x</script>');
+    const x = l();
+    x.descubrimos[0].tipo = '"><script>y</script>' as any;
+    expect(seccionDescubrimos(x)).not.toContain('<script>y</script>');
+  });
 });

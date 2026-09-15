@@ -60,4 +60,9 @@ describe('estilos del documento', () => {
   it('el índice lateral declara z-index para no quedar tapado por el fondo de las secciones alternas', () => {
     expect(ESTILOS_INVESTIGACION).toMatch(/\.indice-lateral\{[^}]*z-index:\d/);
   });
+
+  it('las pestañas del detalle se ocultan sin JS: no hacen nada sin el script que las controla', () => {
+    expect(ESTILOS_INVESTIGACION).toMatch(/\.pestanas\{display:none;?\}/);
+    expect(ESTILOS_INVESTIGACION).toContain('html.js .pestanas{display:flex');
+  });
 });

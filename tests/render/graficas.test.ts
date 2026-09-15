@@ -52,6 +52,17 @@ describe('gráficas', () => {
     expect(graficaRangos([], 'x')).toBe('');
   });
 
+  it('con un tope en cero no truena ni da porcentajes negativos', () => {
+    const filasCero = [
+      { nombre: 'A', min: 0, max: 0, destacada: false },
+      { nombre: 'B', min: 0, max: 0, destacada: false },
+    ];
+    expect(() => graficaBarras(filasCero, 'x')).not.toThrow();
+    expect(graficaBarras(filasCero, 'x')).toContain('width:0%');
+    expect(graficaBarras(filasCero, 'x')).not.toContain('width:-');
+    expect(() => graficaRangos(filasCero, 'x')).not.toThrow();
+  });
+
   it('rangos dibujan de mínimo a máximo y un valor único como punto', () => {
     const html = graficaRangos([
       { nombre: 'Promedio', min: 6480, max: 6480, destacada: false },

@@ -16,7 +16,9 @@ export function filasGrafica<T>(
   });
 }
 
-const pct = (n: number, tope: number) => Math.round((n / tope) * 100);
+// Un tope en cero o negativo (todos los montos en cero, o un dato corrupto)
+// no debe dividir entre cero ni dar un porcentaje negativo: se dibuja vacío.
+const pct = (n: number, tope: number) => (tope <= 0 ? 0 : Math.round((n / tope) * 100));
 
 /** Barras horizontales. Con una sola fila no hay nada que comparar. */
 export function graficaBarras(filas: FilaGrafica[], leyenda: string): string {

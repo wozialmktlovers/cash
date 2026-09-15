@@ -1,4 +1,5 @@
 import type { Investigacion, Sintesis } from '@/research/schemas';
+import { lecturaSchema } from '@/research/schemas';
 import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
 import { LOGO_WOZIAL_SRC } from '@/render/marca';
 import type { OpcionesBarra } from '@/render/barra-operador';
@@ -100,13 +101,22 @@ export const SCRIPT_DOCUMENTO = `(function () {
 })();`;
 
 export function renderizarInvestigacion(inv: Investigacion, meta: MetaInvestigacion, operador?: OpcionesBarra): string {
-  const lectura = inv.lectura?.estado === 'ok' ? inv.lectura.datos : null;
+  // No basta con `estado === 'ok'`: los datos guardados pudieron venir de un
+  // esquema anterior (v1, sin `cifras`) o llegar corruptos. Si no cumplen el
+  // esquema actual, se usa el respaldo en vez de tronar a media renderización.
+  const lecturaCruda = inv.lectura?.estado === 'ok' ? inv.lectura.datos : null;
+  const parseoLectura = lecturaCruda ? lecturaSchema.safeParse(lecturaCruda) : null;
+  const lectura = parseoLectura?.success ? parseoLectura.data : null;
   const sintesis: Sintesis | null = inv.sintesis.estado === 'ok' ? inv.sintesis.datos : null;
   const eyebrow = `Investigación de mercado · ${meta.fecha}`;
 
+  // Sin lectura, el detalle numera según lo que de verdad hay antes: 01 si
+  // hay síntesis, si no directamente 01 él mismo. Nunca un salto de 01 a 04.
+  const numDetalleRespaldo = sintesis ? '02' : '01';
+
   const indice = lectura
     ? [['01', 'descubrimos', 'Qué descubrimos'], ['02', 'cliente-ideal', 'Tu cliente ideal'], ['03', 'recomendamos', 'Qué te recomendamos'], ['04', 'detalle', 'Detalle']]
-    : [...(sintesis ? [['01', 'sintesis', 'Lo más importante']] : []), ['04', 'detalle', 'Detalle']];
+    : [...(sintesis ? [['01', 'sintesis', 'Lo más importante']] : []), [numDetalleRespaldo, 'detalle', 'Detalle']];
 
   const cuerpo = lectura
     ? [
@@ -114,12 +124,12 @@ export function renderizarInvestigacion(inv: Investigacion, meta: MetaInvestigac
         seccionDescubrimos(lectura),
         seccionClienteIdeal(lectura),
         seccionRecomendamos(lectura),
-        seccionDetalle(inv, meta.cliente),
+        seccionDetalle(inv, meta.cliente, '04'),
       ].join('\n')
     : [
         seccionPortada({ eyebrow, titular: meta.cliente, resumen: meta.giro, cifras: [], conIndice: false }),
-        sintesisEditorial(sintesis),
-        seccionDetalle(inv, meta.cliente),
+        sintesisEditorial(sintesis, '01'),
+        seccionDetalle(inv, meta.cliente, numDetalleRespaldo),
       ].join('\n');
 
   return `<!DOCTYPE html>

@@ -89,6 +89,45 @@ describe('respaldo sin lectura', () => {
   });
 });
 
+describe('lectura guardada que no cumple el esquema actual', () => {
+  it('una lectura v1 (sin cifras, con un campo viejo "explicacion") usa el respaldo sin tronar', () => {
+    const v1 = {
+      explicacion: 'Versión anterior del contenido para el cliente, antes de que existiera "cifras".',
+      resumen: 'Texto libre de una versión previa del esquema.',
+    };
+    const inv = { ...(completa as any), lectura: { estado: 'ok', datos: v1 } };
+    expect(() => renderizarInvestigacion(inv, meta)).not.toThrow();
+    const h = renderizarInvestigacion(inv, meta);
+    expect(h).not.toContain('id="descubrimos"');
+    expect(h).toContain((completa as any).sintesis.datos.hallazgos[0].titulo);
+  });
+
+  it('una lectura corrupta (tipos equivocados) usa el respaldo sin tronar', () => {
+    const corrupta = { portada: { titular: 123, resumen: null }, cifras: 'no es un arreglo' };
+    const inv = { ...(completa as any), lectura: { estado: 'ok', datos: corrupta } };
+    expect(() => renderizarInvestigacion(inv, meta)).not.toThrow();
+    expect(renderizarInvestigacion(inv, meta)).not.toContain('id="descubrimos"');
+  });
+});
+
+describe('numeración del respaldo', () => {
+  it('con síntesis: 01 síntesis, 02 detalle, sin saltar a 04', () => {
+    const h = renderizarInvestigacion(completa as any, meta);
+    expect(h).toContain('class="seccion-num">01<');
+    expect(h).toContain('class="seccion-num">02<');
+    expect(h).not.toContain('class="seccion-num">04<');
+    expect(h).toContain('href="#sintesis"><span>01<');
+    expect(h).toContain('href="#detalle"><span>02<');
+  });
+
+  it('sin síntesis: el detalle es 01', () => {
+    const h = renderizarInvestigacion(parcial as any, meta);
+    expect(h).toContain('class="seccion-num">01<');
+    expect(h).not.toContain('class="seccion-num">02<');
+    expect(h).toContain('href="#detalle"><span>01<');
+  });
+});
+
 describe('interacción', () => {
   it('el script del documento es JavaScript válido', () => {
     expect(() => new Function(SCRIPT_DOCUMENTO)).not.toThrow();

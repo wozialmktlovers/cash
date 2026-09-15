@@ -83,6 +83,13 @@ export const SCRIPT_CABECERA = `(function () {
     if (!panel) return;
     var r = cabecera.getBoundingClientRect();
     panel.style.top = (r.bottom + 10) + 'px';
+    // Alineado con el borde derecho de la cápsula, no con el de la ventana:
+    // en pantallas anchas la cápsula no llega al borde (min(85%,1600px) y
+    // centrada), así que un «right:16px» fijo del viewport lo dejaba volando
+    // lejos del botón que lo abre. Con un mínimo de 16px se conserva el
+    // margen de antes en pantallas angostas, donde la cápsula sí casi toca el borde.
+    var margenDerecho = window.innerWidth - r.right;
+    panel.style.right = Math.max(16, margenDerecho) + 'px';
   }
 
   function actualizar() {
