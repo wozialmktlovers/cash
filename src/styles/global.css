@@ -79,6 +79,11 @@ h3 { font: var(--t-h3); letter-spacing: -0.01em; }
 }
 .superior .marca { margin-right: auto; }
 .superior form { display: none; }
+/* Nombre/correo y rol del usuario, junto a «Salir»: solo caben en escritorio,
+   igual que el propio formulario de salir (ver la media query de abajo). */
+.usuario-sesion { display: none; align-items: baseline; gap: 6px; text-align: right; }
+.usuario-nombre { font: var(--t-small); font-weight: 600; color: var(--tinta); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usuario-rol { font: var(--t-micro); color: var(--suave); }
 
 .contenido {
   max-width: var(--ancho); margin: 0 auto;
@@ -119,6 +124,7 @@ h3 { font: var(--t-h3); letter-spacing: -0.01em; }
   .superior .marca { display: none; }
   .superior .buscador-disparador { margin-right: auto; }
   .superior form { display: block; }
+  .usuario-sesion { display: flex; }
   .contenido { padding: 36px 32px 80px; }
 }
 
@@ -299,6 +305,22 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--r
   background: var(--tarjeta); color: var(--tinta); display: grid; place-items: center; cursor: pointer;
 }
 .icono-btn svg { width: 20px; height: 20px; }
+
+/* ── Interruptor (activo/inactivo) ─────────────────── */
+
+.switch { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; cursor: pointer; }
+.switch input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.switch .riel {
+  width: 38px; height: 22px; padding: 2px; border-radius: var(--r-pill);
+  background: var(--gris); border: 1px solid var(--linea); display: flex; align-items: center;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.switch .perilla { width: 16px; height: 16px; border-radius: 50%; background: var(--suave); transition: transform 0.15s ease, background-color 0.15s ease; }
+.switch input:checked + .riel { background: var(--rosa-s); border-color: var(--rosa); }
+.switch input:checked + .riel .perilla { transform: translateX(16px); background: var(--rosa); }
+.switch input:focus-visible + .riel { box-shadow: var(--foco); }
+.switch input:disabled + .riel { opacity: 0.5; }
+.switch input:disabled { cursor: not-allowed; }
 
 .acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 24px; }
 

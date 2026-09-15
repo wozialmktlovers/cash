@@ -5,7 +5,7 @@ import TemaSwitch from '@/components/TemaSwitch.astro';
 import Paleta from '@/components/Paleta';
 import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
 
-type Seccion = 'inicio' | 'clientes' | 'entregables';
+type Seccion = 'inicio' | 'clientes' | 'entregables' | 'usuarios' | 'desempeno';
 
 interface Props {
   titulo: string;
@@ -14,12 +14,19 @@ interface Props {
 }
 
 const { titulo, activo, volver } = Astro.props;
+const usuario = Astro.locals.usuario;
 
-const NAV: Array<{ clave: Seccion; href: string; texto: string; icono: 'inicio' | 'clientes' | 'entregables' }> = [
+const ETIQUETA_ROL: Record<typeof usuario.rol, string> = { admin: 'Admin', operador: 'Operador', cliente: 'Cliente' };
+
+// La navegación lateral gana «Usuarios» (solo admin) y «Desempeño» (admin y
+// operador); la barra inferior de móvil no cambia (sigue con 4 pestañas).
+const NAV: Array<{ clave: Seccion; href: string; texto: string; icono: 'inicio' | 'clientes' | 'entregables' | 'usuarios' | 'grafica' }> = [
   { clave: 'inicio', href: '/', texto: 'Inicio', icono: 'inicio' },
   { clave: 'clientes', href: '/clientes', texto: 'Clientes', icono: 'clientes' },
   { clave: 'entregables', href: '/entregables', texto: 'Entregables', icono: 'entregables' },
 ];
+if (usuario.rol === 'admin') NAV.push({ clave: 'usuarios', href: '/admin/usuarios', texto: 'Usuarios', icono: 'usuarios' });
+if (usuario.rol === 'admin' || usuario.rol === 'operador') NAV.push({ clave: 'desempeno', href: '/desempeno', texto: 'Desempeño', icono: 'grafica' });
 ---
 
 <html lang="es-MX">
@@ -67,6 +74,10 @@ const NAV: Array<{ clave: Seccion; href: string; texto: string; icono: 'inicio' 
             <Icono nombre="buscar" /><span>Busca un cliente…</span><kbd>⌘K</kbd>
           </button>
           <TemaSwitch />
+          <div class="usuario-sesion">
+            <span class="usuario-nombre">{usuario.nombre ?? usuario.email}</span>
+            <span class="usuario-rol">{ETIQUETA_ROL[usuario.rol]}</span>
+          </div>
           <form method="POST" action="/api/logout">
             <button type="submit" class="btn fantasma chico">Salir</button>
           </form>

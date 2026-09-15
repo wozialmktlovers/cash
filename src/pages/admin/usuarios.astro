@@ -1,0 +1,310 @@
+---
+import { asc, eq, inArray, ne } from 'drizzle-orm';
+import Base from '@/layouts/Base.astro';
+import Icono from '@/components/Icono.astro';
+import { db, users, clients } from '@/db';
+
+const usuario = Astro.locals.usuario;
+
+// Equipo: admin y operador.
+const equipo = await db
+  .select({ id: users.id, nombre: users.nombre, email: users.email, rol: users.rol, activo: users.activo })
+  .from(users)
+  .where(ne(users.rol, 'cliente'))
+  .orderBy(asc(users.nombre));
+
+const equipoIds = equipo.map((u) => u.id);
+const clientesAsignados = equipoIds.length
+  ? await db.select({ id: clients.id, nombre: clients.nombre, operadorId: clients.operadorId }).from(clients).where(inArray(clients.operadorId, equipoIds))
+  : [];
+const clientesPorOperador = new Map<string, { id: string; nombre: string }[]>();
+for (const c of clientesAsignados) {
+  if (!c.operadorId) continue;
+  const lista = clientesPorOperador.get(c.operadorId) ?? [];
+  lista.push({ id: c.id, nombre: c.nombre });
+  clientesPorOperador.set(c.operadorId, lista);
+}
+
+// Usuarios de clientes.
+const usuariosCliente = await db
+  .select({ id: users.id, nombre: users.nombre, email: users.email, activo: users.activo, clientId: users.clientId })
+  .from(users)
+  .where(eq(users.rol, 'cliente'))
+  .orderBy(asc(users.nombre));
+
+const clienteIds = [...new Set(usuariosCliente.map((u) => u.clientId).filter((x): x is string => !!x))];
+const nombresCliente = clienteIds.length ? await db.select({ id: clients.id, nombre: clients.nombre }).from(clients).where(inArray(clients.id, clienteIds)) : [];
+const nombrePorCliente = new Map(nombresCliente.map((c) => [c.id, c.nombre]));
+
+// Todos los clientes, para el select de «Invitar» cuando el rol es cliente.
+const clientesTodos = await db.select({ id: clients.id, nombre: clients.nombre }).from(clients).orderBy(asc(clients.nombre));
+
+const ETIQUETA_ROL: Record<'admin' | 'operador', string> = { admin: 'Admin', operador: 'Operador' };
+---
+
+<Base titulo="Usuarios" activo="usuarios">
+  <div class="encabezado">
+    <div>
+      <h1>Usuarios</h1>
+      <p class="sub">{equipo.length} en el equipo · {usuariosCliente.length} de clientes</p>
+    </div>
+    <button type="button" class="btn" id="abrir-invitar"><Icono nombre="mas" />Invitar</button>
+  </div>
+
+  <section class="tarjeta">
+    <h2>Equipo</h2>
+    <p class="sub" style="margin-bottom:18px">Admin y operador. El rol y el acceso se cambian aquí.</p>
+    {equipo.length === 0 ? (
+      <div class="vacio">
+        <Icono nombre="usuarios" />
+        <strong>Sin usuarios internos todavía</strong>
+        Invita al primer admin u operador.
+      </div>
+    ) : (
+      <ul class="lista" id="lista-equipo">
+        {equipo.map((u) => {
+          const clientesDe = clientesPorOperador.get(u.id) ?? [];
+          const esUnoMismo = u.id === usuario.id;
+          return (
+            <li class="renglon renglon-usuario" data-usuario-id={u.id}>
+              <div class="cuerpo">
+                <strong>{u.nombre ?? u.email}</strong>
+                <p class="secundario">{u.email}</p>
+                <p class="secundario">
+                  {clientesDe.length === 0 ? 'Sin clientes asignados' : `${clientesDe.length} ${clientesDe.length === 1 ? 'cliente asignado' : 'clientes asignados'}`}
+                </p>
+                {!u.activo && clientesDe.length > 0 && (
+                  <p class="secundario aviso-inline"><Icono nombre="alerta" />Inactivo con clientes asignados: reasígnalos desde su ficha.</p>
+                )}
+              </div>
+              <select class="rol-select" data-id={u.id} disabled={esUnoMismo} aria-label={`Rol de ${u.nombre ?? u.email}`}>
+                {(Object.keys(ETIQUETA_ROL) as Array<'admin' | 'operador'>).map((r) => (
+                  <option value={r} selected={u.rol === r}>{ETIQUETA_ROL[r]}</option>
+                ))}
+              </select>
+              <label class="switch" title={esUnoMismo ? 'No puedes desactivarte a ti mismo' : u.activo ? 'Activo' : 'Inactivo'}>
+                <input type="checkbox" class="activo-switch" data-id={u.id} checked={u.activo} disabled={esUnoMismo} aria-label={`Activo: ${u.nombre ?? u.email}`} />
+                <span class="riel"><span class="perilla"></span></span>
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    )}
+  </section>
+
+  <section class="tarjeta">
+    <h2>Usuarios de clientes</h2>
+    <p class="sub" style="margin-bottom:18px">Acceden solo al portal de su cliente.</p>
+    {usuariosCliente.length === 0 ? (
+      <div class="vacio">
+        <Icono nombre="usuarios" />
+        <strong>Sin usuarios de clientes todavía</strong>
+        Se invitan desde la ficha de cada cliente, o aquí mismo.
+      </div>
+    ) : (
+      <ul class="lista">
+        {usuariosCliente.map((u) => (
+          <li class="renglon">
+            <div class="cuerpo">
+              <strong>{u.nombre ?? u.email}</strong>
+              <p class="secundario">{u.email} · {u.clientId ? (nombrePorCliente.get(u.clientId) ?? 'Cliente') : 'Sin cliente'}</p>
+            </div>
+            <span class={`etiqueta ${u.activo ? 'completado' : 'cancelado'}`}>{u.activo ? 'Activo' : 'Inactivo'}</span>
+          </li>
+        ))}
+      </ul>
+    )}
+  </section>
+
+  <dialog id="dialogo-invitar" aria-labelledby="invitar-titulo">
+    <h2 id="invitar-titulo">Invitar</h2>
+    <form id="forma-invitar">
+      <div class="campos" style="margin-top:16px">
+        <div class="campo ancho">
+          <label for="inv-email">Correo</label>
+          <input id="inv-email" name="email" type="email" autocomplete="off" required />
+        </div>
+        <div class="campo">
+          <label for="inv-rol">Rol</label>
+          <select id="inv-rol" name="rol" required>
+            <option value="admin">Admin</option>
+            <option value="operador">Operador</option>
+            <option value="cliente">Usuario de cliente</option>
+          </select>
+        </div>
+        <div class="campo" id="inv-cliente-campo" hidden>
+          <label for="inv-cliente">Cliente</label>
+          <select id="inv-cliente" name="clientId">
+            <option value="">Selecciona…</option>
+            {clientesTodos.map((c) => <option value={c.id}>{c.nombre}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div id="inv-resultado" hidden style="margin-top:16px">
+        <p class="aviso verde" id="inv-mensaje"></p>
+        <div class="campo con-icono" style="margin-top:10px">
+          <Icono nombre="enlace" />
+          <input id="inv-enlace" type="text" readonly aria-label="Enlace de invitación" />
+        </div>
+        <button type="button" class="btn fantasma chico" id="inv-copiar" style="margin-top:10px"><Icono nombre="copiar" />Copiar</button>
+      </div>
+
+      <p class="aviso rosa" id="inv-error" hidden role="alert"></p>
+
+      <div class="acciones">
+        <button type="submit" class="btn" id="inv-enviar">Invitar</button>
+        <button type="button" class="btn fantasma" id="inv-cerrar">Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+</Base>
+
+<script>
+  import { toast } from '@/scripts/toast';
+  import { copiar } from '@/scripts/copiar';
+
+  // ── Diálogo «Invitar» ──────────────────────────────
+  const dialogo = document.getElementById('dialogo-invitar') as HTMLDialogElement;
+  const forma = document.getElementById('forma-invitar') as HTMLFormElement;
+  const rolSelect = document.getElementById('inv-rol') as HTMLSelectElement;
+  const clienteCampo = document.getElementById('inv-cliente-campo') as HTMLElement;
+  const clienteSelect = document.getElementById('inv-cliente') as HTMLSelectElement;
+  const resultado = document.getElementById('inv-resultado') as HTMLElement;
+  const mensaje = document.getElementById('inv-mensaje') as HTMLElement;
+  const enlaceInput = document.getElementById('inv-enlace') as HTMLInputElement;
+  const errorAviso = document.getElementById('inv-error') as HTMLElement;
+  const enviar = document.getElementById('inv-enviar') as HTMLButtonElement;
+
+  function actualizarClienteCampo() {
+    const esCliente = rolSelect.value === 'cliente';
+    clienteCampo.hidden = !esCliente;
+    clienteSelect.required = esCliente;
+  }
+  rolSelect.addEventListener('change', actualizarClienteCampo);
+  actualizarClienteCampo();
+
+  function abrirDialogo() {
+    forma.reset();
+    actualizarClienteCampo();
+    resultado.hidden = true;
+    errorAviso.hidden = true;
+    enviar.hidden = false;
+    dialogo.showModal();
+  }
+  document.getElementById('abrir-invitar')!.addEventListener('click', abrirDialogo);
+  document.getElementById('inv-cerrar')!.addEventListener('click', () => dialogo.close());
+
+  const MENSAJES_ERROR: Record<string, string> = {
+    'correo-invalido': 'El correo no es válido.',
+    'rol-invalido': 'El rol no es válido.',
+    'cliente-obligatorio': 'Elige un cliente.',
+    'cliente-invalido': 'Ese cliente no existe.',
+    prohibido: 'No tienes permiso para invitar con ese rol o cliente.',
+    'ya-existe': 'Ya existe una cuenta con ese correo.',
+    'json-invalido': 'No se pudo enviar la invitación.',
+  };
+
+  forma.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    enviar.disabled = true;
+    errorAviso.hidden = true;
+    try {
+      const datos = Object.fromEntries(new FormData(forma).entries()) as Record<string, string>;
+      const cuerpo: Record<string, unknown> = { email: datos.email, rol: datos.rol };
+      if (datos.rol === 'cliente') cuerpo.clientId = datos.clientId;
+
+      const res = await fetch('/api/invitaciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        errorAviso.textContent = MENSAJES_ERROR[json.error] ?? 'No se pudo crear la invitación.';
+        errorAviso.hidden = false;
+        return;
+      }
+      mensaje.textContent = json.correoEnviado ? 'Invitación creada y enviada por correo.' : 'Invitación creada. Copia el enlace y compártelo a mano.';
+      enlaceInput.value = json.enlace;
+      resultado.hidden = false;
+      enviar.hidden = true;
+    } catch {
+      errorAviso.textContent = 'No se pudo contactar al servidor.';
+      errorAviso.hidden = false;
+    } finally {
+      enviar.disabled = false;
+    }
+  });
+
+  document.getElementById('inv-copiar')!.addEventListener('click', () => copiar(enlaceInput.value, enlaceInput));
+
+  // ── Equipo: rol y activo, cada uno con su PATCH ───
+  function revertirSelect(select: HTMLSelectElement, valorAnterior: string) {
+    select.value = valorAnterior;
+  }
+
+  async function patchUsuario(id: string, cambio: Record<string, unknown>) {
+    const res = await fetch(`/api/admin/usuarios/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cambio),
+    });
+    const json = await res.json();
+    return { ok: res.ok && json.ok, error: json.error as string | undefined };
+  }
+
+  const MENSAJES_CAMBIO: Record<string, string> = {
+    'solo-admin': 'Solo un admin puede hacer este cambio.',
+    'rol-cliente-fijo': 'El rol de un usuario de cliente no se puede cambiar.',
+    'no-autodesactivar': 'No puedes desactivarte a ti mismo.',
+    'no-autodegradarse': 'No puedes quitarte tu propio rol de admin.',
+    'ultimo-admin': 'Es el último admin activo: no se puede desactivar ni degradar.',
+    'no-existe': 'Ese usuario ya no existe.',
+  };
+
+  document.querySelectorAll<HTMLSelectElement>('.rol-select').forEach((select) => {
+    const anterior = select.value;
+    let previo = anterior;
+    select.addEventListener('change', async () => {
+      const id = select.dataset.id!;
+      select.disabled = true;
+      const { ok, error } = await patchUsuario(id, { rol: select.value });
+      if (ok) {
+        toast('Rol actualizado');
+        previo = select.value;
+      } else {
+        toast(MENSAJES_CAMBIO[error ?? ''] ?? 'No se pudo cambiar el rol.', 'error');
+        revertirSelect(select, previo);
+      }
+      select.disabled = false;
+    });
+  });
+
+  document.querySelectorAll<HTMLInputElement>('.activo-switch').forEach((input) => {
+    let previo = input.checked;
+    input.addEventListener('change', async () => {
+      const id = input.dataset.id!;
+      input.disabled = true;
+      const { ok, error } = await patchUsuario(id, { activo: input.checked });
+      if (ok) {
+        toast(input.checked ? 'Usuario reactivado' : 'Usuario desactivado');
+        previo = input.checked;
+      } else {
+        toast(MENSAJES_CAMBIO[error ?? ''] ?? 'No se pudo cambiar el estado.', 'error');
+        input.checked = previo;
+      }
+      input.disabled = false;
+    });
+  });
+</script>
+
+<style>
+  .encabezado { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  .renglon-usuario { gap: 16px; }
+  .renglon-usuario .cuerpo { display: flex; flex-direction: column; gap: 2px; }
+  .rol-select { width: auto; min-width: 130px; }
+  .aviso-inline { display: flex; align-items: center; gap: 6px; color: var(--amarillo); }
+  .aviso-inline svg { width: 14px; height: 14px; flex-shrink: 0; }
+</style>

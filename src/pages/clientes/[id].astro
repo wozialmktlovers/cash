@@ -1,5 +1,5 @@
 ---
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and, ne } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import LinksEditor from '@/components/LinksEditor';
@@ -9,7 +9,7 @@ import { iniciales, tinte } from '@/lib/ui/cliente-visual';
 import { ETIQUETA_ESTADO } from '@/lib/ui/progreso';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { clienteVisible } from '@/lib/visibilidad';
-import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults } from '@/db';
+import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults, users } from '@/db';
 
 const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
@@ -17,6 +17,20 @@ const { id } = Astro.params;
 const cliente = await clienteVisible(usuario, id!);
 if (!cliente) return new Response(null, { status: 404 });
 const operable = puedeOperarCliente(usuario, cliente);
+const esAdmin = usuario.rol === 'admin';
+
+// ── Responsable ────────────────────────────────────
+const [responsable] = cliente.operadorId
+  ? await db.select({ id: users.id, nombre: users.nombre, email: users.email }).from(users).where(eq(users.id, cliente.operadorId)).limit(1)
+  : [];
+const operadoresActivos = esAdmin
+  ? await db.select({ id: users.id, nombre: users.nombre, email: users.email }).from(users).where(and(ne(users.rol, 'cliente'), eq(users.activo, true))).orderBy(users.nombre)
+  : [];
+
+// ── Usuarios del cliente ───────────────────────────
+const usuariosCliente = operable
+  ? await db.select({ id: users.id, nombre: users.nombre, email: users.email, activo: users.activo }).from(users).where(and(eq(users.rol, 'cliente'), eq(users.clientId, cliente.id))).orderBy(users.nombre)
+  : [];
 
 const enlaces = await db.select().from(clientLinks).where(eq(clientLinks.clientId, cliente.id));
 const archivos = await db.select().from(clientFiles).where(eq(clientFiles.clientId, cliente.id));
@@ -58,6 +72,48 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
         {operable && <li><button type="button" id="borrar">Eliminar cliente</button></li>}
       </ul>
     </div>
+  </div>
+
+  <div class="rejilla" style="margin-top:20px">
+    <section class="tarjeta">
+      <h2>Responsable</h2>
+      {esAdmin ? (
+        <div class="campo" style="margin-top:12px">
+          <label for="responsable-select">Operador asignado</label>
+          <select id="responsable-select">
+            {operadoresActivos.map((o) => (
+              <option value={o.id} selected={o.id === cliente.operadorId}>{o.nombre ?? o.email}</option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <p class="secundario" style="margin-top:12px">{responsable ? (responsable.nombre ?? responsable.email) : 'Sin responsable asignado'}</p>
+      )}
+    </section>
+
+    {operable && (
+      <section class="tarjeta">
+        <div class="tarjeta-cabeza-flex">
+          <h2>Usuarios del cliente</h2>
+          <button type="button" class="btn fantasma chico" id="abrir-invitar-usuario"><Icono nombre="mas" />Invitar usuario</button>
+        </div>
+        {usuariosCliente.length === 0 ? (
+          <p class="secundario" style="margin-top:12px">Sin usuarios todavía.</p>
+        ) : (
+          <ul class="lista" style="margin-top:12px">
+            {usuariosCliente.map((u) => (
+              <li class="renglon">
+                <div class="cuerpo">
+                  <strong>{u.nombre ?? u.email}</strong>
+                  <p class="secundario">{u.email}</p>
+                </div>
+                <span class={`etiqueta ${u.activo ? 'completado' : 'cancelado'}`}>{u.activo ? 'Activo' : 'Inactivo'}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    )}
   </div>
 
   <div class="rejilla tres" style="margin-top:24px">
@@ -175,6 +231,34 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
     )}
   </section>
 
+  {operable && (
+    <dialog id="dialogo-invitar-usuario" aria-labelledby="invitar-usuario-titulo">
+      <h2 id="invitar-usuario-titulo">Invitar usuario de {cliente.nombre}</h2>
+      <form id="forma-invitar-usuario">
+        <div class="campo" style="margin-top:16px">
+          <label for="iu-email">Correo</label>
+          <input id="iu-email" name="email" type="email" autocomplete="off" required />
+        </div>
+
+        <div id="iu-resultado" hidden style="margin-top:16px">
+          <p class="aviso verde" id="iu-mensaje"></p>
+          <div class="campo con-icono" style="margin-top:10px">
+            <Icono nombre="enlace" />
+            <input id="iu-enlace" type="text" readonly aria-label="Enlace de invitación" />
+          </div>
+          <button type="button" class="btn fantasma chico" id="iu-copiar" style="margin-top:10px"><Icono nombre="copiar" />Copiar</button>
+        </div>
+
+        <p class="aviso rosa" id="iu-error" hidden role="alert"></p>
+
+        <div class="acciones">
+          <button type="submit" class="btn" id="iu-enviar">Invitar</button>
+          <button type="button" class="btn fantasma" id="iu-cerrar">Cerrar</button>
+        </div>
+      </form>
+    </dialog>
+  )}
+
   <dialog id="dialogo-borrar" aria-labelledby="borrar-titulo">
     <h2 id="borrar-titulo">¿Eliminar a {cliente.nombre}?</h2>
     <p class="sub" style="margin:10px 0 0">Se borran también enlaces, archivos e investigaciones. No se puede deshacer.</p>
@@ -187,6 +271,7 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
 
 <script>
   import { toast } from '@/scripts/toast';
+  import { copiar } from '@/scripts/copiar';
 
   const clientId = window.location.pathname.split('/')[2];
 
@@ -289,6 +374,91 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
     growth.disabled = false;
     growth.textContent = original;
   });
+
+  // ── Responsable. Solo se renderiza el select para el admin.
+  const responsableSelect = document.getElementById('responsable-select') as HTMLSelectElement | null;
+  if (responsableSelect) {
+    let previo = responsableSelect.value;
+    responsableSelect.addEventListener('change', async () => {
+      responsableSelect.disabled = true;
+      try {
+        const res = await fetch(`/api/clientes/${clientId}/operador`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ operadorId: responsableSelect.value }),
+        });
+        const json = await res.json();
+        if (json.ok) {
+          toast('Responsable actualizado');
+          previo = responsableSelect.value;
+        } else {
+          toast('No se pudo actualizar el responsable.', 'error');
+          responsableSelect.value = previo;
+        }
+      } catch {
+        toast('No se pudo contactar al servidor.', 'error');
+        responsableSelect.value = previo;
+      }
+      responsableSelect.disabled = false;
+    });
+  }
+
+  // ── Invitar usuario del cliente. El diálogo solo existe si es operable.
+  const dialogoInvitarUsuario = document.getElementById('dialogo-invitar-usuario') as HTMLDialogElement | null;
+  if (dialogoInvitarUsuario) {
+    const formaInvitar = document.getElementById('forma-invitar-usuario') as HTMLFormElement;
+    const iuResultado = document.getElementById('iu-resultado') as HTMLElement;
+    const iuMensaje = document.getElementById('iu-mensaje') as HTMLElement;
+    const iuEnlace = document.getElementById('iu-enlace') as HTMLInputElement;
+    const iuError = document.getElementById('iu-error') as HTMLElement;
+    const iuEnviar = document.getElementById('iu-enviar') as HTMLButtonElement;
+
+    const MENSAJES_ERROR: Record<string, string> = {
+      'correo-invalido': 'El correo no es válido.',
+      prohibido: 'No tienes permiso para invitar usuarios de este cliente.',
+      'ya-existe': 'Ya existe una cuenta con ese correo.',
+    };
+
+    document.getElementById('abrir-invitar-usuario')!.addEventListener('click', () => {
+      formaInvitar.reset();
+      iuResultado.hidden = true;
+      iuError.hidden = true;
+      iuEnviar.hidden = false;
+      dialogoInvitarUsuario.showModal();
+    });
+    document.getElementById('iu-cerrar')!.addEventListener('click', () => dialogoInvitarUsuario.close());
+
+    formaInvitar.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      iuEnviar.disabled = true;
+      iuError.hidden = true;
+      try {
+        const email = (document.getElementById('iu-email') as HTMLInputElement).value;
+        const res = await fetch('/api/invitaciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, rol: 'cliente', clientId }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          iuError.textContent = MENSAJES_ERROR[json.error] ?? 'No se pudo crear la invitación.';
+          iuError.hidden = false;
+          return;
+        }
+        iuMensaje.textContent = json.correoEnviado ? 'Invitación creada y enviada por correo.' : 'Invitación creada. Copia el enlace y compártelo a mano.';
+        iuEnlace.value = json.enlace;
+        iuResultado.hidden = false;
+        iuEnviar.hidden = true;
+      } catch {
+        iuError.textContent = 'No se pudo contactar al servidor.';
+        iuError.hidden = false;
+      } finally {
+        iuEnviar.disabled = false;
+      }
+    });
+
+    document.getElementById('iu-copiar')!.addEventListener('click', () => copiar(iuEnlace.value, iuEnlace));
+  }
 </script>
 
 <style>
@@ -299,4 +469,5 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
      de un <button>: es un <a> y seguiría siendo navegable. Se marca con
      aria-disabled y se anulan el puntero y el subrayado a mano. */
   .accion .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+  .tarjeta-cabeza-flex { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 </style>
