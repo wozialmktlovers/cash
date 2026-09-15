@@ -161,7 +161,11 @@ El cliente nunca ve una página vacía ni un error.
 
 ### Vista del operador
 
-`/resultados/[id]` rinde el mismo documento con la barra de operador (crear, copiar y revocar el link). La barra desplaza la cabecera fija del documento nuevo y toma sus colores de los tokens cuando existen, conservando los actuales como respaldo para el manual de Growth.
+**Actualizado tras C2** (la barra de operador fija que describía esta sección se sustituyó por la cabecera flotante compartida de todos los documentos editoriales — `cabeceraDocumento`, `src/render/editorial/cabecera.ts`):
+
+`/resultados/[id]` rinde el mismo documento con la cabecera flotante (cápsula fija con logo, «Etiqueta · Cliente», switch de tema y progreso de lectura) y, solo en esta vista interna (se le pasa `operador`), un botón **Compartir** junto a Editar/Comentar. El botón abre el panel Compartir (`panel-compartir`, fuera del `<header>` para no quedar recortado por su `overflow:hidden`) con la misma lógica de red que tenía la barra anterior — crear, copiar y revocar el link público — más accesos directos a «Cliente» y «Regenerar». Sin permiso de crear un link (M2 punto 1), el botón «Crear link público» se sustituye por la razón por la que no se puede.
+
+Los botones de Editar/Comentar y sus paneles se activan con `puedeEditar`/`puedeComentar`, no con `operador`: en esta vista interna siempre viajan juntos, pero el portal del cliente (spec §4 de C2, abajo) necesita el botón y el panel de Comentar sin Compartir ni el resto de las acciones de operador — de ahí la separación en la firma de `cabeceraDocumento`.
 
 ### Lo que se retira
 

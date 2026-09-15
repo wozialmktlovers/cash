@@ -236,6 +236,7 @@ La combinación (`client_id`, `etapa`) es única.
     - respuesta a cambios, de cada `pedir_cambios` al siguiente `solicitar`.
     - Se reportan promedio y mediana en días, con un decimal.
   - **Calidad:** rondas de cambios por etapa aprobada (conteo de `pedir_cambios` y `reabrir`), y comentarios de admin y de cliente por entregable.
+    - **Pendiente de visto bueno del dueño** (decisiones tomadas durante la implementación, no en este spec original): un `comentario_cliente` que reabre la etapa (`de !== a`) también cuenta como ronda, al mismo nivel que `pedir_cambios`/`reabrir` — varias observaciones seguidas sobre la misma reapertura solo cuentan una vez (`esRondaDeCambios`, `src/lib/desempeno.ts`). Y en el desglose por etapa (cliente × etapa, operador × etapa), las «rondas» que se muestran son el **promedio** de `resumenEstadistico`, no el conteo crudo (`desglosePorEtapa`, mismo archivo). Ninguna de las dos está confirmada por el dueño; si no le sirven así, ajustar `esRondaDeCambios` y/o cambiar `.promedio` por `.mediana` (o mostrar ambos) en `desglosePorEtapa`.
   - **Carga y avance:** clientes asignados, etapas activas (`en_proceso`, `en_revision`, `con_cambios`), % de avance promedio y etapas aprobadas en el periodo.
   - **Costo:** suma de `costo_usd` de jobs por cliente, por etapa (tipo de job) y por operador (`creado_por`; si es nulo, el operador asignado al cliente).
 - **Vista:**

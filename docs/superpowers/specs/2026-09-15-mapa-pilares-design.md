@@ -208,7 +208,7 @@ Los 300 temas se rinden en el servidor. Sin JS todo se lee e imprime. Con JS se 
 | Nota de más de 2000 caracteres | 400 |
 | Link público | Sin estados, notas, emails ni supuestos |
 | Estrategia falla | Job `fallido` con razón; no se crea resultado |
-| Todos los pilares fallan | Resultado con estrategia y pilares vacíos; job `completado` con aviso en revisión |
+| Todos los pilares fallan (mapa sin un solo tema) | Job `fallido` (`src/pilares/pipeline.ts`: `finales.length > 0 ? 'completado' : 'fallido'`) — un mapa sin ningún tema no le sirve a nadie, así que cuenta como fallido y quien lo lanzó recibe el aviso, en vez de un «completado» vacío |
 | Tope de costo | Pilares no iniciados quedan `omitido_por_costo` |
 
 ---
