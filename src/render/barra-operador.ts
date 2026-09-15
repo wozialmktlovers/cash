@@ -16,10 +16,9 @@ export type OpcionesBarra = {
  * Barra de operador. Solo aparece en la vista interna; el link público sirve
  * el documento sin ella.
  *
- * Compartida entre la presentación y el manual de campaña porque hace lo
- * mismo en los dos: crear, copiar y revocar el link público. Lo único que
- * cambia es qué elementos fijos hay que bajar para que la barra no los tape,
- * y eso viaja en `tipo`.
+ * La usa únicamente el manual de Growth: la investigación tiene su propia
+ * cabecera flotante (`src/render/investigacion/cabecera.ts`) con el mismo
+ * botón Compartir, pero rediseñada como cápsula con progreso de lectura.
  */
 export function barraOperador(o: OpcionesBarra): string {
   const url = o.tokenActivo ? `${o.base}/p/${o.clienteSlug}/${o.tokenActivo}` : '';
@@ -27,29 +26,11 @@ export function barraOperador(o: OpcionesBarra): string {
     ? `/clientes/${escapar(o.clienteId)}`
     : `/clientes/${escapar(o.clienteId)}/investigar`;
 
-  // Cada documento tiene su propio envase fijo que hay que desplazar.
-  const desplazamiento = o.tipo === 'growth'
-    ? `.nav{top:var(--barra-h);}
-       .prog{top:calc(var(--barra-h) + 62px);}
-       body{padding-top:calc(var(--barra-h) + 64px);}`
-    : `.doc-barra{top:var(--barra-h);}
-       body{padding-top:var(--barra-h);}
-       /* La barra fija se suma a la cabecera del documento: sin esto, las anclas
-          del índice dejan el título de la sección debajo de las dos barras. */
-       html{scroll-padding-top:calc(var(--barra-h) + 96px);}
-       .indice-lateral{top:calc(var(--barra-h) + 96px);}
-       /* El documento nuevo trae los tokens del Studio: la barra toma sus colores
-          para no quedar como una franja negra sobre el tema claro. */
-       #barra-op{background:color-mix(in srgb,var(--tarjeta) 94%,transparent);border-bottom-color:var(--linea);}
-       #barra-op .bo-marca{color:var(--rosa);}
-       #barra-op .bo-cliente,#barra-op .bo-estado{color:var(--suave);}
-       #barra-op .bo-btn{color:var(--texto);border-color:var(--linea);}
-       #barra-op .bo-btn:hover{color:var(--rosa);border-color:var(--rosa);}
-       #barra-op .bo-primario{background:var(--rosa);border-color:var(--rosa);color:var(--sobre-acento);}
-       #barra-op .bo-peligro{color:var(--rojo);border-color:var(--rojo);}
-       #barra-op input{background:var(--gris);border-color:var(--linea);color:var(--tinta);}
-       #barra-op .bo-panel{background:var(--tarjeta);border-top-color:var(--linea);}
-       @media (min-width:900px){ #barra-op .bo-panel{background:transparent;} }`;
+  // El envase fijo del manual de Growth, que hay que desplazar para que la
+  // barra no lo tape.
+  const desplazamiento = `.nav{top:var(--barra-h);}
+     .prog{top:calc(var(--barra-h) + 62px);}
+     body{padding-top:calc(var(--barra-h) + 64px);}`;
 
   return `
 <div id="barra-op">

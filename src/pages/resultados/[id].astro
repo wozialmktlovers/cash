@@ -2,7 +2,6 @@
 import { eq, and, desc } from 'drizzle-orm';
 import { db, researchResults, clients, shareLinks } from '@/db';
 import { renderizarInvestigacion } from '@/render/investigacion/documento';
-import { barraOperador } from '@/render/barra-operador';
 import { slugificar } from '@/lib/slug';
 
 const { id } = Astro.params;
@@ -23,10 +22,10 @@ const base = (process.env.PUBLIC_BASE_URL ?? Astro.url.origin).replace(/\/+$/, '
 const html = renderizarInvestigacion(
   r.datos as any,
   { cliente: c.nombre, giro: c.giro, fecha: r.createdAt.toISOString().slice(0, 10) },
-  barraOperador({
+  {
     clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
     version: r.version, tipo: 'research', tokenActivo: activo?.token ?? null, base,
-  }),
+  },
 );
 ---
 

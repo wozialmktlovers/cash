@@ -6,8 +6,15 @@ import TOKENS_CSS from '@/styles/tokens.css?raw';
 // «.a + .a { margin }». Ese patrón ya pisó otras reglas dos veces.
 const DOCUMENTO = `
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+/* Red de seguridad para el panel de compartir link: sus botones y campos
+   traen su propio display (flex/inline-flex) sin condición, que ganaría
+   siempre sobre el [hidden]{display:none} del navegador, igual que le
+   pasaba a las pestañas del detalle antes de esta rama. */
+[hidden]{display:none!important;}
 html{-webkit-font-smoothing:antialiased;scroll-behavior:smooth;scroll-padding-top:96px;}
-body{font:var(--t-body);color:var(--texto);background:var(--fondo);}
+/* La cabecera flotante es fija y no reserva su espacio en el flujo: el
+   cuerpo lo hace a mano, a juego con scroll-padding-top de arriba. */
+body{font:var(--t-body);color:var(--texto);background:var(--fondo);padding-top:96px;}
 a{color:var(--rosa);}
 h1,h2,h3,h4{color:var(--tinta);letter-spacing:var(--tracking-titulo);}
 h2{font:var(--t-h1);}
@@ -16,16 +23,59 @@ p{max-width:68ch;}
 .eyebrow{font:var(--t-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--rosa);}
 .suave{color:var(--suave);font:var(--t-small);}
 
-.doc-barra{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px;padding:10px max(16px,7.5vw);
-  background:color-mix(in srgb,var(--fondo) 88%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--linea);}
-.doc-barra .logo{height:22px;width:auto;filter:brightness(0);}
 :root[data-tema="oscuro"] .logo{filter:none!important;}
-.doc-barra .titulo{flex:1;min-width:0;font:var(--t-small);color:var(--suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.doc-barra .titulo b{color:var(--tinta);font-weight:600;}
 .tema-switch{display:inline-flex;padding:3px;gap:2px;border-radius:var(--r-pill);background:var(--gris);border:1px solid var(--linea);}
 .tema-switch button{width:44px;height:44px;border:0;border-radius:50%;background:transparent;color:var(--suave);cursor:pointer;display:grid;place-items:center;}
 .tema-switch svg{width:18px;height:18px;}
 .tema-switch button[aria-checked="true"]{background:var(--tarjeta);color:var(--tinta);box-shadow:var(--sombra);}
+
+/* Cabecera flotante: sustituye a las dos barras de antes (la del documento y
+   la del operador). Cápsula independiente del flujo, con overflow:hidden
+   para que la barra de progreso quede recortada por su propio radio sin
+   necesidad de un clip-path aparte. El panel de compartir link vive fuera de
+   ella a propósito, para no quedar atrapado por ese overflow. */
+.cabecera{position:fixed;top:14px;left:50%;translate:-50% 0;z-index:60;
+  width:min(85%,1600px);height:64px;display:flex;align-items:center;gap:16px;padding:0 20px;
+  border-radius:var(--r-pill);overflow:hidden;
+  background:color-mix(in srgb,var(--tarjeta) 82%,transparent);backdrop-filter:blur(16px);
+  border:1px solid var(--linea);box-shadow:var(--sombra);
+  transition:height .2s ease;}
+.cabecera.compacta{height:52px;}
+@media (max-width:899px){.cabecera{width:calc(100% - 24px);}}
+@media (prefers-reduced-motion:reduce){.cabecera{transition:none;}}
+
+.cabecera-marca{display:flex;align-items:center;gap:10px;min-width:0;flex:1;overflow:hidden;}
+.cabecera .logo{height:24px;width:auto;flex-shrink:0;filter:brightness(0);transition:height .2s ease;}
+.cabecera.compacta .logo{height:20px;}
+@media (prefers-reduced-motion:reduce){.cabecera .logo{transition:none;}}
+.cabecera .titulo{font:var(--t-small);color:var(--suave);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.cabecera .titulo b{color:var(--tinta);font-weight:600;}
+
+.cabecera-acciones{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.cabecera-compartir{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:var(--r-pill);
+  border:1px solid var(--linea);background:var(--gris);color:var(--tinta);font:var(--t-small);font-weight:600;cursor:pointer;}
+.cabecera-compartir:hover{border-color:var(--rosa);color:var(--rosa);}
+.cabecera-compartir svg{width:16px;height:16px;flex-shrink:0;}
+@media (max-width:520px){.cabecera-compartir{width:44px;padding:0;justify-content:center;}.cabecera-compartir .texto-compartir{display:none;}}
+
+.cabecera-progreso{position:absolute;left:0;bottom:0;height:3px;width:0;background:var(--rosa);}
+
+.panel-compartir{position:fixed;z-index:61;right:16px;width:min(380px,calc(100vw - 24px));
+  background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--r);box-shadow:var(--sombra);
+  padding:20px;display:grid;gap:14px;}
+.panel-compartir[hidden]{display:none;}
+.panel-eyebrow{font:var(--t-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--rosa);}
+.panel-link{display:flex;gap:8px;}
+.panel-url{flex:1;min-width:0;min-height:44px;padding:0 12px;border-radius:var(--r-sm);border:1px solid var(--linea);
+  background:var(--gris);color:var(--tinta);font:var(--t-small);}
+.panel-boton{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 16px;border-radius:var(--r-sm);
+  border:1px solid var(--linea);background:transparent;color:var(--texto);text-decoration:none;font:var(--t-small);font-weight:600;cursor:pointer;}
+.panel-boton:hover{border-color:var(--rosa);color:var(--rosa);}
+.panel-primario{background:var(--rosa);border-color:var(--rosa);color:var(--sobre-acento);}
+.panel-peligro{color:var(--rojo);border-color:var(--rojo-s);}
+.panel-peligro:hover{border-color:var(--rojo);}
+.panel-filas{display:flex;flex-wrap:wrap;gap:8px;}
+.panel-estado{font:var(--t-small);color:var(--suave);min-height:18px;}
 
 .pagina{width:auto;margin:0 16px;}
 .marco{display:block;}
@@ -154,7 +204,7 @@ html.js .aparece.visible{opacity:1;translate:0 0;}
   html.js .aparece{opacity:1;translate:none;transition:none;}
 }
 @media print{
-  .doc-barra,.indice-lateral,.pestanas,.accesos,#barra-op{display:none!important;}
+  .cabecera,.panel-compartir,.indice-lateral,.pestanas,.accesos{display:none!important;}
   body{padding-top:0!important;}
   .pagina,.pie{width:auto;margin:0;}
   .marco{display:block;}

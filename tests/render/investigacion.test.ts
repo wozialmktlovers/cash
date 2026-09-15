@@ -96,7 +96,17 @@ describe('interacción', () => {
   it('maneja pestañas con flechas, índice activo, apariciones e impresión', () => {
     for (const s of ['ArrowRight', 'IntersectionObserver', 'beforeprint', 'afterprint']) expect(SCRIPT_DOCUMENTO).toContain(s);
   });
-  it('inyecta la barra de operador cuando se pasa', () => {
-    expect(renderizarInvestigacion(completa as any, meta, '<div id="barra-op"></div>')).toContain('id="barra-op"');
+  it('con opciones de operador, la cabecera trae el botón Compartir; sin ellas, no', () => {
+    const operador = {
+      clienteId: 'c1', clienteNombre: 'Ana Villa', clienteSlug: 'ana-villa', documentoId: 'd1',
+      version: 1, tipo: 'research' as const, tokenActivo: null, base: 'https://x.test',
+    };
+    expect(renderizarInvestigacion(completa as any, meta, operador)).toContain('Compartir');
+    expect(renderizarInvestigacion(completa as any, meta)).not.toContain('Compartir');
+  });
+  it('no quedan restos de las barras viejas', () => {
+    const h = renderizarInvestigacion(completa as any, meta);
+    expect(h).not.toContain('id="barra-op"');
+    expect(h).not.toContain('class="doc-barra"');
   });
 });
