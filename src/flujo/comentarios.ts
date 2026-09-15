@@ -6,7 +6,7 @@
 // (`data-ancla`, ./editorial/flujo-cliente.ts): secciones (`seccion:<id>`),
 // tarjetas (la ruta del objeto) y temas (`tema:P2-S1-07`).
 
-import type { Rol } from './reglas';
+import type { Accion, Rol } from './reglas';
 
 export const ESTADOS_COMENTARIO = ['abierto', 'atendido', 'descartado'] as const;
 export type EstadoComentario = (typeof ESTADOS_COMENTARIO)[number];
@@ -64,6 +64,27 @@ export function esDeOtraVersion(
 ): boolean {
   if (!documentoVigente) return true;
   return !(comentario.documentoTipo === documentoVigente.tipo && comentario.documentoId === documentoVigente.id);
+}
+
+/**
+ * Cuántos de los comentarios abiertos (de primer nivel) de una etapa cuentan
+ * para decidir `accion` en `aplicarAccion` (fix menores M2, punto 2):
+ * - `pedir_cambios`: solo los del documento VIGENTE (spec §3, tabla de
+ *   transiciones: «al menos un comentario abierto en la versión vigente»).
+ *   Antes contaban también los que quedaron en un documento viejo, así que el
+ *   admin podía pedir cambios sin haber dejado ninguna observación sobre lo
+ *   que está revisando.
+ * - el resto (`solicitar` en particular): todos los de la etapa, de cualquier
+ *   documento — fix round 1: una observación pendiente sigue bloqueando
+ *   `solicitar` aunque el pipeline haya regenerado el documento.
+ */
+export function abiertosQueCuentan(
+  accion: Accion,
+  abiertos: { documentoTipo: string; documentoId: string }[],
+  documentoVigente: { tipo: string; id: string } | null,
+): number {
+  if (accion !== 'pedir_cambios') return abiertos.length;
+  return abiertos.filter((c) => !esDeOtraVersion(c, documentoVigente)).length;
 }
 
 export type ComentarioVisibilidad = { id: string; autorId: string | null; respuestaDe: string | null };

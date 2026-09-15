@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validarComentario, puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion } from '@/flujo/comentarios';
+import { validarComentario, puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, abiertosQueCuentan } from '@/flujo/comentarios';
 
 describe('validarComentario', () => {
   it('acepta un texto y un ancla válidos', () => {
@@ -146,5 +146,32 @@ describe('esDeOtraVersion', () => {
 
   it('distingue por tipo de documento, no solo por id', () => {
     expect(esDeOtraVersion({ documentoTipo: 'growth', documentoId: 'x' }, { tipo: 'research', id: 'x' })).toBe(true);
+  });
+});
+
+describe('abiertosQueCuentan (M2 punto 2: qué comentarios abiertos mira cada acción)', () => {
+  const vigente = { tipo: 'growth', id: 'doc-nuevo' };
+  const abiertos = [
+    { documentoTipo: 'growth', documentoId: 'doc-nuevo' },
+    { documentoTipo: 'growth', documentoId: 'doc-viejo' },
+    { documentoTipo: 'growth', documentoId: 'doc-viejo' },
+  ];
+
+  it('pedir_cambios cuenta solo los del documento vigente de la etapa', () => {
+    expect(abiertosQueCuentan('pedir_cambios', abiertos, vigente)).toBe(1);
+  });
+
+  it('pedir_cambios con observaciones solo en una versión vieja no cuenta ninguna', () => {
+    expect(abiertosQueCuentan('pedir_cambios', abiertos.slice(1), vigente)).toBe(0);
+  });
+
+  it('pedir_cambios sin documento vigente no cuenta ninguna', () => {
+    expect(abiertosQueCuentan('pedir_cambios', abiertos, null)).toBe(0);
+  });
+
+  it('solicitar (y el resto) cuentan todos los abiertos de la etapa, de cualquier documento', () => {
+    expect(abiertosQueCuentan('solicitar', abiertos, vigente)).toBe(3);
+    expect(abiertosQueCuentan('solicitar', abiertos, null)).toBe(3);
+    expect(abiertosQueCuentan('aprobar', abiertos, vigente)).toBe(3);
   });
 });

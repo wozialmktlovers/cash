@@ -13,7 +13,7 @@ import {
   tipoDocumentoDe, etapaDeTipo, puedeComentar, puedeCompartir,
   type Etapa, type Accion, type EtapaCliente, type TipoDocumento, type Rol,
 } from './reglas';
-import { puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, type EstadoComentario } from './comentarios';
+import { puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, abiertosQueCuentan, type EstadoComentario } from './comentarios';
 import { investigacionUtil } from '@/lib/precheck';
 import { clienteOperable, clienteVisible, esUuid } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
@@ -43,6 +43,11 @@ type FilaEtapa = typeof clienteEtapas.$inferSelect;
 
 /** Se lanza cuando la actualización condicional pierde la carrera contra otra petición; nunca sale de este módulo. */
 class CambioConcurrenteError extends Error {}
+
+/** Se lanza dentro de la transacción cuando `aplicarAccion` niega la acción con los datos ya bloqueados; sale como 409 con su razón. */
+class AccionRechazadaError extends Error {
+  constructor(readonly razon: string) { super(razon); }
+}
 
 function paraReglas(f: FilaEtapa): EtapaCliente {
   return { id: f.id, etapa: f.etapa, contratada: f.contratada, interna: f.interna, estado: f.estado, documentoId: f.documentoId };
@@ -347,9 +352,20 @@ export async function comentariosAbiertosPorEtapa(filas: { id: string }[], ejecu
   return resultado;
 }
 
-/** Comentarios abiertos de una sola etapa, en cualquier documento (0 si no hay ninguno). */
-async function comentariosAbiertosVigentes(ejecutor: Ejecutor, fila: FilaEtapa): Promise<number> {
-  return (await comentariosAbiertosPorEtapa([fila], ejecutor)).get(fila.id) ?? 0;
+/**
+ * Comentarios abiertos de primer nivel de una etapa que cuentan para
+ * `accion` (`abiertosQueCuentan`, fix menores M2 punto 2): para
+ * `pedir_cambios` solo los del documento vigente; para el resto, los de
+ * cualquier documento de la etapa. Se lee con el `ejecutor` de quien llama
+ * para que el conteo ocurra dentro de su transacción.
+ */
+async function comentariosAbiertosParaAccion(ejecutor: Ejecutor, fila: FilaEtapa, accion: Accion): Promise<number> {
+  const abiertos = await ejecutor
+    .select({ documentoTipo: comentarios.documentoTipo, documentoId: comentarios.documentoId })
+    .from(comentarios)
+    .where(and(eq(comentarios.etapaId, fila.id), eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe)));
+  const vigente = fila.documentoTipo && fila.documentoId ? { tipo: fila.documentoTipo, id: fila.documentoId } : null;
+  return abiertosQueCuentan(accion, abiertos, vigente);
 }
 
 export type ResultadoTransicion =
@@ -403,20 +419,8 @@ export async function ejecutarTransicion(o: {
     dependencias = dependenciasCumplidas(fila.etapa, etapasCliente.map(paraReglas), hayInvestigacionConDatos);
   }
 
-  const comentariosAbiertos = await comentariosAbiertosVigentes(db, fila);
   const comentarioGeneral = (comentario ?? '').trim();
   const esOperadorAsignado = cliente.operadorId === usuario.id;
-
-  const r = aplicarAccion({
-    etapa: paraReglas(fila),
-    accion,
-    rol: usuario.rol,
-    esOperadorAsignado,
-    comentariosAbiertos,
-    comentarioGeneral,
-    dependencias,
-  });
-  if (!r.ok) return { ok: false, status: 409, razon: r.razon };
 
   // La condición del UPDATE también fija `documento_id` al leído: sin esto,
   // un `generado` que llega entre la lectura y el UPDATE (el operador pide
@@ -429,6 +433,35 @@ export async function ejecutarTransicion(o: {
 
   try {
     const actualizada = await db.transaction(async (tx) => {
+      // Fix menores M2, punto 2: la fila se bloquea (`FOR UPDATE`) y los
+      // comentarios abiertos se cuentan DENTRO de esta transacción, justo
+      // antes del UPDATE. Antes el conteo iba suelto, antes de abrirla: un
+      // comentario creado entre ese conteo y el UPDATE dejaba `solicitar`
+      // pasar a revisión con una observación pendiente. Con la fila bloqueada,
+      // una transición concurrente sobre la misma etapa espera a que esta
+      // cierre, y si el estado o el documento ya no son los leídos, 409.
+      // Tampoco se cuela un comentario nuevo: su INSERT toma `FOR KEY SHARE`
+      // sobre esta misma fila (la FK `comentarios.etapa_id`), que choca con
+      // `FOR UPDATE` — o espera a que esta transacción cierre, o esta espera
+      // a que el comentario se confirme y el conteo de abajo ya lo ve.
+      const [bloqueada] = await tx.select().from(clienteEtapas)
+        .where(eq(clienteEtapas.id, fila.id)).for('update').limit(1);
+      if (!bloqueada || bloqueada.estado !== fila.estado || bloqueada.documentoId !== fila.documentoId) {
+        throw new CambioConcurrenteError();
+      }
+
+      const comentariosAbiertos = await comentariosAbiertosParaAccion(tx, bloqueada, accion);
+      const r = aplicarAccion({
+        etapa: paraReglas(bloqueada),
+        accion,
+        rol: usuario.rol,
+        esOperadorAsignado,
+        comentariosAbiertos,
+        comentarioGeneral,
+        dependencias,
+      });
+      if (!r.ok) throw new AccionRechazadaError(r.razon);
+
       const [fresca] = await tx
         .update(clienteEtapas)
         .set({ estado: r.nuevo, actualizadoEn: new Date() })
@@ -480,6 +513,7 @@ export async function ejecutarTransicion(o: {
     return { ok: true, etapa: actualizada };
   } catch (e) {
     if (e instanceof CambioConcurrenteError) return { ok: false, status: 409, razon: 'La etapa cambió mientras tanto, recarga' };
+    if (e instanceof AccionRechazadaError) return { ok: false, status: 409, razon: e.razon };
     throw e;
   }
 }
