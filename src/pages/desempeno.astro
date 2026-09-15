@@ -6,7 +6,7 @@ import { db, clients, clienteEtapas, etapaEventos, comentarios, researchJobs, us
 import { condicionClientes, esUuid } from '@/lib/visibilidad';
 import { ETAPAS, NOMBRE_ETAPA, PESOS, type Etapa, type Estado } from '@/flujo/reglas';
 import {
-  periodo, resumenEstadistico, tiemposPorEtapa, calidad, carga, costo,
+  periodo, filtrarPeriodo, resumenEstadistico, tiemposPorEtapa, calidad, carga, costo,
   type Evento, type ComentarioM, type JobM, type EtapaM, type Periodo,
 } from '@/lib/desempeno';
 import { graficaBarras, type FilaGrafica } from '@/render/investigacion/graficas';
@@ -103,13 +103,30 @@ const jobs: JobM[] = jobsFilas.map((j) => {
 });
 
 // ── Métricas (funciones puras de src/lib/desempeno.ts) ──────────────────
-// tiemposPorEtapa y calidad no reciben periodo (ver su firma en D1): reflejan
-// todo el historial de los clientes en alcance. Solo `carga` (aprobadas en
-// el periodo) y `costo` (del periodo) respetan el filtro de periodo.
+// tiemposPorEtapa y calidad no reciben periodo (ver su firma en D1: no
+// toman un Periodo), así que el recorte se hace aquí, en la página, sin
+// tocar ese módulo. Con periodo !== 'todo' se calculan solo sobre las
+// etapas "cerradas" en el periodo (con un evento 'aprobar' dentro del
+// rango), pasando el historial completo de esas etapas — así duracion,
+// esperaRevision y respuestaCambios siguen emparejando eventos de la misma
+// etapaId como espera tiemposPorEtapa, en vez de cortar por fecha de cada
+// evento suelto. Con 'todo' no hace falta filtrar: ya es todo el historial.
+function enPeriodoCerrado(eventosSubset: Evento[], comentariosSubset: ComentarioM[]): { eventos: Evento[]; comentarios: ComentarioM[] } {
+  if (claveActiva === 'todo') return { eventos: eventosSubset, comentarios: comentariosSubset };
+  const etapaIdsCerradas = new Set(
+    filtrarPeriodo(eventosSubset.filter((e) => e.accion === 'aprobar'), periodoActual).map((e) => e.etapaId),
+  );
+  return {
+    eventos: eventosSubset.filter((e) => etapaIdsCerradas.has(e.etapaId)),
+    comentarios: comentariosSubset.filter((c) => etapaIdsCerradas.has(c.etapaId)),
+  };
+}
+
 const cargaRes = carga(etapas, eventos, periodoActual);
 const costoRes = costo(jobs, operadorDeCliente, periodoActual);
-const tiemposRes = tiemposPorEtapa(eventos);
-const calidadRes = calidad(eventos, comentariosM);
+const { eventos: eventosCerrados, comentarios: comentariosCerrados } = enPeriodoCerrado(eventos, comentariosM);
+const tiemposRes = tiemposPorEtapa(eventosCerrados);
+const calidadRes = calidad(eventosCerrados, comentariosCerrados);
 
 const diasAprobarProm = resumenEstadistico(Object.values(tiemposRes.duracion).flat()).promedio;
 const esperaRevisionProm = resumenEstadistico(tiemposRes.esperaRevision).promedio;
@@ -157,9 +174,14 @@ const filasPorOperador = [...grupos.values()]
     const eventosG = eventos.filter((e) => g.clientIds.has(e.clientId));
     const comentariosG = comentariosM.filter((c) => g.clientIds.has(clientIdDeEtapaId.get(c.etapaId) ?? ''));
     const cargaG = carga(etapasG, eventosG, periodoActual);
-    const diasG = resumenEstadistico(Object.values(tiemposPorEtapa(eventosG).duracion).flat()).promedio;
-    const rondasG = resumenEstadistico(calidad(eventosG, comentariosG).rondasPorEtapaAprobada).promedio;
-    return { nombre: g.nombre, ...cargaG, dias: diasG, rondas: rondasG, costo: costoRes.porOperador.get(g.clave) ?? 0 };
+    const { eventos: eventosGCerrados, comentarios: comentariosGCerrados } = enPeriodoCerrado(eventosG, comentariosG);
+    const diasG = resumenEstadistico(Object.values(tiemposPorEtapa(eventosGCerrados).duracion).flat()).promedio;
+    const rondasG = resumenEstadistico(calidad(eventosGCerrados, comentariosGCerrados).rondasPorEtapaAprobada).promedio;
+    // clientes: el tamaño real del grupo, no el conteo de carga() (distinto de
+    // los clientId presentes en etapasG; deberían coincidir siempre que cada
+    // cliente tenga sus 4 filas de cliente_etapas, pero g.clientIds.size es la
+    // fuente de verdad — es la misma lista que arma la fila de cada operador).
+    return { nombre: g.nombre, ...cargaG, clientes: g.clientIds.size, dias: diasG, rondas: rondasG, costo: costoRes.porOperador.get(g.clave) ?? 0 };
   })
   .sort((a, b) => (a.nombre === 'Sin asignar' ? 1 : b.nombre === 'Sin asignar' ? -1 : a.nombre.localeCompare(b.nombre, 'es')));
 
@@ -217,13 +239,20 @@ const pct = (n: number) => `${Math.round(n)}%`;
   </nav>
 
   {esAdmin && operadoresSelect.length > 0 && (
-    <form method="GET" class="campo" style="max-width:280px;margin-bottom:22px">
-      <label for="operador-filtro">Operador</label>
-      <input type="hidden" name="periodo" value={claveActiva} />
-      <select id="operador-filtro" name="operador">
-        <option value="">Todos</option>
-        {operadoresSelect.map((o) => <option value={o.id} selected={o.id === operadorFiltro}>{o.nombre ?? o.email}</option>)}
-      </select>
+    <form method="GET" id="operador-form" class="campo" style="max-width:280px;margin-bottom:22px;display:flex;flex-direction:row;align-items:flex-end;gap:10px">
+      <div style="flex:1;min-width:0">
+        <label for="operador-filtro">Operador</label>
+        <input type="hidden" name="periodo" value={claveActiva} />
+        <select id="operador-filtro" name="operador">
+          <option value="">Todos</option>
+          {operadoresSelect.map((o) => <option value={o.id} selected={o.id === operadorFiltro}>{o.nombre ?? o.email}</option>)}
+        </select>
+      </div>
+      {/* El cambio de select se manda solo por JS (abajo); este botón es el
+         camino sin JS — visible siempre, no solo en <noscript>, porque no
+         estorba y cubre también a quien prefiera no depender del cambio
+         automático. */}
+      <button type="submit" class="btn fantasma chico">Aplicar</button>
     </form>
   )}
 
@@ -236,7 +265,7 @@ const pct = (n: number) => `${Math.round(n)}%`;
   ) : (
     <>
       <section class="indicadores" aria-label="Carga y avance">
-        <div class="indicador rosa"><Icono nombre="clientes" /><span class="valor cifra">{cargaRes.clientes}</span><span class="nombre">Clientes</span></div>
+        <div class="indicador rosa"><Icono nombre="clientes" /><span class="valor cifra">{lista.length}</span><span class="nombre">Clientes</span></div>
         <div class="indicador azul"><Icono nombre="reloj" /><span class="valor cifra">{cargaRes.etapasActivas}</span><span class="nombre">Etapas activas</span></div>
         <div class="indicador verde"><Icono nombre="grafica" /><span class="valor cifra">{pct(cargaRes.avancePromedio)}</span><span class="nombre">Avance promedio</span></div>
         <div class="indicador amarillo"><Icono nombre="check" /><span class="valor cifra">{cargaRes.aprobadasEnPeriodo}</span><span class="nombre">Aprobadas en el periodo</span></div>
@@ -248,7 +277,7 @@ const pct = (n: number) => `${Math.round(n)}%`;
         <div class="indicador amarillo"><Icono nombre="alerta" /><span class="valor cifra">{rondasProm === null ? '—' : rondasProm.toFixed(1)}</span><span class="nombre">Rondas de cambios promedio</span></div>
         <div class="indicador verde"><Icono nombre="dinero" /><span class="valor cifra">{dinero(costoRes.total)}</span><span class="nombre">Costo del periodo</span></div>
       </section>
-      <p class="secundario" style="margin-top:10px">Los tiempos y las rondas consideran todo el historial de los clientes visibles; el costo, solo el periodo elegido.</p>
+      <p class="secundario" style="margin-top:10px">Tiempos y rondas de las etapas aprobadas en el periodo.</p>
 
       <section class="seccion">
         <h2>Barras</h2>
@@ -316,6 +345,13 @@ const pct = (n: number) => `${Math.round(n)}%`;
     </>
   )}
 </Base>
+
+<script>
+  // Mismo patrón que src/pages/clientes/index.astro: el <select> manda el
+  // formulario solo con JS; sin JS queda el botón «Aplicar» del formulario.
+  const operadorFiltro = document.getElementById('operador-filtro') as HTMLSelectElement | null;
+  operadorFiltro?.addEventListener('change', () => operadorFiltro.form?.submit());
+</script>
 
 <style>
   /* Estado activo de los chips de periodo (son enlaces, no botones: cada

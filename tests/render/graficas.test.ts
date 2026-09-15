@@ -47,6 +47,19 @@ describe('gráficas', () => {
     expect(html).toContain('$36,792');
   });
 
+  it('acepta un formato propio (D2: días en vez de dinero) sin perder el valor por omisión', () => {
+    const filasDias = [
+      { nombre: 'Investigación', min: 4.2, max: 4.2, destacada: false },
+      { nombre: 'Pilares', min: 2.5, max: 2.5, destacada: false },
+    ];
+    const html = graficaBarras(filasDias, 'Días', (n) => `${n.toFixed(1)} días`);
+    expect(html).toContain('4.2 días');
+    expect(html).toContain('2.5 días');
+    expect(html).not.toContain('$');
+    // Sin el tercer parámetro, sigue formateando en pesos como antes.
+    expect(graficaBarras(filas, 'Precio')).toContain('$36,792');
+  });
+
   it('no dibuja con menos de dos filas', () => {
     expect(graficaBarras(filas.slice(0, 1), 'x')).toBe('');
     expect(graficaRangos([], 'x')).toBe('');
