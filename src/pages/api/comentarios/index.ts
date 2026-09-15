@@ -35,7 +35,9 @@ const cuerpoSchema = z.object({
  * anclado (spec §3). El documento y la versión salen de la etapa: vigente
  * para el personal, aprobada para el cliente — nunca los elige quien llama.
  * Sin permiso, 404; una etapa sin documento (personal) o sin versión
- * aprobada (cliente), 409 con la razón en español.
+ * aprobada (cliente), 409 con la razón en español. Un usuario cliente que
+ * pasó su límite de observaciones (20 por hora, 100 por día), 429 con un
+ * mensaje que el portal muestra tal cual.
  */
 export const POST: APIRoute = async ({ request, locals }) => {
   let crudo: unknown;

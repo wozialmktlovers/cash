@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validarComentario, puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, abiertosQueCuentan } from '@/flujo/comentarios';
+import { validarComentario, puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, abiertosQueCuentan, limiteObservacionesCliente, LIMITE_OBSERVACIONES_HORA, LIMITE_OBSERVACIONES_DIA } from '@/flujo/comentarios';
 
 describe('validarComentario', () => {
   it('acepta un texto y un ancla válidos', () => {
@@ -173,5 +173,41 @@ describe('abiertosQueCuentan (M2 punto 2: qué comentarios abiertos mira cada ac
     expect(abiertosQueCuentan('solicitar', abiertos, vigente)).toBe(3);
     expect(abiertosQueCuentan('solicitar', abiertos, null)).toBe(3);
     expect(abiertosQueCuentan('aprobar', abiertos, vigente)).toBe(3);
+  });
+});
+
+describe('limiteObservacionesCliente (M2 punto 3: 20 por hora, 100 por día)', () => {
+  it('los topes son los del ruling', () => {
+    expect(LIMITE_OBSERVACIONES_HORA).toBe(20);
+    expect(LIMITE_OBSERVACIONES_DIA).toBe(100);
+  });
+
+  it('por debajo de ambos topes deja pasar', () => {
+    expect(limiteObservacionesCliente({ enUltimaHora: 0, enUltimoDia: 0 })).toEqual({ ok: true });
+    expect(limiteObservacionesCliente({ enUltimaHora: 19, enUltimoDia: 99 })).toEqual({ ok: true });
+  });
+
+  it('con 20 en la última hora niega, con un mensaje claro que habla de la hora', () => {
+    const r = limiteObservacionesCliente({ enUltimaHora: 20, enUltimoDia: 20 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.razon).toContain('20');
+      expect(r.razon).toContain('hora');
+    }
+  });
+
+  it('con 100 en el último día niega aunque la última hora esté libre, y el mensaje habla del día', () => {
+    const r = limiteObservacionesCliente({ enUltimaHora: 0, enUltimoDia: 100 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.razon).toContain('100');
+      expect(r.razon).toContain('día');
+    }
+  });
+
+  it('si se pasan los dos, manda el del día (esperar una hora no alcanza)', () => {
+    const r = limiteObservacionesCliente({ enUltimaHora: 25, enUltimoDia: 100 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.razon).toContain('100');
   });
 });

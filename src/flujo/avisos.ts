@@ -18,6 +18,7 @@ export type EventoAviso =
   | 'aprobada'
   | 'comentario_cliente'
   | 'respuesta_cliente'
+  | 'cliente_respondio'
   | 'cliente_reasignado'
   | 'entregable_generado'
   | 'job_fallido';
@@ -57,6 +58,12 @@ function candidatosDe(evento: EventoAviso, ctx: ContextoDestinatarios): (Usuario
       // comentario padre): se pasa en `ctx.usuariosCliente` con esa única
       // entrada, igual que `aprobada` reutiliza el mismo campo.
       return ctx.usuariosCliente;
+    case 'cliente_respondio':
+      // Fix menores M2, punto 3: cuando el cliente responde en su hilo, se
+      // entera el operador asignado (es quien le contesta). Sin operador, o
+      // con uno desactivado, la respuesta no debe quedar sin que nadie la
+      // vea: cae a los admins.
+      return ctx.operador && ctx.operador.activo ? [ctx.operador] : ctx.admins;
     case 'entregable_generado':
     case 'job_fallido':
       return [ctx.autor];
@@ -142,6 +149,13 @@ export function textoAviso(evento: EventoAviso, datos: DatosAviso): { titulo: st
       return {
         titulo: `Nueva respuesta en ${etapa}`,
         texto: `El equipo de Wozial respondió tu observación en ${etapa}.`,
+      };
+    case 'cliente_respondio':
+      // Solo el nombre del negocio: el aviso va al equipo, y no hace falta
+      // (ni conviene) repetir quién del equipo abrió la conversación.
+      return {
+        titulo: `${cliente} respondió en ${etapa}`,
+        texto: `${cliente} respondió en un hilo de observaciones de ${etapa}. Revísalo cuando puedas.`,
       };
     case 'cliente_reasignado':
       return {
@@ -326,5 +340,25 @@ export async function avisarRespuestaCliente(o: {
       actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa },
     },
     '/portal',
+  );
+}
+
+/**
+ * Aviso de una respuesta DEL CLIENTE dentro de su propio hilo (fix menores
+ * M2, punto 3): antes solo se avisaba en la otra dirección (equipo →
+ * cliente) y la respuesta del cliente quedaba sin que nadie se enterara. Va
+ * al operador asignado (o a los admins si no hay uno activo). Nada de esto
+ * llega al cliente, así que no hay identidades del equipo que ocultar; el
+ * enlace es la ficha interna del cliente.
+ */
+export async function avisarRespuestaDelCliente(o: {
+  actorId: string; operadorId: string | null; cliente: string; etapa: string; enlace: string;
+}): Promise<void> {
+  const operador = await usuarioPorId(o.operadorId);
+  const admins = operador && operador.activo ? [] : await adminsActivos();
+  await notificar(
+    'cliente_respondio',
+    { admins, operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false, actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa } },
+    o.enlace,
   );
 }

@@ -106,6 +106,27 @@ describe('destinatarios', () => {
   });
 });
 
+describe('destinatarios: cliente_respondio (M2 punto 3)', () => {
+  it('va al operador asignado, no a los admins ni al cliente', () => {
+    const operador = u('op1');
+    const r = destinatarios('cliente_respondio', {
+      ...CTX_VACIO, operador, admins: [u('a1', { rol: 'admin' })], usuariosCliente: [u('c1', { rol: 'cliente' })], actorId: 'c1',
+    });
+    expect(r).toEqual([operador]);
+  });
+
+  it('sin operador asignado (o inactivo) cae a los admins, para que la respuesta no se pierda', () => {
+    const admin = u('a1', { rol: 'admin' });
+    expect(destinatarios('cliente_respondio', { ...CTX_VACIO, operador: null, admins: [admin] })).toEqual([admin]);
+    expect(destinatarios('cliente_respondio', { ...CTX_VACIO, operador: u('op1', { activo: false }), admins: [admin] })).toEqual([admin]);
+  });
+
+  it('nunca avisa a quien respondió', () => {
+    const r = destinatarios('cliente_respondio', { ...CTX_VACIO, operador: u('c1', { rol: 'cliente' }), actorId: 'c1' });
+    expect(r).toEqual([]);
+  });
+});
+
 describe('textoAviso', () => {
   const datos = { cliente: 'Ana Villa', etapa: 'Mapa de pilares', autor: 'María' };
 
@@ -139,7 +160,7 @@ describe('textoAviso', () => {
   });
 
   it('cada evento produce título y texto no vacíos', () => {
-    const eventos = ['solicitud', 'cambios_pedidos', 'reabierta', 'aprobada', 'comentario_cliente', 'respuesta_cliente', 'cliente_reasignado', 'entregable_generado', 'job_fallido'] as const;
+    const eventos = ['solicitud', 'cambios_pedidos', 'reabierta', 'aprobada', 'comentario_cliente', 'respuesta_cliente', 'cliente_respondio', 'cliente_reasignado', 'entregable_generado', 'job_fallido'] as const;
     for (const evento of eventos) {
       const { titulo, texto } = textoAviso(evento, datos);
       expect(titulo.length).toBeGreaterThan(0);
@@ -204,5 +225,15 @@ describe('datosParaDestinatario', () => {
     const operador = u('op1', { rol: 'operador' });
     const { texto } = textoAviso('aprobada', datosParaDestinatario(operador, datosConAutor));
     expect(texto).toContain('María');
+  });
+});
+
+describe('textoAviso: cliente_respondio (M2 punto 3)', () => {
+  it('dice qué cliente respondió y en qué etapa, sin nombres del equipo', () => {
+    const { titulo, texto } = textoAviso('cliente_respondio', { cliente: 'Ana Villa', etapa: 'Manual de campaña', autor: 'María' });
+    expect(titulo).toContain('Ana Villa');
+    expect(titulo).toContain('Manual de campaña');
+    expect(texto).toContain('respondió');
+    expect(`${titulo} ${texto}`).not.toContain('María');
   });
 });

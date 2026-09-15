@@ -87,6 +87,36 @@ export function abiertosQueCuentan(
   return abiertos.filter((c) => !esDeOtraVersion(c, documentoVigente)).length;
 }
 
+/** Tope de observaciones (comentarios y respuestas) de un usuario cliente en la última hora (ruling M2). */
+export const LIMITE_OBSERVACIONES_HORA = 20;
+/** Tope de observaciones de un usuario cliente en las últimas 24 horas (ruling M2). */
+export const LIMITE_OBSERVACIONES_DIA = 100;
+
+/**
+ * Límite de observaciones por usuario cliente (fix menores M2, punto 3): sin
+ * él, una cuenta de cliente (o una sesión robada) podía llenar de
+ * comentarios la etapa y de avisos/correos al operador y a los admins. Las
+ * ventanas son móviles (última hora, últimas 24 h), contadas por quien llama
+ * con una consulta a `comentarios`. Si se pasan los dos topes, el mensaje es
+ * el del día: esperar una hora no alcanzaría. El texto lo ve el cliente tal
+ * cual en el portal (la ruta responde 429 con esta razón).
+ */
+export function limiteObservacionesCliente(o: { enUltimaHora: number; enUltimoDia: number }): { ok: true } | { ok: false; razon: string } {
+  if (o.enUltimoDia >= LIMITE_OBSERVACIONES_DIA) {
+    return {
+      ok: false,
+      razon: `Llegaste al máximo de ${LIMITE_OBSERVACIONES_DIA} observaciones por día. Podrás dejar más mañana; si es urgente, escríbele a tu equipo de Wozial.`,
+    };
+  }
+  if (o.enUltimaHora >= LIMITE_OBSERVACIONES_HORA) {
+    return {
+      ok: false,
+      razon: `Llegaste al máximo de ${LIMITE_OBSERVACIONES_HORA} observaciones por hora. Espera un rato y vuelve a intentarlo.`,
+    };
+  }
+  return { ok: true };
+}
+
 export type ComentarioVisibilidad = { id: string; autorId: string | null; respuestaDe: string | null };
 
 /**

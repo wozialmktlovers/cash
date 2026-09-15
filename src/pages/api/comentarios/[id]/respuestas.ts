@@ -14,7 +14,8 @@ const cuerpoSchema = z.object({
  * `POST /api/comentarios/[id]/respuestas` `{ texto }`: responde a un
  * comentario de primer nivel (spec §3, «Responder»). El cliente solo
  * responde en sus propios hilos; el personal, en cualquiera que pueda ver.
- * Una respuesta a una respuesta, o sin permiso, 404/409 (ver `servicio.ts`).
+ * Una respuesta a una respuesta, o sin permiso, 404/409 (ver `servicio.ts`);
+ * un cliente por encima de su límite de observaciones, 429.
  */
 export const POST: APIRoute = async ({ params, request, locals }) => {
   const id = params.id!;

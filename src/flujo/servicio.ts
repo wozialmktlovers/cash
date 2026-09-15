@@ -13,11 +13,11 @@ import {
   tipoDocumentoDe, etapaDeTipo, puedeComentar, puedeCompartir,
   type Etapa, type Accion, type EtapaCliente, type TipoDocumento, type Rol,
 } from './reglas';
-import { puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, abiertosQueCuentan, type EstadoComentario } from './comentarios';
+import { puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, abiertosQueCuentan, limiteObservacionesCliente, type EstadoComentario } from './comentarios';
 import { investigacionUtil } from '@/lib/precheck';
 import { clienteOperable, clienteVisible, esUuid } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
-import { avisarJob, avisarTransicion, avisarComentarioCliente, avisarRespuestaCliente, type EventoAviso } from './avisos';
+import { avisarJob, avisarTransicion, avisarComentarioCliente, avisarRespuestaCliente, avisarRespuestaDelCliente, type EventoAviso } from './avisos';
 
 /** Ruta interna para ver el documento vigente de una etapa (spec §3, Avisos: «enlace»). Exportada: la ficha (B5) la usa para el botón «Ver documento». */
 export function enlaceDocumento(tipo: TipoDocumento, documentoId: string): string {
@@ -531,7 +531,32 @@ type FilaComentario = typeof comentarios.$inferSelect;
 
 export type ResultadoComentario =
   | { ok: true; comentario: FilaComentario }
-  | { ok: false; status: 404 | 409; razon: string };
+  | { ok: false; status: 404 | 409 | 429; razon: string };
+
+/**
+ * Observaciones (comentarios y respuestas) que `usuarioId` escribió en la
+ * última hora y en las últimas 24 horas, en una sola consulta a
+ * `comentarios` (fix menores M2, punto 3: no hace falta tabla aparte).
+ * Cuenta también las respuestas: si no, el límite se esquivaba respondiendo
+ * en el propio hilo. El conteo no bloquea nada: dos envíos simultáneos
+ * justo en el tope pueden pasar ambos, un exceso de uno que no vale un candado.
+ */
+async function observacionesRecientes(usuarioId: string): Promise<{ enUltimaHora: number; enUltimoDia: number }> {
+  const [fila] = await db
+    .select({
+      enUltimaHora: sql<number>`count(*) filter (where ${comentarios.creadoEn} > now() - interval '1 hour')::int`,
+      enUltimoDia: sql<number>`count(*)::int`,
+    })
+    .from(comentarios)
+    .where(and(eq(comentarios.autorId, usuarioId), sql`${comentarios.creadoEn} > now() - interval '24 hours'`));
+  return { enUltimaHora: fila?.enUltimaHora ?? 0, enUltimoDia: fila?.enUltimoDia ?? 0 };
+}
+
+/** `limiteObservacionesCliente` con el conteo de la base: `null` si puede escribir, o el 429 con la razón. */
+async function rechazoPorLimite(usuarioId: string): Promise<{ ok: false; status: 429; razon: string } | null> {
+  const limite = limiteObservacionesCliente(await observacionesRecientes(usuarioId));
+  return limite.ok ? null : { ok: false, status: 429, razon: limite.razon };
+}
 
 const RAZON_ETAPA_INEXISTENTE = 'La etapa no existe';
 const RAZON_COMENTARIO_INEXISTENTE = 'El comentario no existe';
@@ -604,6 +629,11 @@ export async function crearComentarioCliente(o: {
   const [clienteFila] = await db.select({ nombre: clients.nombre, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, fila.clientId)).limit(1);
   if (!clienteFila) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
 
+  // El límite va después de las comprobaciones de visibilidad (una etapa
+  // ajena sigue siendo 404, nunca 429) y antes de escribir nada.
+  const limite = await rechazoPorLimite(usuario.id);
+  if (limite) return limite;
+
   try {
     let creado!: FilaComentario;
     let nuevoEstado = fila.estado;
@@ -649,7 +679,9 @@ export async function crearComentarioCliente(o: {
  * cliente solo responde en sus propios hilos; el personal, en cualquiera que
  * pueda ver. Nunca a una respuesta (un solo nivel de anidado). Si quien
  * responde no es el cliente y el hilo lo abrió un cliente, avisa a su autor
- * (evento `respuesta_cliente`, spec §4 «Actividad reciente»).
+ * (evento `respuesta_cliente`, spec §4 «Actividad reciente»). Si quien
+ * responde es el cliente, avisa al operador (`cliente_respondio`, M2 punto 3)
+ * y respeta el límite de observaciones (429).
  */
 export async function responderComentario(o: {
   comentarioId: string; usuario: UsuarioSesion; texto: string;
@@ -678,6 +710,12 @@ export async function responderComentario(o: {
 
   if (padre.respuestaDe !== null) return { ok: false, status: 409, razon: 'Solo se puede responder a un comentario principal' };
 
+  // Mismo límite que las observaciones nuevas (M2 punto 3): solo al cliente.
+  if (usuario.rol === 'cliente') {
+    const limite = await rechazoPorLimite(usuario.id);
+    if (limite) return limite;
+  }
+
   const [creado] = await db.insert(comentarios).values({
     etapaId: padre.etapaId, documentoTipo: padre.documentoTipo, documentoId: padre.documentoId, versionNumero: padre.versionNumero,
     ancla: padre.ancla, texto: o.texto, autorId: usuario.id, autorRol: usuario.rol, respuestaDe: padre.id,
@@ -691,6 +729,20 @@ export async function responderComentario(o: {
       cliente: clienteFila?.nombre ?? 'Cliente',
       etapa: NOMBRE_ETAPA[etapaFila.etapa],
     }).catch((e) => console.error('[avisos] respuesta_cliente:', e));
+  }
+
+  // Fix menores M2, punto 3: la respuesta del cliente en su hilo avisa al
+  // operador del cliente (o a los admins, ver `avisarRespuestaDelCliente`).
+  // Al cliente no le llega nada de esto ni se le devuelve quién recibe el aviso.
+  if (usuario.rol === 'cliente') {
+    const [clienteFila] = await db.select({ nombre: clients.nombre, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, etapaFila.clientId)).limit(1);
+    void avisarRespuestaDelCliente({
+      actorId: usuario.id,
+      operadorId: clienteFila?.operadorId ?? null,
+      cliente: clienteFila?.nombre ?? 'Cliente',
+      etapa: NOMBRE_ETAPA[etapaFila.etapa],
+      enlace: `/clientes/${etapaFila.clientId}`,
+    }).catch((e) => console.error('[avisos] cliente_respondio:', e));
   }
 
   return { ok: true, comentario: creado };
