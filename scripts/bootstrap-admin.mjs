@@ -23,8 +23,9 @@ export async function bootstrapAdmin() {
   const sql = postgres(process.env.DATABASE_URL, { max: 1 });
   try {
     const h = await hash(password, { memoryCost: 19456, timeCost: 2, parallelism: 1 });
-    await sql`INSERT INTO users (email, password_hash) VALUES (${email}, ${h})
-              ON CONFLICT (email) DO UPDATE SET password_hash = ${h}`;
+    // Siempre admin y activo: con los roles, un usuario nuevo nace operador.
+    await sql`INSERT INTO users (email, password_hash, rol, activo) VALUES (${email}, ${h}, 'admin', true)
+              ON CONFLICT (email) DO UPDATE SET password_hash = ${h}, rol = 'admin', activo = true`;
     console.log(`[admin] usuario listo: ${email} — borra ADMIN_EMAIL y ADMIN_PASSWORD de las variables`);
   } catch (e) {
     console.error('[admin] no se pudo crear el usuario:', e instanceof Error ? e.message : e);
