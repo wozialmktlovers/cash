@@ -1,0 +1,24 @@
+---
+import { iniciales, tinte } from '@/lib/ui/cliente-visual';
+import { normalizar } from '@/lib/ui/buscar';
+import { ETIQUETA_CLIENTE, type ResumenCliente } from '@/lib/ui/estado-cliente';
+
+interface Props {
+  cliente: { id: string; nombre: string; giro: string; ciudad: string | null };
+  resumen: ResumenCliente;
+}
+const { cliente: c, resumen: r } = Astro.props;
+const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+---
+<a href={`/clientes/${c.id}`} class="tarjeta cliente-tarjeta"
+  data-estado={r.estado} data-busqueda={normalizar(`${c.nombre} ${c.giro} ${c.ciudad ?? ''}`)}>
+  <span class={`avatar ${tinte(c.id)}`}>{iniciales(c.nombre)}</span>
+  <div class="cuerpo">
+    <h3>{c.nombre}</h3>
+    <p class="secundario">{c.giro}{c.ciudad ? ` · ${c.ciudad}` : ''}</p>
+    <div class="pie">
+      <span class={`punto ${r.estado}`}>{ETIQUETA_CLIENTE[r.estado]}</span>
+      <span class="secundario cifra">{r.costo > 0 ? dinero(r.costo) : '—'}</span>
+    </div>
+  </div>
+</a>
