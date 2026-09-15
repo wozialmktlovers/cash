@@ -5,7 +5,7 @@ import TemaSwitch from '@/components/TemaSwitch.astro';
 import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
 import { db, invitaciones, users, clients } from '@/db';
 import { eq } from 'drizzle-orm';
-import { hashToken, estadoInvitacion, invitacionVigente } from '@/lib/invitaciones';
+import { hashToken, estadoInvitacion, invitacionVigente, type InvitacionEstado } from '@/lib/invitaciones';
 
 const { token } = Astro.params;
 
@@ -17,7 +17,7 @@ const ahora = new Date();
 // Las fechas se comprueban primero (barato, sin consultas extra); solo si la
 // invitación sigue viva por fecha vale la pena ir a ver si quien la creó
 // todavía tiene autoridad para haberla emitido.
-let estado = estadoInvitacion(inv ?? null, ahora);
+let estado: InvitacionEstado = estadoInvitacion(inv ?? null, ahora);
 if (estado === 'valida') {
   const [creador] = inv!.creadoPor
     ? await db.select().from(users).where(eq(users.id, inv!.creadoPor)).limit(1)
