@@ -10,6 +10,13 @@ export type OpcionesBarra = {
   tipo: 'research' | 'growth' | 'pilares';
   tokenActivo: string | null;
   base: string;
+  /**
+   * Por qué este usuario no puede crear un link público (fix menores M2,
+   * punto 1: el operador solo comparte lo aprobado). Con razón, la vista
+   * interna la muestra en lugar de «Crear link público»; un link ya creado se
+   * sigue mostrando y se puede copiar o revocar igual.
+   */
+  razonNoCompartir?: string | null;
 };
 
 /**
@@ -54,7 +61,9 @@ export function barraOperador(o: OpcionesBarra, puedeEditar = false, puedeComent
       <button class="bo-btn" id="bo-copiar" type="button">Copiar</button>
       <button class="bo-btn bo-peligro" id="bo-revocar" type="button">Revocar</button>
     </span>
-    <button class="bo-btn bo-primario" id="bo-crear" type="button" ${o.tokenActivo ? 'hidden' : ''}>Crear link público</button>
+    ${o.razonNoCompartir
+      ? `<span class="bo-razon" id="bo-razon" ${o.tokenActivo ? 'hidden' : ''}>${escapar(o.razonNoCompartir)}</span>`
+      : `<button class="bo-btn bo-primario" id="bo-crear" type="button" ${o.tokenActivo ? 'hidden' : ''}>Crear link público</button>`}
     <span class="bo-estado" id="bo-estado"></span>
   </div>
 </div>
@@ -84,6 +93,7 @@ export function barraOperador(o: OpcionesBarra, puedeEditar = false, puedeComent
     border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);
     color:#fff;font-family:inherit;font-size:0.75rem;}
   #barra-op .bo-estado{color:rgba(255,255,255,.6);}
+  #barra-op .bo-razon{color:rgba(255,255,255,.72);white-space:normal;max-width:420px;}
   #barra-op .bo-sep{flex:1;}
   #barra-op .bo-panel{display:none;flex-wrap:wrap;gap:8px;align-items:center;
     padding:12px 16px;border-top:1px solid rgba(255,255,255,.1);background:rgba(10,10,10,.97);}
@@ -104,6 +114,8 @@ export function barraOperador(o: OpcionesBarra, puedeEditar = false, puedeComent
   var envoltura=document.getElementById('bo-link');
   var campo=document.getElementById('bo-url');
   var crear=document.getElementById('bo-crear');
+  // Sin permiso de compartir no hay botón de crear, solo la razón (M2 punto 1).
+  var razon=document.getElementById('bo-razon');
   var menu=document.getElementById('bo-menu');
   var avisar=function(t){estado.textContent=t;setTimeout(function(){estado.textContent='';},2600);};
 
@@ -113,14 +125,14 @@ export function barraOperador(o: OpcionesBarra, puedeEditar = false, puedeComent
     menu.textContent=abierta?'Cerrar':'Acciones';
   });
 
-  crear.addEventListener('click',async function(){
+  if(crear)crear.addEventListener('click',async function(){
     crear.disabled=true;
     try{
       var res=await fetch('/api/share',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({resultId:'${escapar(o.documentoId)}',tipo:'${o.tipo}'})});
       var b=await res.json();
       if(b.ok){campo.value=b.url;campo.dataset.token=b.token;envoltura.hidden=false;crear.hidden=true;avisar('Link creado.');}
-      else{avisar('No se pudo crear.');}
+      else{avisar((b.errores&&b.errores[0])||'No se pudo crear.');}
     }catch(e){avisar('Sin conexion.');}
     crear.disabled=false;
   });
@@ -134,7 +146,7 @@ export function barraOperador(o: OpcionesBarra, puedeEditar = false, puedeComent
     try{
       var res=await fetch('/api/share',{method:'DELETE',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({token:campo.dataset.token})});
-      if(res.ok){envoltura.hidden=true;crear.hidden=false;avisar('Link revocado. Ahora devuelve 404.');}
+      if(res.ok){envoltura.hidden=true;if(crear)crear.hidden=false;if(razon)razon.hidden=false;avisar('Link revocado. Ahora devuelve 404.');}
       else{avisar('No se pudo revocar.');}
     }catch(e){avisar('Sin conexion.');}
   });

@@ -173,6 +173,51 @@ export function puedeGenerar(
   return dependenciasCumplidas(etapa, etapas, hayInvestigacionConDatos);
 }
 
+/** Lo mínimo de una etapa (o de su versión aprobada) para decidir si un documento se puede compartir. */
+export type DocumentoDeEtapa = { documentoTipo: TipoDocumento | null; documentoId: string | null };
+
+/**
+ * Decide si `POST /api/share` puede crear un link público `/p/` para este
+ * documento (fix menores M2, punto 1). Antes cualquier operador podía
+ * publicar un borrador: el link público no pasa por el flujo de revisión, así
+ * que el cliente (o quien reciba el link) veía algo que el admin todavía no
+ * había autorizado. Ruling del controlador:
+ * - admin: siempre puede (es quien aprueba, decide qué sale);
+ * - operador: solo si la etapa del documento está `aprobada`, la etapa
+ *   apunta a ESTE documento como vigente y la versión aprobada registrada es
+ *   de este mismo documento — una versión vieja de una etapa aprobada no es
+ *   lo que se autorizó;
+ * - cliente: nunca (no llega a esta ruta, pero la regla no lo deja pasar).
+ * Los links ya creados no se tocan: esta regla solo mira la creación.
+ */
+export function puedeCompartir(o: {
+  rol: Rol;
+  tipo: TipoDocumento;
+  documentoId: string;
+  etapa: ({ estado: Estado } & DocumentoDeEtapa) | null;
+  versionAprobada: DocumentoDeEtapa | null;
+}): { ok: boolean; razon: string } {
+  if (o.rol === 'admin') return { ok: true, razon: '' };
+  if (o.rol !== 'operador') return { ok: false, razon: 'No tienes permiso para crear links públicos.' };
+
+  if (!o.etapa) {
+    return { ok: false, razon: 'Solo se pueden compartir documentos aprobados: este documento no tiene etapa.' };
+  }
+  if (o.etapa.estado !== 'aprobada') {
+    return {
+      ok: false,
+      razon: `Solo se pueden compartir documentos aprobados: la etapa está «${ETIQUETA_ESTADO_ETAPA[o.etapa.estado]}». Pide a un administrador que lo apruebe o que cree el link.`,
+    };
+  }
+
+  const esEste = (d: DocumentoDeEtapa | null) => !!d && d.documentoTipo === o.tipo && d.documentoId === o.documentoId;
+  if (!esEste(o.etapa) || !esEste(o.versionAprobada)) {
+    return { ok: false, razon: 'Este documento no es la versión aprobada de la etapa: comparte la versión vigente.' };
+  }
+
+  return { ok: true, razon: '' };
+}
+
 /** Plan de contratación de una sola etapa, tal como lo devuelve `planContratacion` (src/flujo/servicio.ts). */
 export type PlanEtapa = { etapa: Etapa; contratada: boolean; interna: boolean };
 

@@ -17,6 +17,7 @@ import {
   puedeComentar,
   puedeGenerar,
   cambiosContratacionRiesgosos,
+  puedeCompartir,
   type EtapaCliente,
   type Estado,
 } from '@/flujo/reglas';
@@ -638,5 +639,51 @@ describe('puedeComentar', () => {
     expect(puedeComentar('cliente', false, 'desarrollo_mensual')).toBe(true);
     expect(puedeComentar('cliente', false, 'investigacion')).toBe(false);
     expect(puedeComentar('cliente', false, 'pilares')).toBe(false);
+  });
+});
+
+describe('puedeCompartir (M2 punto 1: link público solo de lo aprobado)', () => {
+  const doc = { tipo: 'research' as const, documentoId: 'doc-1' };
+  const etapaAprobada = { estado: 'aprobada' as Estado, documentoTipo: 'research' as const, documentoId: 'doc-1' };
+  const versionDelDoc = { documentoTipo: 'research' as const, documentoId: 'doc-1' };
+
+  it('admin siempre puede, aunque sea un borrador o no haya etapa', () => {
+    expect(puedeCompartir({ rol: 'admin', ...doc, etapa: null, versionAprobada: null }).ok).toBe(true);
+    expect(puedeCompartir({ rol: 'admin', ...doc, etapa: { ...etapaAprobada, estado: 'en_proceso' }, versionAprobada: null }).ok).toBe(true);
+  });
+
+  it('operador puede si la etapa está aprobada y este documento es la versión aprobada', () => {
+    expect(puedeCompartir({ rol: 'operador', ...doc, etapa: etapaAprobada, versionAprobada: versionDelDoc })).toEqual({ ok: true, razon: '' });
+  });
+
+  it('operador no puede compartir un borrador: la razón nombra el estado de la etapa', () => {
+    for (const estado of ['no_iniciada', 'en_proceso', 'en_revision', 'con_cambios'] as Estado[]) {
+      const r = puedeCompartir({ rol: 'operador', ...doc, etapa: { ...etapaAprobada, estado }, versionAprobada: versionDelDoc });
+      expect(r.ok).toBe(false);
+      expect(r.razon).toContain('aprobad');
+      expect(r.razon).toContain(ETIQUETA_ESTADO_ETAPA[estado]);
+    }
+  });
+
+  it('operador no puede si no hay etapa para el documento', () => {
+    const r = puedeCompartir({ rol: 'operador', ...doc, etapa: null, versionAprobada: null });
+    expect(r.ok).toBe(false);
+    expect(r.razon).not.toBe('');
+  });
+
+  it('operador no puede si la etapa aprobada apunta a otro documento (una versión vieja)', () => {
+    const r = puedeCompartir({ rol: 'operador', ...doc, etapa: { ...etapaAprobada, documentoId: 'doc-2' }, versionAprobada: { ...versionDelDoc, documentoId: 'doc-2' } });
+    expect(r.ok).toBe(false);
+    expect(r.razon).toContain('versión aprobada');
+  });
+
+  it('operador no puede si la versión aprobada registrada es de otro documento o falta', () => {
+    expect(puedeCompartir({ rol: 'operador', ...doc, etapa: etapaAprobada, versionAprobada: { ...versionDelDoc, documentoId: 'doc-2' } }).ok).toBe(false);
+    expect(puedeCompartir({ rol: 'operador', ...doc, etapa: etapaAprobada, versionAprobada: null }).ok).toBe(false);
+    expect(puedeCompartir({ rol: 'operador', ...doc, etapa: { ...etapaAprobada, documentoTipo: 'growth' }, versionAprobada: versionDelDoc }).ok).toBe(false);
+  });
+
+  it('el cliente nunca crea links', () => {
+    expect(puedeCompartir({ rol: 'cliente', ...doc, etapa: etapaAprobada, versionAprobada: versionDelDoc }).ok).toBe(false);
   });
 });

@@ -5,6 +5,7 @@ import { slugificar } from '@/lib/slug';
 import { crearShareLink, revocarShareLink } from '@/lib/share';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { documentoVisible, type DocumentoTipo } from '@/lib/visibilidad';
+import { permisoCompartir } from '@/flujo/servicio';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -35,6 +36,12 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!doc || !puedeOperarCliente(locals.usuario, doc.cliente)) {
     return json({ ok: false, errores: ['El resultado no existe'] }, 404);
   }
+
+  // Un operador solo publica lo que el admin ya aprobó (fix menores M2,
+  // punto 1): 409 con la razón, que la vista interna también muestra. Va
+  // DESPUÉS del 404 para no confirmar la existencia de un documento ajeno.
+  const permiso = await permisoCompartir(locals.usuario, doc.cliente.id, tipo, resultId);
+  if (!permiso.ok) return json({ ok: false, errores: [permiso.razon] }, 409);
 
   // El link lleva el nombre del negocio delante del token. Es lo que ve el
   // cliente al recibirlo, así que decir de quién es vale más que ser corto.

@@ -10,7 +10,7 @@ import {
 } from '@/db';
 import {
   ETAPAS, NOMBRE_ETAPA, aplicarAccion, dependenciasCumplidas, estadoTrasGenerar, estadoTrasComentarioCliente,
-  tipoDocumentoDe, etapaDeTipo, puedeComentar,
+  tipoDocumentoDe, etapaDeTipo, puedeComentar, puedeCompartir,
   type Etapa, type Accion, type EtapaCliente, type TipoDocumento, type Rol,
 } from './reglas';
 import { puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, type EstadoComentario } from './comentarios';
@@ -155,6 +155,34 @@ export async function etapaDelDocumento(clientId: string, tipo: TipoDocumento, d
   const vigente = etapas.find((e) => e.documentoTipo === tipo && e.documentoId === documentoId);
   if (vigente) return vigente;
   return etapas.find((e) => e.etapa === etapaDeTipo(tipo)) ?? null;
+}
+
+/**
+ * `puedeCompartir` con los datos de la base (fix menores M2, punto 1): la
+ * etapa del tipo del documento y la versión aprobada que tenga registrada.
+ * La usan `POST /api/share` (409 con la razón) y las vistas internas (para
+ * mostrar la razón en lugar de «Crear link público»), así las dos deciden
+ * igual. Al admin no le cuesta ninguna consulta: siempre puede.
+ */
+export async function permisoCompartir(
+  usuario: UsuarioSesion,
+  clientId: string,
+  tipo: TipoDocumento,
+  documentoId: string,
+): Promise<{ ok: boolean; razon: string }> {
+  if (usuario.rol === 'admin') return { ok: true, razon: '' };
+
+  // Se mira la etapa del TIPO, no `etapaDelDocumento`: si la etapa apunta a
+  // otro documento, la regla lo tiene que saber para negar con su razón.
+  const [etapa] = await db.select().from(clienteEtapas)
+    .where(and(eq(clienteEtapas.clientId, clientId), eq(clienteEtapas.etapa, etapaDeTipo(tipo))))
+    .limit(1);
+  const [version] = etapa?.versionAprobadaId
+    ? await db.select({ documentoTipo: documentoVersiones.documentoTipo, documentoId: documentoVersiones.documentoId })
+        .from(documentoVersiones).where(eq(documentoVersiones.id, etapa.versionAprobadaId)).limit(1)
+    : [];
+
+  return puedeCompartir({ rol: usuario.rol, tipo, documentoId, etapa: etapa ?? null, versionAprobada: version ?? null });
 }
 
 /** Datos vigentes del documento (research, growth o pilares) por su id. */

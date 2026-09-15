@@ -6,7 +6,7 @@ import { barraOperador } from '@/render/barra-operador';
 import { slugificar } from '@/lib/slug';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { documentoVisible } from '@/lib/visibilidad';
-import { etapaDelDocumento } from '@/flujo/servicio';
+import { etapaDelDocumento, permisoCompartir } from '@/flujo/servicio';
 import { puedeEditar as calcularPuedeEditar } from '@/flujo/edicion';
 import { puedeComentar } from '@/flujo/reglas';
 import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
@@ -31,6 +31,9 @@ const links = operable
   : [];
 
 const activo = links.find((l) => !l.revocado) ?? null;
+// Misma regla que `POST /api/share` (M2 punto 1): si este usuario no puede
+// crear el link, la vista interna muestra la razón en lugar del botón.
+const compartir = operable ? await permisoCompartir(usuario, c.id, 'growth', r.id) : null;
 const base = (process.env.PUBLIC_BASE_URL ?? Astro.url.origin).replace(/\/+$/, '');
 
 let flujo: FlujoDatos | undefined;
@@ -66,6 +69,7 @@ const html = renderizarManual(
     ? barraOperador({
         clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
         version: r.version, tipo: 'growth', tokenActivo: activo?.token ?? null, base,
+          razonNoCompartir: compartir && !compartir.ok ? compartir.razon : null,
       }, Boolean(flujo?.puedeEditar), Boolean(flujo?.puedeComentar))
     : undefined,
   // No basta con `operable`: un operador viendo la etapa en revisión es

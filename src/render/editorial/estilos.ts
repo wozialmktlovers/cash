@@ -106,6 +106,8 @@ body[data-vista-previa] .cabecera{top:54px;}
 .panel-peligro:hover{border-color:var(--rojo);}
 .panel-filas{display:flex;flex-wrap:wrap;gap:8px;}
 .panel-estado{font:var(--t-small);color:var(--suave);min-height:18px;}
+/* Razón por la que no se puede crear el link (M2 punto 1): en lugar del botón. */
+.panel-razon{font:var(--t-small);color:var(--suave);margin:0;max-width:34ch;}
 
 .pagina{width:auto;margin:0 16px;}
 .marco{display:block;}

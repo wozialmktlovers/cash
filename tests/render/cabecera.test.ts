@@ -39,6 +39,26 @@ describe('cabecera del documento', () => {
     expect(h).toMatch(/id="panel-revocar"[^>]*hidden/);
   });
 
+  it('operador sin permiso de compartir (M2 punto 1): la razón en lugar de «Crear link público»', () => {
+    const h = cabeceraDocumento(meta, { ...operador, tokenActivo: null, razonNoCompartir: 'Solo aprobados <b>' });
+    expect(h).not.toContain('Crear link público');
+    expect(h).toMatch(/id="panel-razon"(?![^>]*hidden)/);
+    expect(h).toContain('Solo aprobados &lt;b&gt;');
+  });
+
+  it('con un link ya creado y sin permiso de crear otro: el link sigue visible y la razón oculta', () => {
+    const h = cabeceraDocumento(meta, { ...operador, razonNoCompartir: 'Solo aprobados' });
+    expect(h).toContain('https://x.test/p/ana-villa/tok123');
+    expect(h).toMatch(/id="panel-razon"[^>]*hidden/);
+    expect(h).not.toContain('Crear link público');
+  });
+
+  it('el script muestra la razón del servidor al fallar y no truena sin botón de crear', () => {
+    expect(SCRIPT_CABECERA).toContain('b.errores');
+    expect(SCRIPT_CABECERA).toContain("getElementById('panel-razon')");
+    expect(SCRIPT_CABECERA).toContain('if (crear) crear.hidden = false');
+  });
+
   it('escapa el nombre del cliente', () => {
     const h = cabeceraDocumento({ ...meta, cliente: '<script>alert(1)</script>' }, operador);
     expect(h).not.toContain('<script>alert(1)</script>');

@@ -59,7 +59,10 @@ function panelCompartir(o: OpcionesBarra, etiqueta: string): string {
       <input class="panel-url" id="panel-url" type="text" readonly aria-label="URL pública" value="${escapar(url)}" data-token="${escapar(o.tokenActivo ?? '')}">
       <button type="button" class="panel-boton" id="panel-copiar">Copiar</button>
     </div>
-    <button type="button" class="panel-boton panel-primario" id="panel-crear" data-documento="${escapar(o.documentoId)}" data-tipo="${escapar(o.tipo)}" ${o.tokenActivo ? 'hidden' : ''}>Crear link público</button>
+    ${o.razonNoCompartir
+      // Sin permiso de crear (M2 punto 1): la razón ocupa el lugar del botón.
+      ? `<p class="panel-razon" id="panel-razon" ${o.tokenActivo ? 'hidden' : ''}>${escapar(o.razonNoCompartir)}</p>`
+      : `<button type="button" class="panel-boton panel-primario" id="panel-crear" data-documento="${escapar(o.documentoId)}" data-tipo="${escapar(o.tipo)}" ${o.tokenActivo ? 'hidden' : ''}>Crear link público</button>`}
     <div class="panel-filas">
       <a class="panel-boton" href="/clientes/${escapar(o.clienteId)}">Cliente</a>
       <a class="panel-boton" href="${regenerarHref(o)}">Regenerar</a>
@@ -240,6 +243,8 @@ export const SCRIPT_CABECERA_COMPARTIR = `(function () {
   var envoltura = document.getElementById('panel-link');
   var campo = document.getElementById('panel-url');
   var crear = document.getElementById('panel-crear');
+  // Sin permiso de compartir no hay botón de crear, solo la razón (M2 punto 1).
+  var razon = document.getElementById('panel-razon');
   var revocar = document.getElementById('panel-revocar');
   var copiar = document.getElementById('panel-copiar');
   var avisar = function (t) {
@@ -263,7 +268,7 @@ export const SCRIPT_CABECERA_COMPARTIR = `(function () {
           if (revocar) revocar.hidden = false;
           avisar('Link creado.');
         } else {
-          avisar('No se pudo crear.');
+          avisar((b.errores && b.errores[0]) || 'No se pudo crear.');
         }
         crear.disabled = false;
       }).catch(function () { avisar('Sin conexion.'); crear.disabled = false; });
@@ -289,7 +294,8 @@ export const SCRIPT_CABECERA_COMPARTIR = `(function () {
       }).then(function (res) {
         if (res.ok) {
           if (envoltura) envoltura.hidden = true;
-          crear.hidden = false;
+          if (crear) crear.hidden = false;
+          if (razon) razon.hidden = false;
           revocar.hidden = true;
           avisar('Link revocado. Ahora devuelve 404.');
         } else {
