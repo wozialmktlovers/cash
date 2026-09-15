@@ -4,10 +4,10 @@ import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import LinksEditor from '@/components/LinksEditor';
 import FilesUploader from '@/components/FilesUploader';
-import { contarEtapasConDatos } from '@/lib/precheck';
+import { puedeGenerarPilares, contarEtapasConDatos } from '@/lib/precheck';
 import { iniciales, tinte } from '@/lib/ui/cliente-visual';
 import { ETIQUETA_ESTADO } from '@/lib/ui/progreso';
-import { db, clients, clientLinks, clientFiles, researchJobs, researchResults, growthResults } from '@/db';
+import { db, clients, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults } from '@/db';
 
 const { id } = Astro.params;
 
@@ -19,15 +19,20 @@ const archivos = await db.select().from(clientFiles).where(eq(clientFiles.client
 const jobs = await db.select().from(researchJobs).where(eq(researchJobs.clientId, cliente.id)).orderBy(desc(researchJobs.createdAt));
 const resultados = await db.select().from(researchResults).where(eq(researchResults.clientId, cliente.id));
 const manuales = await db.select().from(growthResults).where(eq(growthResults.clientId, cliente.id)).orderBy(desc(growthResults.version));
+const mapas = await db.select().from(pilaresResults).where(eq(pilaresResults.clientId, cliente.id)).orderBy(desc(pilaresResults.version));
 
 const resultadoPorJob = new Map(resultados.map((r) => [r.jobId, r.id]));
 const manualPorJob = new Map(manuales.map((m) => [m.jobId, m.id]));
+const mapaPorJob = new Map(mapas.map((m) => [m.jobId, m.id]));
 
-// El manual de campaña parte de la investigación: sin una con datos no hay
-// nada sobre lo que razonar, así que la tarjeta explica por qué no se puede.
-const puedeGrowth = resultados.some((r) => contarEtapasConDatos(r.datos) > 0);
+// El manual de campaña y el mapa de pilares parten de la investigación: sin
+// una con datos no hay nada sobre lo que razonar, así que la tarjeta explica
+// por qué no se puede.
+const mejorEtapas = Math.max(0, ...resultados.map((r) => contarEtapasConDatos(r.datos)));
+const puedeGrowth = mejorEtapas > 0;
+const puedePilares = puedeGenerarPilares({ etapasConDatos: mejorEtapas });
 
-const ultimaInvestigacion = jobs.find((j) => j.tipo !== 'growth');
+const ultimaInvestigacion = jobs.find((j) => j.tipo === 'research');
 
 const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -51,7 +56,7 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
     </div>
   </div>
 
-  <div class="rejilla" style="margin-top:24px">
+  <div class="rejilla tres" style="margin-top:24px">
     <section class="tarjeta accion">
       <span class="icono-tinte" style="background:var(--rosa-s);color:var(--rosa)"><Icono nombre="investigar" /></span>
       <h3>Investigar</h3>
@@ -76,6 +81,24 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
         <p class="secundario">Requiere una investigación con datos. El manual parte de ella.</p>
       )}
       <button type="button" class="btn" id="generar-growth" disabled={!puedeGrowth}>Generar</button>
+    </section>
+
+    <section class="tarjeta accion">
+      <span class="icono-tinte" style="background:var(--verde-s);color:var(--verde)"><Icono nombre="entregables" /></span>
+      <h3>Mapa de pilares</h3>
+      <p class="secundario">Content Strategy</p>
+      {puedePilares.ok ? (
+        // Igual que el manual: el costo vive en el job, así que se muestra el
+        // último mapa real (por versión), no el último intento.
+        <p class="secundario">{mapas[0] ? `Último mapa: ${fecha(mapas[0].createdAt)}` : 'Listo para generarse'}</p>
+      ) : (
+        <p class="secundario">{puedePilares.razon}</p>
+      )}
+      {puedePilares.ok ? (
+        <a href={`/clientes/${cliente.id}/pilares`} class="btn">Generar</a>
+      ) : (
+        <span class="btn" aria-disabled="true">Generar</span>
+      )}
     </section>
   </div>
 
@@ -124,13 +147,15 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
         {jobs.map((j) => (
           <li class="renglon">
             <div class="cuerpo">
-              <strong>{j.tipo === 'growth' ? 'Manual de campaña' : 'Investigación'}</strong>
+              <strong>{j.tipo === 'growth' ? 'Manual de campaña' : j.tipo === 'pilares' ? 'Mapa de pilares' : 'Investigación'}</strong>
               <p class="secundario">{fechaHora(j.createdAt)} · <span class="cifra">{dinero(Number(j.costoUsd))}</span></p>
               {j.error && <p class="secundario" style="color:var(--rojo)">{j.error}</p>}
             </div>
             <span class={`etiqueta ${j.estado}`}>{ETIQUETA_ESTADO[j.estado] ?? j.estado}</span>
             {manualPorJob.has(j.id) ? (
               <a href={`/growth/${manualPorJob.get(j.id)}`} class="btn fantasma chico">Ver manual</a>
+            ) : mapaPorJob.has(j.id) ? (
+              <a href={`/pilares/${mapaPorJob.get(j.id)}`} class="btn fantasma chico">Ver mapa</a>
             ) : resultadoPorJob.has(j.id) ? (
               <a href={`/resultados/${resultadoPorJob.get(j.id)}`} class="btn fantasma chico">Ver presentación</a>
             ) : (
@@ -261,4 +286,8 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
   .ficha-cabeza { display: flex; align-items: center; gap: 22px; }
   .ficha-titulo { flex: 1; min-width: 0; }
   .ficha-titulo h1 { overflow-wrap: anywhere; }
+  /* El botón-enlace de «Mapa de pilares» no puede usar el atributo disabled
+     de un <button>: es un <a> y seguiría siendo navegable. Se marca con
+     aria-disabled y se anulan el puntero y el subrayado a mano. */
+  .accion .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
 </style>

@@ -19,8 +19,18 @@ const GROWTH: Etapa[] = [
   { clave: 'prompts', titulo: 'Prompts', detalle: 'Indicaciones de imagen por pieza. Espera a los creativos.' },
 ];
 
+const PILARES: Etapa[] = [
+  { clave: 'estrategia', titulo: 'Estrategia', detalle: 'Idea rectora, principios, pilares y mix.' },
+  { clave: 'pilar1', titulo: 'Pilar 1', detalle: 'Sesenta temas en tres subcategorías.' },
+  { clave: 'pilar2', titulo: 'Pilar 2', detalle: 'Sesenta temas en tres subcategorías.' },
+  { clave: 'pilar3', titulo: 'Pilar 3', detalle: 'Sesenta temas en tres subcategorías.' },
+  { clave: 'pilar4', titulo: 'Pilar 4', detalle: 'Sesenta temas en tres subcategorías.' },
+  { clave: 'pilar5', titulo: 'Pilar 5', detalle: 'Sesenta temas en tres subcategorías.' },
+  { clave: 'revision', titulo: 'Revisión', detalle: 'Temas repetidos y reparto por función.' },
+];
+
 export function etapasDe(tipo: string | undefined): Etapa[] {
-  return tipo === 'growth' ? GROWTH : INVESTIGACION;
+  return tipo === 'growth' ? GROWTH : tipo === 'pilares' ? PILARES : INVESTIGACION;
 }
 
 export function porcentaje(etapas: Record<string, string>, tipo: string | undefined): number {

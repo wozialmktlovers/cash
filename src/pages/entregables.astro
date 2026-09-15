@@ -2,7 +2,7 @@
 import { desc, eq, and, inArray } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
-import { db, clients, researchResults, growthResults, shareLinks } from '@/db';
+import { db, clients, researchResults, growthResults, pilaresResults, shareLinks } from '@/db';
 import { slugificar } from '@/lib/slug';
 
 const investigaciones = await db
@@ -11,10 +11,14 @@ const investigaciones = await db
 const manuales = await db
   .select({ id: growthResults.id, version: growthResults.version, createdAt: growthResults.createdAt, clientId: clients.id, nombre: clients.nombre })
   .from(growthResults).innerJoin(clients, eq(clients.id, growthResults.clientId));
+const mapas = await db
+  .select({ id: pilaresResults.id, version: pilaresResults.version, createdAt: pilaresResults.createdAt, clientId: clients.id, nombre: clients.nombre })
+  .from(pilaresResults).innerJoin(clients, eq(clients.id, pilaresResults.clientId));
 
 const documentos = [
   ...investigaciones.map((d) => ({ ...d, tipo: 'research' as const })),
   ...manuales.map((d) => ({ ...d, tipo: 'growth' as const })),
+  ...mapas.map((d) => ({ ...d, tipo: 'pilares' as const })),
 ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
 const links = documentos.length
@@ -34,7 +38,7 @@ const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month
   <div class="encabezado">
     <div>
       <h1>Entregables</h1>
-      <p class="sub">Presentaciones de Social Research y manuales de campaña.</p>
+      <p class="sub">Presentaciones de Social Research, manuales de campaña y mapas de pilares.</p>
     </div>
   </div>
 
@@ -51,17 +55,19 @@ const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month
         <button type="button" class="chip" data-filtro="todos" aria-pressed="true">Todos</button>
         <button type="button" class="chip" data-filtro="research" aria-pressed="false">Investigaciones</button>
         <button type="button" class="chip" data-filtro="growth" aria-pressed="false">Manuales</button>
+        <button type="button" class="chip" data-filtro="pilares" aria-pressed="false">Mapas de pilares</button>
       </div>
       <section class="tarjeta">
         <ul class="lista">
           {documentos.map((d) => {
             const link = linkPorDocumento.get(d.id);
             const url = link ? `${base}/p/${slugificar(d.nombre)}/${link.token}` : '';
-            const vista = d.tipo === 'growth' ? `/growth/${d.id}` : `/resultados/${d.id}`;
+            const vista = d.tipo === 'growth' ? `/growth/${d.id}` : d.tipo === 'pilares' ? `/pilares/${d.id}` : `/resultados/${d.id}`;
+            const eyebrow = d.tipo === 'growth' ? 'Manual de campaña' : d.tipo === 'pilares' ? 'Mapa de pilares' : 'Social Research';
             return (
               <li class="renglon" data-tipo={d.tipo} data-result-id={d.id}>
                 <div class="cuerpo">
-                  <p class="eyebrow">{d.tipo === 'growth' ? 'Manual de campaña' : 'Social Research'}</p>
+                  <p class="eyebrow">{eyebrow}</p>
                   <strong>{d.nombre}</strong>
                   <p class="secundario">Versión {d.version} · {fecha(d.createdAt)}{link ? ` · ${link.visitas} ${link.visitas === 1 ? 'visita' : 'visitas'}` : ''}</p>
                   <div class="link-publico" hidden={!link}>

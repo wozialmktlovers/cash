@@ -2,7 +2,7 @@
 import { eq } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import ProgresoJob from '@/components/ProgresoJob';
-import { db, researchJobs, researchResults, growthResults, clients } from '@/db';
+import { db, researchJobs, researchResults, growthResults, pilaresResults, clients } from '@/db';
 
 const { id } = Astro.params;
 
@@ -11,10 +11,13 @@ if (!job) return new Response('Investigación no encontrada', { status: 404 });
 
 const [cliente] = await db.select().from(clients).where(eq(clients.id, job.clientId)).limit(1);
 // El resultado vive en una tabla u otra según el tipo del job.
-const tabla = job.tipo === 'growth' ? growthResults : researchResults;
+const tabla = job.tipo === 'growth' ? growthResults : job.tipo === 'pilares' ? pilaresResults : researchResults;
 const [resultado] = await db.select({ id: tabla.id }).from(tabla).where(eq(tabla.jobId, job.id)).limit(1);
 
 const esGrowth = job.tipo === 'growth';
+const esPilares = job.tipo === 'pilares';
+const eyebrow = esGrowth ? 'Manual de campaña' : esPilares ? 'Mapa de pilares' : 'Social Research';
+const titulo = esGrowth ? 'Manual de campaña' : esPilares ? 'Mapa de pilares' : 'Investigación';
 const tope = Number(process.env.COST_LIMIT_USD || 15);
 
 const inicial = {
@@ -32,13 +35,13 @@ const inicial = {
 ---
 
 <Base
-  titulo={`${esGrowth ? 'Manual de campaña' : 'Investigación'} · ${cliente?.nombre ?? ''}`}
+  titulo={`${titulo} · ${cliente?.nombre ?? ''}`}
   activo="clientes"
   volver={{ href: `/clientes/${job.clientId}`, texto: cliente?.nombre ?? 'Cliente' }}
 >
   <div class="encabezado">
     <div>
-      <p class="eyebrow">{esGrowth ? 'Manual de campaña' : 'Social Research'}</p>
+      <p class="eyebrow">{eyebrow}</p>
       <h1>{cliente?.nombre}</h1>
       <p class="sub">La página se actualiza sola cada tres segundos.</p>
     </div>

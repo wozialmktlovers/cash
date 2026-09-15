@@ -9,12 +9,20 @@ type Estado = {
   costoUsd: number;
   error: string | null;
   resultId: string | null;
-  tipo?: 'research' | 'growth';
+  tipo?: 'research' | 'growth' | 'pilares';
   startedAt: string | null;
   finishedAt: string | null;
 };
 
 const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+
+// El destino final y su texto según el tipo de job. `research` es el valor
+// por omisión: los jobs viejos no traían `tipo`.
+const DESTINO: Record<'research' | 'growth' | 'pilares', { href: (id: string) => string; texto: string }> = {
+  research: { href: (id) => `/resultados/${id}`, texto: 'Ver la presentación' },
+  growth: { href: (id) => `/growth/${id}`, texto: 'Ver el manual de campaña' },
+  pilares: { href: (id) => `/pilares/${id}`, texto: 'Ver el mapa de pilares' },
+};
 
 const TRAZO: Record<string, string> = {
   ok: 'm5 12.5 4.5 4.5L19 7',
@@ -62,7 +70,7 @@ export default function ProgresoJob({ jobId, inicial, tope }: { jobId: string; i
   // ok) para no aparentar que el trabajo llegó al final.
   const pct = estado.estado === 'completado' ? 100 : porcentaje(estado.etapas ?? {}, estado.tipo);
   const tiempo = transcurrido(estado.startedAt, estado.finishedAt ? new Date(estado.finishedAt) : ahora);
-  const esGrowth = estado.tipo === 'growth';
+  const destino = DESTINO[estado.tipo ?? 'research'];
 
   return (
     <div>
@@ -102,8 +110,8 @@ export default function ProgresoJob({ jobId, inicial, tope }: { jobId: string; i
       </section>
 
       {terminado && estado.resultId && (
-        <a href={esGrowth ? `/growth/${estado.resultId}` : `/resultados/${estado.resultId}`} className="btn ancho-total" style={{ marginTop: 18 }}>
-          {esGrowth ? 'Ver el manual de campaña' : 'Ver la presentación'}
+        <a href={destino.href(estado.resultId)} className="btn ancho-total" style={{ marginTop: 18 }}>
+          {destino.texto}
         </a>
       )}
       {terminado && !estado.resultId && (

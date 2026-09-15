@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { etapasDe, porcentaje, transcurrido, ETIQUETA_ESTADO } from '@/lib/ui/progreso';
 import { ETAPAS } from '@/research/pipeline';
 import { ETAPAS_GROWTH } from '@/growth/pipeline';
+import { ETAPAS_PILARES } from '@/pilares/pipeline';
 import { jobEstado } from '@/db/schema';
 
 describe('etapasDe', () => {
@@ -12,6 +13,9 @@ describe('etapasDe', () => {
   it('un tipo desconocido usa las de investigación', () => {
     expect(etapasDe(undefined)).toEqual(etapasDe('research'));
     expect(etapasDe('raro')).toEqual(etapasDe('research'));
+  });
+  it('las etapas del mapa de pilares coinciden con su pipeline', () => {
+    expect(etapasDe('pilares').map((e) => e.clave)).toEqual([...ETAPAS_PILARES]);
   });
 });
 
