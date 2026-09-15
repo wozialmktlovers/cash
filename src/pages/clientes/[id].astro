@@ -128,6 +128,10 @@ const ETIQUETA_ACCION: Record<string, string> = {
   iniciar: 'Inició', solicitar: 'Solicitó autorización', aprobar: 'Aprobó',
   pedir_cambios: 'Pidió cambios', reabrir: 'Reabrió', generado: 'Generó un entregable',
   comentario_cliente: 'Comentó',
+  // B6: la edición sobre el documento y el restaurar una versión también
+  // insertan su propio evento de etapa (`accion` es texto libre, no el enum
+  // de acciones — ver `etapaEventos` en el esquema).
+  edicion: 'Edición del documento', restaurada: 'Versión restaurada',
 };
 
 type ItemHistorial =

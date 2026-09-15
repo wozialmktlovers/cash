@@ -89,6 +89,10 @@ export const NAVEGACION_GROWTH = `
 
   document.addEventListener('keydown',function(e){
     if(e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    // Modo edición (B6, SCRIPT_FLUJO): mientras se edita un [data-editable]
+    // (contenteditable), 'f'/'0'/'+'/'-' son texto, no atajos de la barra.
+    if(e.target && e.target.isContentEditable) return;
+    if(document.documentElement.classList.contains('modo-edicion')) return;
     if(e.key==='+'||e.key==='='){e.preventDefault();moverEscala(1);}
     if(e.key==='-'||e.key==='_'){e.preventDefault();moverEscala(-1);}
     if(e.key==='0'){e.preventDefault();p=0;aplicarEscala();}

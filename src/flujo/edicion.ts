@@ -102,23 +102,54 @@ export function aplicarCambios(datos: unknown, cambios: Cambio[]): { ok: true; d
   return { ok: true, datos: copia };
 }
 
+/** Un mensaje por incidencia, con la ruta del campo delante (`a.b.0.c: mensaje`) cuando el issue trae una — mismo formato que `validarCliente`. */
 function mensajes(error: z.ZodError): string[] {
-  return error.issues.map((i) => i.message);
+  return error.issues.map((i) => (i.path.length ? `${i.path.join('.')}: ${i.message}` : i.message));
+}
+
+/** `true` si `datos.lectura` (cuando existe) cumple hoy `lecturaSchema`. */
+function lecturaValida(datos: unknown): boolean {
+  const lectura = (datos as { lectura?: unknown } | null | undefined)?.lectura;
+  return investigacionSchema.shape.lectura.safeParse(lectura).success;
 }
 
 /**
  * Valida `datos` contra el esquema del tipo, tras aplicar los cambios:
- * - `research`: el documento completo contra `investigacionSchema`.
+ * - `research`: el documento contra `investigacionSchema`, salvo `lectura`.
+ *   `lectura` se revisa aparte, y solo si YA era válida en `datosAnteriores`
+ *   (el `datos` previo al cambio, cuando se conoce): una investigación vieja
+ *   (v1, sin `cifras`) cuya lectura no cumple el esquema actual se lee con el
+ *   respaldo de síntesis/detalle (`renderizarInvestigacion`), y no debe
+ *   quedar imposible de editar en el resto por una `lectura` que ya venía
+ *   rota de antes — B6, ronda de arreglos 1, punto 6. Si `datosAnteriores` no
+ *   se pasa (pruebas puras, por ejemplo), se revalida por seguridad. Los
+ *   nodos `data-editable` de la lectura se conservan en el render tal cual
+ *   (no se ocultan): si el documento SÍ tenía una lectura válida, seguirá
+ *   pudiendo editarse y seguirá exigiéndose que el cambio no la rompa.
  * - `pilares`: `datos.estrategia` contra `estrategiaSchema` y cada tema del
  *   banco (`datos.pilares[].subcategorias[].temas[]`, saltando los pilares
  *   `vacio`) contra `temaGeneradoSchema`.
  * - `growth`: `growthSchema.partial().passthrough()` (el documento puede
  *   venir incompleto: cada agente escribe su trozo).
  */
-export function validarDocumento(tipo: TipoDocumento, datos: unknown): { ok: true } | { ok: false; errores: string[] } {
+export function validarDocumento(
+  tipo: TipoDocumento,
+  datos: unknown,
+  datosAnteriores?: unknown,
+): { ok: true } | { ok: false; errores: string[] } {
   if (tipo === 'research') {
-    const r = investigacionSchema.safeParse(datos);
-    if (!r.success) return { ok: false, errores: mensajes(r.error) };
+    const errores: string[] = [];
+
+    const sinLectura = investigacionSchema.omit({ lectura: true });
+    const r = sinLectura.safeParse(datos);
+    if (!r.success) errores.push(...mensajes(r.error));
+
+    if (datosAnteriores === undefined || lecturaValida(datosAnteriores)) {
+      const rl = investigacionSchema.shape.lectura.safeParse((datos as { lectura?: unknown } | null | undefined)?.lectura);
+      if (!rl.success) errores.push(...mensajes(rl.error));
+    }
+
+    if (errores.length) return { ok: false, errores };
     return { ok: true };
   }
 

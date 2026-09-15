@@ -4,6 +4,7 @@ import { renderizarPilares } from '@/render/pilares/documento';
 import { renderizarManual } from '@/render/growth/manual';
 import { seccionPortada as seccionPortadaLectura } from '@/render/investigacion/lectura';
 import { SCRIPT_FLUJO, type FlujoDatos } from '@/render/editorial/flujo-cliente';
+import { NAVEGACION_GROWTH } from '@/render/growth/navegacion';
 import { FakeDocument, FakeWindow, ejecutarScript } from '../helpers/fake-dom';
 import investigacionCompleta from '../fixtures/investigacion-completa.json';
 import lecturaEjemplo from '../fixtures/lectura-ejemplo.json';
@@ -138,8 +139,31 @@ function armarPagina(puedeEditarDoc = true) {
   btnDescartar.id = 'btn-descartar-cambios';
   doc.body.appendChild(btnDescartar);
 
+  const btnVersiones = doc.createElement('button');
+  btnVersiones.id = 'btn-flujo-versiones';
+  doc.body.appendChild(btnVersiones);
+
+  const dialogoVersiones = doc.createElement('dialog');
+  dialogoVersiones.id = 'dialog-versiones';
+  doc.body.appendChild(dialogoVersiones);
+
+  const listaVersiones = doc.createElement('div');
+  listaVersiones.id = 'dialog-versiones-lista';
+  dialogoVersiones.appendChild(listaVersiones);
+
+  const estadoVersiones = doc.createElement('p');
+  estadoVersiones.id = 'dialog-versiones-estado';
+  dialogoVersiones.appendChild(estadoVersiones);
+
+  const cerrarVersionesBtn = doc.createElement('button');
+  cerrarVersionesBtn.id = 'dialog-versiones-cerrar';
+  dialogoVersiones.appendChild(cerrarVersionesBtn);
+
   ejecutarScript(SCRIPT_FLUJO, doc, win as unknown as Window);
-  return { doc, win, titular, btnEditar, barra, contador, estadoBarra, btnGuardar, btnDescartar };
+  return {
+    doc, win, titular, btnEditar, barra, contador, estadoBarra, btnGuardar, btnDescartar,
+    btnVersiones, dialogoVersiones, listaVersiones, estadoVersiones, cerrarVersionesBtn,
+  };
 }
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -250,10 +274,145 @@ describe('SCRIPT_FLUJO · modo edición (fake-dom)', () => {
     expect(barra.hidden).toBe(true);
   });
 
+  // B6, ronda de arreglos 1, punto 3: salir sin guardar (por Escape o por
+  // volver a pulsar Editar) no debe dejar el texto editado a medias en la
+  // página — la salida confirmada pasa por `descartar()`, que restaura cada
+  // [data-editable] a su texto original.
+  it('confirmar la salida por Escape restaura el texto original (sin fantasmas)', () => {
+    const { titular, btnEditar } = armarPagina();
+    btnEditar.dispatch('click');
+    titular.textContent = 'Texto fantasma';
+    titular.dispatch('input');
+
+    titular.dispatch('keydown', { key: 'Escape' });
+
+    expect(titular.textContent).toBe('Titular original');
+  });
+
+  it('confirmar la salida al volver a pulsar Editar restaura el texto original', () => {
+    const { titular, btnEditar } = armarPagina();
+    btnEditar.dispatch('click');
+    titular.textContent = 'Texto fantasma';
+    titular.dispatch('input');
+
+    btnEditar.dispatch('click'); // "Salir de editar"
+
+    expect(titular.textContent).toBe('Titular original');
+  });
+
+  it('si no se confirma la salida, el texto editado se queda tal cual (sigue en modo edición)', () => {
+    const { titular, btnEditar, barra, win } = armarPagina();
+    (win as any).confirm = vi.fn(() => false);
+    btnEditar.dispatch('click');
+    titular.textContent = 'Sigo editando';
+    titular.dispatch('input');
+
+    titular.dispatch('keydown', { key: 'Escape' });
+
+    expect(titular.textContent).toBe('Sigo editando');
+    expect(barra.hidden).toBe(false);
+  });
+
   it('sin puedeEditar en data-flujo, Editar no entra en modo edición', () => {
     const { titular, btnEditar, barra } = armarPagina(false);
     btnEditar.dispatch('click');
     expect(titular.getAttribute('contenteditable')).toBeNull();
     expect(barra.hidden).toBe(true);
+  });
+
+  // B6, ronda de arreglos 1, punto 7 (primera mitad): un campo editable es
+  // el texto de una tarjeta, no un editor de párrafos.
+  it('Enter dentro de un [data-editable] se previene (nunca mete un salto de línea)', () => {
+    const { titular, btnEditar } = armarPagina();
+    btnEditar.dispatch('click');
+
+    let prevenido = false;
+    const evento = { key: 'Enter', preventDefault: () => { prevenido = true; } };
+    titular.dispatch('keydown', evento as any);
+
+    expect(prevenido).toBe(true);
+  });
+
+  // B6, ronda de arreglos 1, punto 7 (segunda mitad): Escape con el diálogo
+  // de versiones abierto le pertenece SOLO al diálogo — antes, también
+  // disparaba el aviso de «¿salir sin guardar?» del modo edición.
+  it('Escape con el diálogo de versiones abierto lo cierra a él y no toca el modo edición', async () => {
+    const { titular, btnEditar, btnVersiones, dialogoVersiones, win } = armarPagina();
+    globalThis.fetch = vi.fn().mockResolvedValue({ json: () => Promise.resolve({ ok: true, versiones: [] }) }) as unknown as typeof fetch;
+
+    btnEditar.dispatch('click');
+    titular.textContent = 'Cambiado, pero no me toques';
+    titular.dispatch('input');
+
+    btnVersiones.dispatch('click');
+    await flush();
+    expect(dialogoVersiones.getAttribute('open')).toBe('open');
+
+    titular.dispatch('keydown', { key: 'Escape' });
+
+    // El diálogo se cerró (su Escape), pero el modo edición sigue con el
+    // texto tal cual — nunca se llamó a confirm() para salir de editar.
+    expect(dialogoVersiones.getAttribute('open')).toBeNull();
+    expect((win as any).confirm).not.toHaveBeenCalled();
+    expect(titular.textContent).toBe('Cambiado, pero no me toques');
+    expect(titular.getAttribute('contenteditable')).toBeTruthy();
+  });
+});
+
+/**
+ * B6, ronda de arreglos 1, punto 1: los atajos de teclado del manual de
+ * Growth (f/0/+/-/=/_) no deben robarle la tecla a un [data-editable] en
+ * modo edición. Se prueba con 'f' (pantalla completa) porque no toca
+ * `element.style`, que fake-dom no implementa; los atajos de escala
+ * (+/-/0) usan la misma condición de guarda, así que quedan cubiertos por
+ * el mismo cambio de código aunque no se ejecuten aquí.
+ */
+describe('NAVEGACION_GROWTH · atajos vs. modo edición (fake-dom)', () => {
+  function armarNav() {
+    const doc = new FakeDocument();
+    const win = new FakeWindow();
+    const seccion = doc.createElement('div');
+    seccion.className = 'sec';
+    doc.body.appendChild(seccion);
+    (doc as any).fullscreenElement = {};
+    (doc as any).exitFullscreen = vi.fn();
+    // fake-dom no modela `.style`: el script aplica la escala tipográfica al
+    // cargar (independiente del atajo de teclado que prueban estos casos),
+    // así que basta un `setProperty` de mentiras para que no truene.
+    (doc.documentElement as any).style = { setProperty: () => {} };
+    ejecutarScript(NAVEGACION_GROWTH, doc, win as unknown as Window);
+    return { doc, win };
+  }
+
+  it('con el foco en un campo contenteditable, "f" no dispara pantalla completa', () => {
+    const { doc } = armarNav();
+    const campo = doc.createElement('div');
+    (campo as any).isContentEditable = true;
+    doc.body.appendChild(campo);
+
+    campo.dispatch('keydown', { key: 'f' });
+
+    expect((doc as any).exitFullscreen).not.toHaveBeenCalled();
+  });
+
+  it('con <html class="modo-edicion">, "f" tampoco dispara pantalla completa', () => {
+    const { doc } = armarNav();
+    doc.documentElement.classList.add('modo-edicion');
+    const cualquiera = doc.createElement('div');
+    doc.body.appendChild(cualquiera);
+
+    cualquiera.dispatch('keydown', { key: 'f' });
+
+    expect((doc as any).exitFullscreen).not.toHaveBeenCalled();
+  });
+
+  it('fuera de modo edición, "f" sigue disparando pantalla completa (no se rompió el atajo)', () => {
+    const { doc } = armarNav();
+    const cualquiera = doc.createElement('div');
+    doc.body.appendChild(cualquiera);
+
+    cualquiera.dispatch('keydown', { key: 'f' });
+
+    expect((doc as any).exitFullscreen).toHaveBeenCalled();
   });
 });

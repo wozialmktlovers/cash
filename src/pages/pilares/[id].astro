@@ -69,7 +69,9 @@ const html = renderizarPilares(
       : undefined,
     avance,
     resultId: r.id,
-    editable: operable,
+    // No basta con `operable`: un operador viendo la etapa en revisión es
+    // operable, pero no puede editar — B6, ronda de arreglos 1, punto 9.
+    editable: Boolean(flujo?.puedeEditar),
     flujo,
   },
 );

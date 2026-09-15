@@ -76,8 +76,13 @@ export function barraEdicion(): string {
  * solo) como si no (entonces lo hace el propio handler).
  *
  * Escape (o el botón Editar de nuevo) sale del modo, preguntando primero si
- * hay cambios sin guardar. Guardar manda el PATCH y recarga; un error se
- * avisa en la propia barra, sin salir del modo.
+ * hay cambios sin guardar; si se confirma (o no había ninguno), la salida
+ * pasa siempre por `descartar()`: además de salir, deja cada `[data-editable]`
+ * con su texto original, para no dejar en pantalla un cambio a medio hacer
+ * que nadie guardó. Si el diálogo de versiones está abierto, Escape lo cierra
+ * a él y no toca el modo edición (un solo dueño de la tecla). Guardar manda
+ * el PATCH y recarga; un error se avisa en la propia barra, sin salir del
+ * modo. Dentro de un `[data-editable]`, Enter nunca mete un salto de línea.
  */
 export const SCRIPT_FLUJO = `(function () {
   var crudo = document.body.getAttribute('data-flujo');
@@ -89,6 +94,24 @@ export const SCRIPT_FLUJO = `(function () {
   var editables = document.querySelectorAll('[data-editable]');
   var enEdicion = false;
   var modoContenteditable = 'true';
+  var dialogoAbierto = false;
+
+  var barra = document.getElementById('barra-edicion');
+  var contador = document.getElementById('barra-edicion-contador');
+  var estadoBarra = document.getElementById('barra-edicion-estado');
+  var btnGuardar = document.getElementById('btn-guardar-cambios');
+  var btnDescartar = document.getElementById('btn-descartar-cambios');
+  var btnEditar = document.getElementById('btn-flujo-editar');
+  var btnVersiones = document.getElementById('btn-flujo-versiones');
+  var dialogoVersiones = document.getElementById('dialog-versiones');
+  var lista = document.getElementById('dialog-versiones-lista');
+  var estadoVersiones = document.getElementById('dialog-versiones-estado');
+  var cerrarBtn = document.getElementById('dialog-versiones-cerrar');
+
+  // Todas las funciones se declaran aquí arriba, fuera de cualquier bloque
+  // 'if': una function declaration dentro de un bloque no es válida en ES5
+  // estricto (varía de motor a motor). Los 'if' de abajo solo deciden si se
+  // ENGANCHAN los listeners, nunca si la función existe.
 
   function soportaPlaintextOnly() {
     try {
@@ -111,14 +134,6 @@ export const SCRIPT_FLUJO = `(function () {
     return cambios;
   }
 
-  var barra = document.getElementById('barra-edicion');
-  var contador = document.getElementById('barra-edicion-contador');
-  var estadoBarra = document.getElementById('barra-edicion-estado');
-  var btnGuardar = document.getElementById('btn-guardar-cambios');
-  var btnDescartar = document.getElementById('btn-descartar-cambios');
-  var btnEditar = document.getElementById('btn-flujo-editar');
-  var btnVersiones = document.getElementById('btn-flujo-versiones');
-
   function actualizarContador() {
     if (!contador) return;
     var n = recolectarCambios().length;
@@ -137,10 +152,17 @@ export const SCRIPT_FLUJO = `(function () {
     }
   }
 
+  // Un campo editable es el texto de una tarjeta, no un editor de párrafos:
+  // Enter nunca mete un salto de línea.
+  function alTecleoEditable(e) {
+    if (e.key === 'Enter') e.preventDefault();
+  }
+
   for (var i = 0; i < editables.length; i++) {
     (function (el) {
       el.addEventListener('input', actualizarContador);
       el.addEventListener('paste', alPegar);
+      el.addEventListener('keydown', alTecleoEditable);
     })(editables[i]);
   }
 
@@ -173,10 +195,21 @@ export const SCRIPT_FLUJO = `(function () {
     return window.confirm('¿Salir sin guardar los cambios?');
   }
 
+  // Deshace los cambios en pantalla (vuelve cada [data-editable] a su texto
+  // original) y sale del modo. Tanto «Descartar» como una salida confirmada
+  // por «Editar»/Escape pasan por aquí: salir sin guardar nunca debe dejar
+  // el texto editado a medias en la página (fantasma que confunde a quien
+  // vuelva a entrar en modo edición, porque '__original' ya no es el que se
+  // ve).
   function descartar() {
     for (var m = 0; m < editables.length; m++) editables[m].textContent = editables[m].__original;
     actualizarContador();
     salirEdicion();
+  }
+
+  function salirConfirmando() {
+    if (!confirmarSalida()) return;
+    descartar();
   }
 
   function guardar() {
@@ -202,122 +235,124 @@ export const SCRIPT_FLUJO = `(function () {
     });
   }
 
+  function etiquetaMotivo(m) {
+    if (m === 'generado') return 'Generado';
+    if (m === 'edicion') return 'Edición';
+    if (m === 'aprobada') return 'Aprobada';
+    if (m === 'restaurada') return 'Restaurada';
+    return m;
+  }
+
+  function pintarVersiones(versiones) {
+    if (!lista) return;
+    lista.textContent = '';
+    if (!versiones.length) {
+      var vacio = document.createElement('p');
+      vacio.className = 'suave';
+      vacio.textContent = 'Todavía no hay versiones guardadas.';
+      lista.appendChild(vacio);
+      return;
+    }
+    for (var i = 0; i < versiones.length; i++) {
+      (function (v) {
+        var fila = document.createElement('div');
+        fila.className = 'version-fila';
+
+        var info = document.createElement('div');
+        info.className = 'version-info';
+        var motivo = document.createElement('span');
+        motivo.className = 'version-motivo';
+        motivo.textContent = 'v' + v.numero + ' · ' + etiquetaMotivo(v.motivo);
+        var meta = document.createElement('span');
+        meta.className = 'suave';
+        meta.textContent = (v.autor || 'Wozial') + ' · ' + String(v.creadoEn).slice(0, 10);
+        info.appendChild(motivo);
+        info.appendChild(meta);
+        fila.appendChild(info);
+
+        if (flujo.puedeEditar) {
+          var restaurar = document.createElement('button');
+          restaurar.type = 'button';
+          restaurar.className = 'panel-boton';
+          restaurar.textContent = 'Restaurar';
+          restaurar.addEventListener('click', function () {
+            if (!window.confirm('¿Restaurar la versión v' + v.numero + '? Se guardan los datos actuales antes de reemplazarlos.')) return;
+            restaurar.disabled = true;
+            fetch('/api/documentos/' + flujo.tipo + '/' + flujo.id + '/versiones', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ numero: v.numero }),
+            }).then(function (res) {
+              return res.json().then(function (b) { return { ok: b && b.ok, errores: b && b.errores }; });
+            }).then(function (r) {
+              if (r.ok) {
+                window.location.reload();
+              } else {
+                restaurar.disabled = false;
+                if (estadoVersiones) estadoVersiones.textContent = (r.errores && r.errores[0]) || 'No se pudo restaurar.';
+              }
+            }).catch(function () {
+              restaurar.disabled = false;
+              if (estadoVersiones) estadoVersiones.textContent = 'Sin conexión.';
+            });
+          });
+          fila.appendChild(restaurar);
+        }
+
+        lista.appendChild(fila);
+      })(versiones[i]);
+    }
+  }
+
+  function cargarVersiones() {
+    if (lista) lista.textContent = 'Cargando…';
+    fetch('/api/documentos/' + flujo.tipo + '/' + flujo.id + '/versiones')
+      .then(function (res) { return res.json(); })
+      .then(function (b) {
+        if (b && b.ok) { pintarVersiones(b.versiones); }
+        else if (lista) { lista.textContent = ''; if (estadoVersiones) estadoVersiones.textContent = 'No se pudo cargar el historial.'; }
+      })
+      .catch(function () {
+        if (lista) lista.textContent = '';
+        if (estadoVersiones) estadoVersiones.textContent = 'Sin conexión.';
+      });
+  }
+
+  function abrirVersiones() {
+    dialogoAbierto = true;
+    if (estadoVersiones) estadoVersiones.textContent = '';
+    if (dialogoVersiones.showModal) dialogoVersiones.showModal(); else dialogoVersiones.setAttribute('open', 'open');
+    cargarVersiones();
+  }
+
+  function cerrarVersiones() {
+    dialogoAbierto = false;
+    if (dialogoVersiones.close) dialogoVersiones.close(); else dialogoVersiones.removeAttribute('open');
+  }
+
   if (btnEditar) {
     btnEditar.addEventListener('click', function () {
-      if (enEdicion) { if (confirmarSalida()) salirEdicion(); }
+      if (enEdicion) salirConfirmando();
       else entrarEdicion();
     });
   }
   if (btnGuardar) btnGuardar.addEventListener('click', guardar);
   if (btnDescartar) btnDescartar.addEventListener('click', descartar);
 
+  // Un solo dueño de Escape: si el diálogo de versiones está abierto, lo
+  // cierra a él y no toca el modo edición aunque esté encendido debajo —
+  // antes, el propio <dialog> y este listener competían por la misma tecla
+  // y cerrar el diálogo también disparaba «¿salir sin guardar?».
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && enEdicion) { if (confirmarSalida()) salirEdicion(); }
+    if (e.key !== 'Escape') return;
+    if (dialogoAbierto) { cerrarVersiones(); return; }
+    if (enEdicion) salirConfirmando();
   });
 
-  // ── Panel de versiones ──────────────────────────────────────────────
-  var dialogoVersiones = document.getElementById('dialog-versiones');
+  if (dialogoVersiones) dialogoVersiones.addEventListener('close', function () { dialogoAbierto = false; });
+
   if (dialogoVersiones && btnVersiones) {
-    var lista = document.getElementById('dialog-versiones-lista');
-    var estadoVersiones = document.getElementById('dialog-versiones-estado');
-    var cerrarBtn = document.getElementById('dialog-versiones-cerrar');
-    var cargada = false;
-
-    function etiquetaMotivo(m) {
-      if (m === 'generado') return 'Generado';
-      if (m === 'edicion') return 'Edición';
-      if (m === 'aprobada') return 'Aprobada';
-      if (m === 'restaurada') return 'Restaurada';
-      return m;
-    }
-
-    function pintarVersiones(versiones) {
-      if (!lista) return;
-      lista.textContent = '';
-      if (!versiones.length) {
-        var vacio = document.createElement('p');
-        vacio.className = 'suave';
-        vacio.textContent = 'Todavía no hay versiones guardadas.';
-        lista.appendChild(vacio);
-        return;
-      }
-      for (var i = 0; i < versiones.length; i++) {
-        (function (v) {
-          var fila = document.createElement('div');
-          fila.className = 'version-fila';
-
-          var info = document.createElement('div');
-          info.className = 'version-info';
-          var motivo = document.createElement('span');
-          motivo.className = 'version-motivo';
-          motivo.textContent = 'v' + v.numero + ' · ' + etiquetaMotivo(v.motivo);
-          var meta = document.createElement('span');
-          meta.className = 'suave';
-          meta.textContent = (v.autor || 'Wozial') + ' · ' + String(v.creadoEn).slice(0, 10);
-          info.appendChild(motivo);
-          info.appendChild(meta);
-          fila.appendChild(info);
-
-          if (flujo.puedeEditar) {
-            var restaurar = document.createElement('button');
-            restaurar.type = 'button';
-            restaurar.className = 'panel-boton';
-            restaurar.textContent = 'Restaurar';
-            restaurar.addEventListener('click', function () {
-              if (!window.confirm('¿Restaurar la versión v' + v.numero + '? Se guardan los datos actuales antes de reemplazarlos.')) return;
-              restaurar.disabled = true;
-              fetch('/api/documentos/' + flujo.tipo + '/' + flujo.id + '/versiones', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ numero: v.numero }),
-              }).then(function (res) {
-                return res.json().then(function (b) { return { ok: b && b.ok, errores: b && b.errores }; });
-              }).then(function (r) {
-                if (r.ok) {
-                  window.location.reload();
-                } else {
-                  restaurar.disabled = false;
-                  if (estadoVersiones) estadoVersiones.textContent = (r.errores && r.errores[0]) || 'No se pudo restaurar.';
-                }
-              }).catch(function () {
-                restaurar.disabled = false;
-                if (estadoVersiones) estadoVersiones.textContent = 'Sin conexión.';
-              });
-            });
-            fila.appendChild(restaurar);
-          }
-
-          lista.appendChild(fila);
-        })(versiones[i]);
-      }
-    }
-
-    function cargarVersiones() {
-      if (lista) lista.textContent = 'Cargando…';
-      fetch('/api/documentos/' + flujo.tipo + '/' + flujo.id + '/versiones')
-        .then(function (res) { return res.json(); })
-        .then(function (b) {
-          if (b && b.ok) { pintarVersiones(b.versiones); cargada = true; }
-          else if (lista) { lista.textContent = ''; if (estadoVersiones) estadoVersiones.textContent = 'No se pudo cargar el historial.'; }
-        })
-        .catch(function () {
-          if (lista) lista.textContent = '';
-          if (estadoVersiones) estadoVersiones.textContent = 'Sin conexión.';
-        });
-    }
-
-    function abrirVersiones() {
-      if (estadoVersiones) estadoVersiones.textContent = '';
-      if (dialogoVersiones.showModal) dialogoVersiones.showModal(); else dialogoVersiones.setAttribute('open', 'open');
-      cargarVersiones();
-    }
-    function cerrarVersiones() {
-      if (dialogoVersiones.close) dialogoVersiones.close(); else dialogoVersiones.removeAttribute('open');
-    }
-
     btnVersiones.addEventListener('click', abrirVersiones);
     if (cerrarBtn) cerrarBtn.addEventListener('click', cerrarVersiones);
-    dialogoVersiones.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrarVersiones(); });
-    void cargada;
   }
 })();`;

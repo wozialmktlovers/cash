@@ -53,8 +53,11 @@ const cuerpoSchema = z.object({ numero: z.number().int().positive() });
  * la razón en español. Guarda los datos ACTUALES como versión `restaurada`
  * (el punto al que se podría volver de este restaurar), valida los datos de
  * la versión pedida y los deja como vigentes, todo en una transacción con
- * `SELECT ... FOR UPDATE`. Un documento aprobado que se restaura deja de
- * estarlo, igual que al editar.
+ * `SELECT ... FOR UPDATE` sobre la fila del resultado Y sobre la etapa (la
+ * autorización se repite ahí, sobre la fila ya bloqueada — igual que en el
+ * PATCH, B6 ronda de arreglos 1, punto 4). Un documento aprobado que se
+ * restaura deja de estarlo, igual que al editar, y solo si es el vigente de
+ * su etapa (punto 5).
  */
 export const POST: APIRoute = async ({ params, request, locals }) => {
   const tipoParam = params.tipo;
@@ -75,6 +78,8 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   const r = cuerpoSchema.safeParse(crudo);
   if (!r.success) return json({ ok: false, errores: r.error.issues.map((i) => i.message) }, 400);
 
+  // Primer chequeo, fuera de la transacción (salida rápida); la definitiva
+  // se repite abajo sobre la etapa ya bloqueada.
   const etapa = await etapaDelDocumento(doc.cliente.id, tipoParam, id);
   if (!etapa) return json({ ok: false, errores: ['El documento no existe'] }, 404);
 
@@ -89,6 +94,12 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
     const [actual] = await tx.select({ datos: tabla.datos }).from(tabla).where(eq(tabla.id, id)).for('update').limit(1);
     if (!actual) return { ok: false as const, status: 404 as const, errores: ['El documento no existe'] };
 
+    const [etapaFresca] = await tx.select().from(clienteEtapas).where(eq(clienteEtapas.id, etapa.id)).for('update').limit(1);
+    if (!etapaFresca) return { ok: false as const, status: 404 as const, errores: ['El documento no existe'] };
+    if (!puedeEditar(locals.usuario.rol, esOperadorAsignado, etapaFresca.estado)) {
+      return { ok: false as const, status: 409 as const, errores: ['El documento está en revisión; espera la decisión del administrador'] };
+    }
+
     const [versionPedida] = await tx
       .select({ datos: documentoVersiones.datos })
       .from(documentoVersiones)
@@ -96,18 +107,24 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       .limit(1);
     if (!versionPedida) return { ok: false as const, status: 404 as const, errores: ['La versión no existe'] };
 
-    const validado = validarDocumento(tipoParam, versionPedida.datos);
+    // La versión que se restaura se valida contra el documento ACTUAL (antes
+    // de reemplazarlo): si `lectura` ya venía rota, restaurar no debe
+    // bloquearse por eso (mismo criterio que editar — punto 6).
+    const validado = validarDocumento(tipoParam, versionPedida.datos, actual.datos);
     if (!validado.ok) return { ok: false as const, status: 400 as const, errores: validado.errores };
 
     const version = await guardarVersion(tipoParam, id, actual.datos, 'restaurada', locals.usuario.id, tx);
     await tx.update(tabla).set({ datos: versionPedida.datos }).where(eq(tabla.id, id));
 
-    const nuevoEstado = estadoTrasGenerar(etapa.estado);
-    if (nuevoEstado !== etapa.estado) {
-      await tx.update(clienteEtapas).set({ estado: nuevoEstado, actualizadoEn: new Date() }).where(eq(clienteEtapas.id, etapa.id));
-      await tx.insert(etapaEventos).values({
-        etapaId: etapa.id, accion: 'restaurada', de: etapa.estado, a: nuevoEstado, usuarioId: locals.usuario.id, comentario: null,
-      });
+    const esVigente = etapaFresca.documentoTipo === tipoParam && etapaFresca.documentoId === id;
+    if (esVigente) {
+      const nuevoEstado = estadoTrasGenerar(etapaFresca.estado);
+      if (nuevoEstado !== etapaFresca.estado) {
+        await tx.update(clienteEtapas).set({ estado: nuevoEstado, actualizadoEn: new Date() }).where(eq(clienteEtapas.id, etapaFresca.id));
+        await tx.insert(etapaEventos).values({
+          etapaId: etapaFresca.id, accion: 'restaurada', de: etapaFresca.estado, a: nuevoEstado, usuarioId: locals.usuario.id, comentario: null,
+        });
+      }
     }
 
     return { ok: true as const, version: version.numero };

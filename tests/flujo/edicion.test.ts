@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { aplicarCambios, validarDocumento, puedeEditar } from '@/flujo/edicion';
 import investigacionCompleta from '../fixtures/investigacion-completa.json';
+import lecturaEjemplo from '../fixtures/lectura-ejemplo.json';
 import growthCompleto from '../fixtures/growth-completo.json';
 import { mapaFalso } from '../fixtures/pilares';
 
@@ -128,6 +129,48 @@ describe('validarDocumento', () => {
     delete roto.competencia.datos.directos[0].fuente;
     const r = validarDocumento('research', roto);
     expect(r.ok).toBe(false);
+  });
+
+  it('research: los mensajes de error llevan la ruta del campo delante', () => {
+    const roto = JSON.parse(JSON.stringify(investigacionCompleta));
+    delete roto.competencia.datos.directos[0].fuente;
+    const r = validarDocumento('research', roto);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.errores.length).toBeGreaterThan(0);
+      // El formato es "a.b.0.c: mensaje" (igual que validarCliente en
+      // src/lib/clientes.ts) — B6, ronda de arreglos 1, punto 8.
+      expect(r.errores[0]).toMatch(/^competencia\.datos\.directos\.0\.fuente/);
+    }
+  });
+
+  it('research: una lectura vieja (inválida) no bloquea editar el resto del documento', () => {
+    // La lectura ya viene rota ANTES del cambio (le falta casi todo el
+    // esquema actual, como una investigación v1 sin `cifras`): el mismo
+    // `datos` como "antes" y "después" simula un cambio que no la toca.
+    const conLecturaRota = { ...investigacionCompleta, lectura: { estado: 'ok', datos: { portada: { titular: 'x', resumen: 'y' } } } };
+    const r = validarDocumento('research', conLecturaRota, conLecturaRota);
+    expect(r.ok).toBe(true);
+  });
+
+  it('research: sin `datosAnteriores`, la lectura sí se revalida (por seguridad)', () => {
+    const conLecturaRota = { ...investigacionCompleta, lectura: { estado: 'ok', datos: { portada: { titular: 'x', resumen: 'y' } } } };
+    const r = validarDocumento('research', conLecturaRota);
+    expect(r.ok).toBe(false);
+  });
+
+  it('research: si la lectura SÍ era válida antes, un cambio que la rompe se sigue rechazando', () => {
+    const antes = { ...investigacionCompleta, lectura: { estado: 'ok', datos: lecturaEjemplo } };
+    const despues = JSON.parse(JSON.stringify(antes));
+    delete despues.lectura.datos.portada; // rompe lecturaSchema
+    const r = validarDocumento('research', despues, antes);
+    expect(r.ok).toBe(false);
+  });
+
+  it('research: si la lectura era válida y el cambio no la toca, sigue validando (y pasa)', () => {
+    const antes = { ...investigacionCompleta, lectura: { estado: 'ok', datos: lecturaEjemplo } };
+    const r = validarDocumento('research', antes, antes);
+    expect(r.ok).toBe(true);
   });
 
   it('pilares: acepta el mapa de prueba (estrategia + temas)', () => {

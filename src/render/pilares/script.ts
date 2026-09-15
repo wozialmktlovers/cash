@@ -179,11 +179,23 @@ export const SCRIPT_PILARES = `(function () {
     aplicarFiltros();
     banco.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
   }
+  // La tarjeta de pilar (sección 03) es 'role="button"' y su nombre/pregunta
+  // llevan 'data-editable' (B6): en modo edición, un clic para poner el
+  // cursor en el texto, o el espacio al teclear una palabra, no debe saltar
+  // al banco. 'enModoEdicion' mira la misma clase que pone SCRIPT_FLUJO en
+  // <html> al entrar en modo edición.
+  function enModoEdicion() {
+    return document.documentElement.classList.contains('modo-edicion');
+  }
   var tarjetasPilar = document.querySelectorAll('[data-ir-pilar]');
   for (var h = 0; h < tarjetasPilar.length; h++) {
     (function (tarjeta) {
-      tarjeta.addEventListener('click', function () { irAPilar(tarjeta.getAttribute('data-ir-pilar')); });
+      tarjeta.addEventListener('click', function (e) {
+        if (enModoEdicion() || (e.target && e.target.isContentEditable)) return;
+        irAPilar(tarjeta.getAttribute('data-ir-pilar'));
+      });
       tarjeta.addEventListener('keydown', function (e) {
+        if (enModoEdicion() || (e.target && e.target.isContentEditable)) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); irAPilar(tarjeta.getAttribute('data-ir-pilar')); }
       });
     })(tarjetasPilar[h]);

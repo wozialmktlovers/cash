@@ -227,4 +227,55 @@ describe('SCRIPT_PILARES · comportamiento real (fake-dom)', () => {
     expect(tarjeta.hidden).toBe(false);
     expect(dom.contador.textContent).toBe('Mostrando 1 de 1');
   });
+
+  // B6, ronda de arreglos 1, punto 2: la tarjeta de pilar (sección 03) es
+  // 'role="button"' y navega al banco con clic/Enter/Espacio; su nombre y
+  // pregunta llevan `data-editable` (B6). En modo edición, un clic para
+  // poner el cursor o el espacio al teclear una palabra no debe saltar al
+  // banco.
+  describe('tarjeta de pilar [data-ir-pilar] vs. modo edición', () => {
+    function construirTarjetaPilar(doc: FakeDocument) {
+      const tarjeta = doc.createElement('article');
+      tarjeta.setAttribute('data-ir-pilar', '2');
+      tarjeta.setAttribute('role', 'button');
+      tarjeta.setAttribute('tabindex', '0');
+      doc.body.appendChild(tarjeta);
+      return tarjeta;
+    }
+
+    it('con <html class="modo-edicion">, un clic en la tarjeta no filtra el banco', () => {
+      const doc = new FakeDocument();
+      const win = new FakeWindow();
+      const dom = construirBanco(doc);
+      (dom.banco as any).scrollIntoView = () => {};
+      const tarjeta = construirTarjetaPilar(doc);
+      ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+      doc.documentElement.classList.add('modo-edicion');
+      tarjeta.dispatch('click');
+      expect(dom.filtroPilar.value).toBe('');
+
+      doc.documentElement.classList.remove('modo-edicion');
+      tarjeta.dispatch('click');
+      expect(dom.filtroPilar.value).toBe('2');
+    });
+
+    it('con el target contenteditable, Enter/Espacio en la tarjeta tampoco navegan', () => {
+      const doc = new FakeDocument();
+      const win = new FakeWindow();
+      const dom = construirBanco(doc);
+      (dom.banco as any).scrollIntoView = () => {};
+      const tarjeta = construirTarjetaPilar(doc);
+      const nombre = doc.createElement('h3');
+      (nombre as any).isContentEditable = true;
+      tarjeta.appendChild(nombre);
+      ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+      nombre.dispatch('keydown', { key: ' ' });
+      expect(dom.filtroPilar.value).toBe('');
+
+      tarjeta.dispatch('keydown', { key: 'Enter' });
+      expect(dom.filtroPilar.value).toBe('2');
+    });
+  });
 });

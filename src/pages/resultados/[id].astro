@@ -53,7 +53,11 @@ const html = renderizarInvestigacion(
         version: r.version, tipo: 'research', tokenActivo: activo?.token ?? null, base,
       }
     : undefined,
-  operable,
+  // `data-editable` solo cuando este usuario, en el estado ACTUAL de la
+  // etapa, puede editar — no basta con `operable` (un operador viendo un
+  // documento en revisión es operable, pero no puede editar) — B6, ronda de
+  // arreglos 1, punto 9.
+  Boolean(flujo?.puedeEditar),
   flujo,
 );
 ---
