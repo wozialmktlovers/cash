@@ -56,11 +56,48 @@ describe('pilarSchemaPara', () => {
 
 describe('reemplazosSchema', () => {
   it('acepta temas con id', () => {
-    expect(reemplazosSchema.safeParse({ temas: [{ id: 'P1-S1-01', texto: 'Nuevo', funcion: 'venta', formato: 'reel' }] }).success).toBe(true);
+    const r = reemplazosSchema.safeParse({ temas: [{ id: 'P1-S1-01', texto: 'Nuevo', funcion: 'venta', formato: 'reel' }] });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.temas).toHaveLength(1);
   });
-  it('rechaza números de tema fuera de 01-20', () => {
-    const conId = (id: string) => ({ temas: [{ id, texto: 'Nuevo', funcion: 'venta', formato: 'reel' }] });
-    expect(reemplazosSchema.safeParse(conId('P1-S1-00')).success).toBe(false);
-    expect(reemplazosSchema.safeParse(conId('P1-S1-21')).success).toBe(false);
+
+  // Parseo tolerante (spec §3): un reemplazo inválido no debe tirar el lote
+  // entero, porque los demás sí sirven para corregir sus duplicados.
+  it('descarta solo el reemplazo con número de tema fuera de 01-20; conserva los demás del lote', () => {
+    const conIdInvalido = (id: string) => ({
+      temas: [
+        { id, texto: 'Malo', funcion: 'venta', formato: 'reel' },
+        { id: 'P1-S1-05', texto: 'Bueno', funcion: 'venta', formato: 'reel' },
+      ],
+    });
+    const r0 = reemplazosSchema.safeParse(conIdInvalido('P1-S1-00'));
+    expect(r0.success).toBe(true);
+    if (r0.success) { expect(r0.data.temas).toHaveLength(1); expect(r0.data.temas[0].id).toBe('P1-S1-05'); }
+
+    const r21 = reemplazosSchema.safeParse(conIdInvalido('P1-S1-21'));
+    expect(r21.success).toBe(true);
+    if (r21.success) expect(r21.data.temas).toHaveLength(1);
+  });
+
+  it('un tema con función o formato inválidos también se descarta solo, sin tumbar el lote', () => {
+    const r = reemplazosSchema.safeParse({
+      temas: [
+        { id: 'P1-S1-01', texto: 'Malo', funcion: 'inventada', formato: 'reel' },
+        { id: 'P1-S1-02', texto: 'Bueno', funcion: 'venta', formato: 'story' },
+      ],
+    });
+    expect(r.success).toBe(true);
+    if (r.success) { expect(r.data.temas).toHaveLength(1); expect(r.data.temas[0].id).toBe('P1-S1-02'); }
+  });
+
+  it('un lote sin ningún reemplazo válido no revienta: temas queda vacío', () => {
+    const r = reemplazosSchema.safeParse({ temas: [{ id: 'no-valido', texto: 'x' }] });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.temas).toEqual([]);
+  });
+
+  it('sigue exigiendo que "temas" sea un arreglo, para que pedirJson reintente si el modelo no lo manda así', () => {
+    expect(reemplazosSchema.safeParse({ temas: 'no es un arreglo' }).success).toBe(false);
+    expect(reemplazosSchema.safeParse({}).success).toBe(false);
   });
 });

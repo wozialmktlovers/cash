@@ -45,3 +45,20 @@ export function contarEtapasConDatos(datos: unknown): number {
   return Object.values(datos as Record<string, any>)
     .filter((e) => e && typeof e === 'object' && e.estado === 'ok').length;
 }
+
+/**
+ * Entre varias filas de investigación del mismo cliente, la más reciente que
+ * sí tiene datos. El pipeline inserta una fila aunque las cinco etapas
+ * fallen (para dejar constancia del intento), así que la versión más alta no
+ * siempre sirve de base: si la v2 falló entera pero la v1 tiene datos, hay
+ * que generar sobre la v1. Growth y el mapa de pilares comparten esta regla
+ * con el precheck de la API para que lo que el operador ve como «listo»
+ * corresponda exactamente a la fila que el pipeline va a usar.
+ */
+export function investigacionUtil<T extends { datos: unknown; version: number }>(
+  resultados: T[],
+): T | undefined {
+  return resultados
+    .filter((r) => contarEtapasConDatos(r.datos) > 0)
+    .sort((a, b) => b.version - a.version)[0];
+}

@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { and, eq, or } from 'drizzle-orm';
 import { db, researchJobs, researchResults, clients } from '@/db';
-import { puedeGenerarGrowth, puedeGenerarPilares, contarEtapasConDatos } from '@/lib/precheck';
+import { puedeGenerarGrowth, puedeGenerarPilares, contarEtapasConDatos, investigacionUtil } from '@/lib/precheck';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -31,9 +31,9 @@ export const POST: APIRoute = async ({ request }) => {
 
   // El manual y el mapa de pilares parten de la investigación: sin ella no hay nada que razonar.
   if (tipo !== 'research') {
-    const previos = await db.select({ datos: researchResults.datos })
+    const previos = await db.select({ datos: researchResults.datos, version: researchResults.version })
       .from(researchResults).where(eq(researchResults.clientId, clientId));
-    const mejor = Math.max(0, ...previos.map((p) => contarEtapasConDatos(p.datos)));
+    const mejor = contarEtapasConDatos(investigacionUtil(previos)?.datos);
     const r = tipo === 'growth' ? puedeGenerarGrowth({ etapasConDatos: mejor }) : puedeGenerarPilares({ etapasConDatos: mejor });
     if (!r.ok) return json({ ok: false, errores: [r.razon] }, 409);
   }

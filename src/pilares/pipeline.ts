@@ -1,9 +1,9 @@
-import { eq, desc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db, researchJobs, researchResults, pilaresResults, clients, clientLinks, clientFiles } from '@/db';
 import { armarContexto } from '@/research/contexto';
 import { repartirPorTope, superaTope } from '@/research/pipeline';
-import { calcularCosto } from '@/lib/cost';
-import { contarEtapasConDatos } from '@/lib/precheck';
+import { calcularCosto, leerTopeUsd } from '@/lib/cost';
+import { investigacionUtil } from '@/lib/precheck';
 import { correrEstrategia, correrPilar, correrCorreccion } from './agentes';
 import {
   asignarIds, todosLosTemas, buscarDuplicados, mixReal, fueraDeMargen, aplicarReemplazos, sonParecidos,
@@ -39,9 +39,14 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
   const fallar = (error: string) => db.update(researchJobs)
     .set({ estado: 'fallido', error, finishedAt: new Date() }).where(eq(researchJobs.id, jobId));
 
-  const [investigacion] = await db.select().from(researchResults)
-    .where(eq(researchResults.clientId, job.clientId)).orderBy(desc(researchResults.version)).limit(1);
-  if (!investigacion || contarEtapasConDatos(investigacion.datos) === 0) {
+  // La más reciente CON DATOS, no la más reciente a secas: el pipeline
+  // inserta una fila aunque las cinco etapas fallen, así que la versión más
+  // alta puede estar vacía mientras una anterior sí tiene con qué trabajar.
+  // Misma regla que el precheck de POST /api/jobs, para que un cliente que
+  // la API deja «listo» nunca falle el job al arrancar.
+  const resultados = await db.select().from(researchResults).where(eq(researchResults.clientId, job.clientId));
+  const investigacion = investigacionUtil(resultados);
+  if (!investigacion) {
     await fallar('Este cliente no tiene una investigación con datos. El mapa de pilares parte de ella.');
     return;
   }
@@ -50,7 +55,7 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
   const archivos = await db.select().from(clientFiles).where(eq(clientFiles.clientId, job.clientId));
   const ctx = armarContexto(cliente, links, archivos);
 
-  const tope = Number(process.env.COST_LIMIT_USD || 15);
+  const tope = leerTopeUsd(process.env.COST_LIMIT_USD, 15, 'COST_LIMIT_USD');
   const modeloSin = process.env.MODEL_SYNTHESIS || 'claude-opus-5';
   const modeloInv = process.env.MODEL_RESEARCH || 'claude-sonnet-5';
   const estado: Record<string, string> = { ...(job.etapas as Record<string, string>) };

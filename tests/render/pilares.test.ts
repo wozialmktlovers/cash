@@ -47,6 +47,15 @@ describe('mapa de pilares · vista pública', () => {
     for (const s of ['Compartir', 'Exportar CSV', 'boton-estado', 'data-estado', 'Mix real del banco', '/api/pilares']) expect(marcado(html)).not.toContain(s);
     expect((html.match(/class="tema-tarjeta/g) ?? []).length).toBe(300);
   });
+
+  // Spec §5: «Exportar CSV» es interno (columnas con nota, estado, etc.), pero
+  // «Imprimir / PDF» no expone nada privado y debe estar también en la vista
+  // pública que recibe el cliente.
+  it('Imprimir / PDF sí está en la vista pública, aunque Exportar CSV no', () => {
+    expect(marcado(html)).toContain('data-accion="imprimir"');
+    expect(html).toContain('Imprimir / PDF');
+    expect(marcado(html)).not.toContain('data-accion="csv"');
+  });
 });
 
 describe('bordes', () => {

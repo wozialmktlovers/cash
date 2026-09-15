@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { revisarAntesDeInvestigar } from '@/lib/precheck';
+import { revisarAntesDeInvestigar, investigacionUtil, contarEtapasConDatos } from '@/lib/precheck';
 
 describe('revisión previa', () => {
   it('avisa cuando no hay enlaces ni archivos', () => {
@@ -66,5 +66,42 @@ describe('precheck del manual de campaña', () => {
     for (const malo of [null, undefined, 'texto', 42, []]) {
       expect(contarEtapasConDatos(malo)).toBe(0);
     }
+  });
+});
+
+describe('investigacionUtil', () => {
+  const ok = (n: number) => ({ estado: 'ok', datos: {} });
+  const vacia = { estado: 'vacio', razon: 'x' };
+
+  it('elige la más reciente entre las que sí tienen datos, no la más reciente a secas', () => {
+    // Caso del reporte: v1 con 4 etapas con datos, v2 falló entera pero el
+    // pipeline igual insertó su fila. Generar sobre v2 haría fallar el job
+    // aunque la API ya haya dicho que el cliente estaba listo.
+    const v1 = { version: 1, datos: { a: ok(1), b: ok(1), c: ok(1), d: ok(1) } };
+    const v2 = { version: 2, datos: { a: vacia, b: vacia, c: vacia, d: vacia, e: vacia } };
+    expect(investigacionUtil([v1, v2])).toBe(v1);
+  });
+
+  it('entre dos versiones con datos, gana la más reciente', () => {
+    const v1 = { version: 1, datos: { a: ok(1), b: ok(1) } };
+    const v2 = { version: 2, datos: { a: ok(1) } };
+    expect(investigacionUtil([v1, v2])).toBe(v2);
+  });
+
+  it('sin ninguna con datos, no devuelve nada', () => {
+    const v1 = { version: 1, datos: { a: vacia } };
+    const v2 = { version: 2, datos: {} };
+    expect(investigacionUtil([v1, v2])).toBeUndefined();
+  });
+
+  it('lista vacía no revienta', () => {
+    expect(investigacionUtil([])).toBeUndefined();
+  });
+
+  it('el conteo de la elegida coincide con lo que usaría el precheck de la API', () => {
+    const v1 = { version: 1, datos: { a: ok(1), b: ok(1), c: ok(1), d: ok(1) } };
+    const v2 = { version: 2, datos: {} };
+    const elegida = investigacionUtil([v1, v2]);
+    expect(contarEtapasConDatos(elegida?.datos)).toBe(4);
   });
 });

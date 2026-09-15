@@ -1,6 +1,6 @@
 import { eq, desc } from 'drizzle-orm';
 import { db, researchJobs, researchResults, growthResults, clients } from '@/db';
-import { calcularCosto } from '@/lib/cost';
+import { calcularCosto, leerTopeUsd } from '@/lib/cost';
 import { repartirPorTope, superaTope } from '@/research/pipeline';
 import { armarContextoGrowth } from './contexto';
 import { correrEstructura } from './agents/estructura';
@@ -47,7 +47,7 @@ export async function ejecutarGrowth(jobId: string): Promise<void> {
     return;
   }
 
-  const tope = Number(process.env.COST_LIMIT_USD || 15);
+  const tope = leerTopeUsd(process.env.COST_LIMIT_USD, 15, 'COST_LIMIT_USD');
   const modelo = process.env.MODEL_RESEARCH || 'claude-sonnet-5';
   const ctx = armarContextoGrowth(investigacion.datos as any, cliente);
 

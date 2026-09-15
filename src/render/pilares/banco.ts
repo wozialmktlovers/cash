@@ -143,7 +143,8 @@ function herramientas(mapa: MapaPilares, interna: boolean, total: number): strin
       <select data-filtro="formato" aria-label="Filtrar por formato"><option value="">Todos los formatos</option>${opcionesFormato}</select>
       ${interna ? `<select data-filtro="estado" aria-label="Filtrar por estado"><option value="">Todos los estados</option>${opcionesEstado}</select>` : ''}
       <button type="button" data-accion="limpiar">Limpiar</button>
-      ${interna ? `<button type="button" data-accion="csv">Exportar CSV</button><button type="button" data-accion="imprimir">Imprimir / PDF</button>` : ''}
+      ${interna ? `<button type="button" data-accion="csv">Exportar CSV</button>` : ''}
+      <button type="button" data-accion="imprimir">Imprimir / PDF</button>
     </div>
   </div>`;
 }

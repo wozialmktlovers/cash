@@ -76,12 +76,30 @@ export function pilarSchemaPara(nombres: string[]) {
 }
 export type PilarGenerado = { subcategorias: { nombre: string; temas: TemaGenerado[] }[] };
 
-export const reemplazosSchema = z.object({
-  // El número de tema va de 01 a 20: nada de 00 ni de 21 en adelante.
-  temas: z.array(z.object({ id: z.string().regex(/^P[1-5]-S[1-3]-(0[1-9]|1\d|20)$/), ...temaGeneradoSchema.shape })),
-});
-
 export type Tema = TemaGenerado & { id: string };
+
+// El número de tema va de 01 a 20: nada de 00 ni de 21 en adelante.
+const reemplazoTemaSchema = z.object({ id: z.string().regex(/^P[1-5]-S[1-3]-(0[1-9]|1\d|20)$/), ...temaGeneradoSchema.shape });
+
+/**
+ * A diferencia de los esquemas de arriba, este es tolerante tema por tema:
+ * un reemplazo inválido no debe tirar todo el lote de corrección, porque
+ * los demás sí sirven y perderlos deja duplicados que sí se podían arreglar.
+ * `temas` debe seguir siendo un arreglo (si el modelo devuelve otra cosa,
+ * `pedirJson` reintenta con el error de esquema de aquí), pero cada elemento
+ * se valida aparte: el que no pase el esquema del tema simplemente se cae
+ * del resultado, en vez de invalidar los que sí pasaron.
+ */
+export const reemplazosSchema = z.object({
+  temas: z.array(z.unknown()),
+}).transform((v): { temas: Tema[] } => {
+  const temas: Tema[] = [];
+  for (const item of v.temas) {
+    const r = reemplazoTemaSchema.safeParse(item);
+    if (r.success) temas.push(r.data);
+  }
+  return { temas };
+});
 export type PilarMapa =
   | { numero: number; estado: 'ok'; subcategorias: { nombre: string; temas: Tema[] }[] }
   | { numero: number; estado: 'vacio'; razon: string };

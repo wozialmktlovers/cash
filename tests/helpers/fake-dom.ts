@@ -68,6 +68,8 @@ export class FakeElement {
   get id(): string { return this.attrs.id ?? ''; }
   set id(v: string) { this.attrs.id = v; }
 
+  get parentNode(): FakeElement | null { return this.parent; }
+
   getAttribute(name: string): string | null { return name in this.attrs ? this.attrs[name] : null; }
   setAttribute(name: string, value: string): void { this.attrs[name] = String(value); }
   removeAttribute(name: string): void { delete this.attrs[name]; }
@@ -100,8 +102,12 @@ export class FakeElement {
   }
 
   appendChild(el: FakeElement): FakeElement { el.parent = this; this.children.push(el); return el; }
+  removeChild(el: FakeElement): FakeElement { this.children = this.children.filter((c) => c !== el); el.parent = null; return el; }
 
   focus(): void { this.doc.activeElement = this; }
+
+  /** No-op: alcanza para los scripts que llaman a `elemento.click()` a mano (por ejemplo, el <a> de descarga del CSV). */
+  click(): void {}
 
   addEventListener(type: string, fn: (e: any) => void): void {
     (this.listeners[type] ??= []).push(fn);

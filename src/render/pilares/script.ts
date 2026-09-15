@@ -235,6 +235,10 @@ export const SCRIPT_PILARES = `(function () {
         tarjeta.setAttribute('data-estado', nuevo);
         boton.setAttribute('data-estado-actual', nuevo);
         boton.textContent = ETIQUETA_ESTADO[nuevo];
+        // Si hay un filtro de estado activo, la tarjeta puede dejar de (o
+        // empezar a) hacer match: sin esto el contador y el CSV quedaban
+        // desfasados de lo que se veía hasta el siguiente filtro manual.
+        aplicarFiltros();
 
         var m = obtenerMeta(tarjeta);
         m.el.textContent = 'Guardado';
@@ -254,6 +258,7 @@ export const SCRIPT_PILARES = `(function () {
           tarjeta.setAttribute('data-estado', anterior);
           boton.setAttribute('data-estado-actual', anterior);
           boton.textContent = ETIQUETA_ESTADO[anterior];
+          aplicarFiltros();
           m.el.textContent = 'No se pudo guardar';
           setTimeout(function () {
             if (m.creado) { if (m.el.parentNode) m.el.parentNode.removeChild(m.el); }
@@ -310,8 +315,12 @@ export const SCRIPT_PILARES = `(function () {
       var texto = notaTexto ? notaTexto.value : '';
       guardarCambio(temaEnvio, { nota: texto }, function () {
         if (botonEnvio) {
-          botonEnvio.setAttribute('data-nota', texto);
-          botonEnvio.classList.toggle('con-nota', !!texto);
+          // El servidor guarda la nota recortada (ver validarCambioTema); el
+          // botón debe reflejar lo mismo, si no la próxima vez que se abra
+          // el panel mostraría espacios que ya no están guardados.
+          var textoGuardado = texto.trim();
+          botonEnvio.setAttribute('data-nota', textoGuardado);
+          botonEnvio.classList.toggle('con-nota', !!textoGuardado);
         }
         if (notaEstado) notaEstado.textContent = 'Guardada.';
       }, function () {
@@ -327,8 +336,10 @@ export const SCRIPT_PILARES = `(function () {
   function celdaSegura(v) {
     var s = String(v == null ? '' : v);
     // Protección contra inyección de fórmulas: si Excel/Sheets abre el CSV,
-    // una celda que empiece con = + - @ puede ejecutarse como fórmula.
-    if (/^[=+\\-@]/.test(s)) s = "'" + s;
+    // una celda que empiece con = + - @ (o con tab/retorno de carro, que
+    // algunos lectores saltan antes de mirar el primer caracter "visible")
+    // puede ejecutarse como fórmula.
+    if (/^[=+\\-@\\t\\r]/.test(s)) s = "'" + s;
     return s;
   }
   var botonCsv = banco.querySelector('[data-accion="csv"]');
