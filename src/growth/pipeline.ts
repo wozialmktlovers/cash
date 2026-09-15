@@ -1,6 +1,7 @@
-import { eq, desc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db, researchJobs, researchResults, growthResults, clients } from '@/db';
 import { calcularCosto, leerTopeUsd } from '@/lib/cost';
+import { investigacionUtil } from '@/lib/precheck';
 import { repartirPorTope, superaTope } from '@/research/pipeline';
 import { armarContextoGrowth } from './contexto';
 import { correrEstructura } from './agents/estructura';
@@ -35,9 +36,9 @@ export async function ejecutarGrowth(jobId: string): Promise<void> {
 
   // El manual solo existe encadenado a una investigación. Sin ella no hay nada
   // sobre lo que razonar, y generarlo igualmente sería inventar la campaña.
-  const [investigacion] = await db.select().from(researchResults)
-    .where(eq(researchResults.clientId, job.clientId))
-    .orderBy(desc(researchResults.version)).limit(1);
+  // La misma regla que la API: la investigación más reciente que tenga datos.
+  const investigaciones = await db.select().from(researchResults).where(eq(researchResults.clientId, job.clientId));
+  const investigacion = investigacionUtil(investigaciones);
 
   if (!investigacion) {
     await db.update(researchJobs).set({
