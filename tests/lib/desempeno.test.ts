@@ -207,13 +207,14 @@ describe('tiemposPorEtapa', () => {
     expect(tiemposPorEtapa(eventos).esperaRevision).toEqual([]);
   });
 
-  it('respuestaCambios: pedir_cambios, reabrir y comentario_cliente hasta el siguiente solicitar', () => {
+  it('respuestaCambios: pedir_cambios, reabrir y comentario_cliente (que cambia el estado) hasta el siguiente solicitar', () => {
     const eventos = [
-      ev({ etapaId: 'e1', accion: 'pedir_cambios', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
+      ev({ etapaId: 'e1', accion: 'pedir_cambios', de: 'en_revision', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
       ev({ etapaId: 'e1', accion: 'solicitar', a: 'en_revision', creadoEn: new Date('2026-01-03T00:00:00Z') }),
-      ev({ etapaId: 'e2', accion: 'reabrir', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
+      ev({ etapaId: 'e2', accion: 'reabrir', de: 'aprobada', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
       ev({ etapaId: 'e2', accion: 'solicitar', a: 'en_revision', creadoEn: new Date('2026-01-02T00:00:00Z') }),
-      ev({ etapaId: 'e3', accion: 'comentario_cliente', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
+      // comentario_cliente que sí reabre (de !== a): cuenta.
+      ev({ etapaId: 'e3', accion: 'comentario_cliente', de: 'aprobada', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
       ev({ etapaId: 'e3', accion: 'solicitar', a: 'en_revision', creadoEn: new Date('2026-01-05T00:00:00Z') }),
     ];
     expect(tiemposPorEtapa(eventos).respuestaCambios.sort((a, b) => a - b)).toEqual([1, 2, 4]);
@@ -222,6 +223,19 @@ describe('tiemposPorEtapa', () => {
   it('un pedir_cambios sin solicitar posterior no cuenta', () => {
     const eventos = [ev({ etapaId: 'e1', accion: 'pedir_cambios', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') })];
     expect(tiemposPorEtapa(eventos).respuestaCambios).toEqual([]);
+  });
+
+  it('respuestaCambios: comentario_cliente que NO cambia el estado (de === a) no cuenta — evita que observaciones seguidas infl en la métrica', () => {
+    const eventos = [
+      // Reapertura real: aprobada → con_cambios. Cuenta una vez.
+      ev({ etapaId: 'e1', etapa: 'manual_campana', accion: 'comentario_cliente', de: 'aprobada', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
+      // Dos observaciones más del cliente sobre la misma etapa, ya en con_cambios: no reabren nada, no deben sumar muestras.
+      ev({ etapaId: 'e1', etapa: 'manual_campana', accion: 'comentario_cliente', de: 'con_cambios', a: 'con_cambios', creadoEn: new Date('2026-01-02T00:00:00Z') }),
+      ev({ etapaId: 'e1', etapa: 'manual_campana', accion: 'comentario_cliente', de: 'con_cambios', a: 'con_cambios', creadoEn: new Date('2026-01-03T00:00:00Z') }),
+      ev({ etapaId: 'e1', etapa: 'manual_campana', accion: 'solicitar', a: 'en_revision', creadoEn: new Date('2026-01-06T00:00:00Z') }),
+    ];
+    // Antes del fix: 3 muestras (5, 4, 3 días). Ahora: solo 1, de la reapertura real (1 al 6 = 5 días).
+    expect(tiemposPorEtapa(eventos).respuestaCambios).toEqual([5]);
   });
 });
 
@@ -238,6 +252,17 @@ describe('calidad', () => {
   it('etapa nunca aprobada no cuenta', () => {
     const eventos = [ev({ etapaId: 'e1', accion: 'pedir_cambios', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') })];
     expect(calidad(eventos, []).rondasPorEtapaAprobada).toEqual([]);
+  });
+
+  it('rondasPorEtapaAprobada: una reapertura del cliente que cambió el estado (comentario_cliente, de !== a) también cuenta como ronda; las que no cambiaron el estado no', () => {
+    const eventos = [
+      ev({ etapaId: 'e1', etapa: 'manual_campana', accion: 'comentario_cliente', de: 'aprobada', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
+      ev({ etapaId: 'e1', etapa: 'manual_campana', accion: 'comentario_cliente', de: 'con_cambios', a: 'con_cambios', creadoEn: new Date('2026-01-02T00:00:00Z') }),
+      ev({ etapaId: 'e1', etapa: 'manual_campana', accion: 'solicitar', a: 'en_revision', creadoEn: new Date('2026-01-03T00:00:00Z') }),
+      ev({ etapaId: 'e1', etapa: 'manual_campana', accion: 'aprobar', a: 'aprobada', creadoEn: new Date('2026-01-04T00:00:00Z') }),
+    ];
+    // Solo la primera comentario_cliente reabrió de verdad (de !== a): 1 ronda, no 2.
+    expect(calidad(eventos, []).rondasPorEtapaAprobada).toEqual([1]);
   });
 
   it('comentarios por entregable: promedios de admin/operador y de cliente entre etapaIds con comentarios', () => {

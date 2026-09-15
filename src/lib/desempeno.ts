@@ -177,6 +177,30 @@ function siguienteConAccion(evs: Evento[], desdeIndex: number, acciones: string[
 
 const ETAPAS_VACIAS: Etapa[] = ['investigacion', 'pilares', 'desarrollo_mensual', 'manual_campana'];
 
+/**
+ * Un evento cuenta como "ronda de cambios" (dispara una nueva espera de
+ * respuesta en `respuestaCambios` y suma en `rondasPorEtapaAprobada`) cuando
+ * de verdad representa trabajo pedido de nuevo, no cualquier comentario:
+ * - `pedir_cambios` y `reabrir`: acciones del admin, siempre cambian el
+ *   estado (`aplicarAccion` solo las permite desde `en_revision`/`aprobada`),
+ *   así que son transiciones reales por definición.
+ * - `comentario_cliente`: el cliente puede dejar varias observaciones
+ *   seguidas sobre la misma etapa sin que eso reabra nada (`de === a` la
+ *   mayoría de las veces — `estadoTrasComentarioCliente`, src/flujo/reglas.ts,
+ *   solo cambia el estado si la etapa estaba `aprobada`). Antes de este fix,
+ *   cada `comentario_cliente` contaba como una ronda propia, así que tres
+ *   observaciones seguidas sobre la misma reapertura inflaban "respuesta a
+ *   cambios" a tres muestras en vez de una. Ahora solo cuenta cuando de
+ *   verdad reabrió la etapa (`de !== a`): la decisión explícita que pide la
+ *   tarea I4 es que SÍ cuenta como ronda (spec §5: es una reapertura causada
+ *   por el cliente, equivalente en esfuerzo a un `reabrir` del admin), pero
+ *   solo una vez por reapertura real, no una por cada observación.
+ */
+function esRondaDeCambios(e: Evento): boolean {
+  if (e.accion === 'pedir_cambios' || e.accion === 'reabrir') return true;
+  return e.accion === 'comentario_cliente' && e.de !== e.a;
+}
+
 // Nota (fix wave, #11): a propósito, `tiemposPorEtapa` y `calidad` no filtran
 // por `interna` — reciben el `eventos`/`comentarios` que les pase la página,
 // que hoy incluye las etapas internas. Los tiempos y las rondas de cambio
@@ -212,7 +236,7 @@ export function tiemposPorEtapa(eventos: Evento[]): {
         const decision = siguienteConAccion(evs, i, ['aprobar', 'pedir_cambios']);
         if (decision) esperaRevision.push(diasEntre(e.creadoEn, decision.creadoEn));
       }
-      if (e.accion === 'pedir_cambios' || e.accion === 'reabrir' || e.accion === 'comentario_cliente') {
+      if (esRondaDeCambios(e)) {
         const solicitud = siguienteConAccion(evs, i, ['solicitar']);
         if (solicitud) respuestaCambios.push(diasEntre(e.creadoEn, solicitud.creadoEn));
       }
@@ -235,7 +259,7 @@ export function calidad(
   for (const evs of porEtapaId.values()) {
     const tieneAprobacion = evs.some((e) => e.accion === 'aprobar');
     if (!tieneAprobacion) continue;
-    const rondas = evs.filter((e) => e.accion === 'pedir_cambios' || e.accion === 'reabrir').length;
+    const rondas = evs.filter(esRondaDeCambios).length;
     rondasPorEtapaAprobada.push(rondas);
   }
 
