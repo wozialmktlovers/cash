@@ -25,7 +25,8 @@ export function validarCambioUsuario(
 
   // Un usuario cliente sin `client_id` solo puede existir inactivo (CHECK de
   // la migración 0005, M2 punto 6): reactivarlo violaría la restricción y
-  // además no tendría portal que ver. Hay que invitarlo de nuevo a un cliente.
+  // además no tendría portal que ver. Como la invitación rechaza correos que ya
+  // tienen cuenta, el acceso se da invitando a esa persona con otro correo.
   if (cambio.activo === true && objetivo.rol === 'cliente' && objetivo.clientId === null) {
     return { ok: false, error: 'cliente-sin-cliente' };
   }

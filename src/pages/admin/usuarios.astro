@@ -329,7 +329,9 @@ const invitacionesEquipo = await db
     'no-autodesactivar': 'No puedes desactivarte a ti mismo.',
     'no-autodegradarse': 'No puedes quitarte tu propio rol de admin.',
     'ultimo-admin': 'Es el último admin activo: no se puede desactivar ni degradar.',
-    'cliente-sin-cliente': 'Este usuario ya no pertenece a ningún cliente: invítalo de nuevo desde la ficha del cliente.',
+    // No «invítalo de nuevo»: POST /api/invitaciones rechaza (ya-existe) cualquier
+    // correo con cuenta, y ninguna pantalla reasigna el cliente de un usuario.
+    'cliente-sin-cliente': 'No se puede reactivar: esta cuenta ya no pertenece a ningún cliente. Para darle acceso a esa persona, invítala con otro correo desde la ficha del cliente.',
     'no-existe': 'Ese usuario ya no existe.',
     'sin-conexion': 'No se pudo contactar al servidor.',
   };
