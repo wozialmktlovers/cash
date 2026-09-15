@@ -27,10 +27,10 @@ function regenerarHref(o: OpcionesBarra): string {
  * <header> a propósito: la cápsula recorta su contenido con `overflow:hidden`
  * para redondear la barra de progreso, y el panel no debe quedar atrapado ahí.
  */
-function panelCompartir(o: OpcionesBarra): string {
+function panelCompartir(o: OpcionesBarra, etiqueta: string): string {
   const url = o.tokenActivo ? `${o.base}/p/${o.clienteSlug}/${o.tokenActivo}` : '';
 
-  return `<div class="panel-compartir" id="panel-compartir" role="dialog" aria-label="Compartir investigación" hidden>
+  return `<div class="panel-compartir" id="panel-compartir" role="dialog" aria-label="Compartir ${escapar(etiqueta.toLowerCase())}" hidden>
     <p class="panel-eyebrow">Vista interna · v${o.version}</p>
     <div class="panel-link" id="panel-link" ${o.tokenActivo ? '' : 'hidden'}>
       <input class="panel-url" id="panel-url" type="text" readonly aria-label="URL pública" value="${escapar(url)}" data-token="${escapar(o.tokenActivo ?? '')}">
@@ -68,7 +68,7 @@ export function cabeceraDocumento(o: { etiqueta: string; cliente: string; operad
   </div>
   <div class="cabecera-progreso" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de lectura"></div>
 </header>
-${o.operador ? panelCompartir(o.operador) : ''}`;
+${o.operador ? panelCompartir(o.operador, o.etiqueta) : ''}`;
 }
 
 /**

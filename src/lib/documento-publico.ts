@@ -3,6 +3,7 @@ import { db, researchResults, growthResults, pilaresResults, clients, clientLink
 import { resolverShareLink } from '@/lib/share';
 import { renderizarInvestigacion } from '@/render/investigacion/documento';
 import { renderizarManual } from '@/render/growth/manual';
+import { renderizarPilares } from '@/render/pilares/documento';
 import { slugificar } from '@/lib/slug';
 
 /**
@@ -38,7 +39,6 @@ export async function resolverDocumentoPublico(token: string): Promise<
     : [undefined];
 
   // El link público nunca lleva barra de operador: es lo que ve el cliente.
-  // El render del mapa de pilares llega en P6; hasta entonces, un HTML mínimo.
   const html = link.documentoTipo === 'growth'
     ? renderizarManual(r.datos as any, {
         cliente: c.nombre, producto: c.producto, fecha,
@@ -47,7 +47,7 @@ export async function resolverDocumentoPublico(token: string): Promise<
         creadoEn: r.createdAt,
       })
     : link.documentoTipo === 'pilares'
-    ? '<!DOCTYPE html><title>Mapa de pilares</title><p>Disponible pronto.</p>'
+    ? renderizarPilares(r.datos as any, { cliente: c.nombre, fecha })
     : renderizarInvestigacion(r.datos as any, { cliente: c.nombre, giro: c.giro, fecha });
 
   return { tipo: 'html', html, slug: slugificar(c.nombre) };
