@@ -105,12 +105,17 @@ const ETIQUETA_ROL: Record<'admin' | 'operador', string> = { admin: 'Admin', ope
     ) : (
       <ul class="lista">
         {usuariosCliente.map((u) => (
-          <li class="renglon">
+          <li class="renglon" data-usuario-id={u.id}>
             <div class="cuerpo">
               <strong>{u.nombre ?? u.email}</strong>
               <p class="secundario">{u.email} · {u.clientId ? (nombrePorCliente.get(u.clientId) ?? 'Cliente') : 'Sin cliente'}</p>
             </div>
-            <span class={`etiqueta ${u.activo ? 'completado' : 'cancelado'}`}>{u.activo ? 'Activo' : 'Inactivo'}</span>
+            {/* Mismo control que el equipo (la API ya permite desactivar/reactivar
+                un usuario de cliente): antes era una etiqueta de solo lectura. */}
+            <label class="switch" title={u.activo ? 'Activo' : 'Inactivo'}>
+              <input type="checkbox" class="activo-switch" data-id={u.id} checked={u.activo} aria-label={`Activo: ${u.nombre ?? u.email}`} />
+              <span class="riel"><span class="perilla"></span></span>
+            </label>
           </li>
         ))}
       </ul>
@@ -246,13 +251,22 @@ const ETIQUETA_ROL: Record<'admin' | 'operador', string> = { admin: 'Admin', ope
   }
 
   async function patchUsuario(id: string, cambio: Record<string, unknown>) {
-    const res = await fetch(`/api/admin/usuarios/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cambio),
-    });
-    const json = await res.json();
-    return { ok: res.ok && json.ok, error: json.error as string | undefined };
+    try {
+      const res = await fetch(`/api/admin/usuarios/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cambio),
+      });
+      const json = await res.json();
+      return { ok: res.ok && json.ok, error: json.error as string | undefined };
+    } catch {
+      // Sin red, servidor caído o respuesta que no es JSON: ninguno de los
+      // dos listeners de abajo envolvía esta llamada, así que una falla acá
+      // no revertía el control ni avisaba nada, y como nunca se llegaba al
+      // 'finally' de más abajo, el select o el switch se quedaban
+      // deshabilitados para siempre.
+      return { ok: false, error: 'sin-conexion' };
+    }
   }
 
   const MENSAJES_CAMBIO: Record<string, string> = {
@@ -262,6 +276,7 @@ const ETIQUETA_ROL: Record<'admin' | 'operador', string> = { admin: 'Admin', ope
     'no-autodegradarse': 'No puedes quitarte tu propio rol de admin.',
     'ultimo-admin': 'Es el último admin activo: no se puede desactivar ni degradar.',
     'no-existe': 'Ese usuario ya no existe.',
+    'sin-conexion': 'No se pudo contactar al servidor.',
   };
 
   document.querySelectorAll<HTMLSelectElement>('.rol-select').forEach((select) => {
