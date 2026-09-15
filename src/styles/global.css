@@ -216,7 +216,10 @@ a.tarjeta:hover { transform: translateY(-2px); border-color: color-mix(in srgb, 
 .avatar.azul { background: var(--azul-s); color: var(--azul); }
 .avatar.amarillo { background: var(--amarillo-s); color: var(--amarillo); }
 
-.cliente-tarjeta { display: flex; gap: 18px; align-items: flex-start; }
+/* a.tarjeta (arriba) tenía más especificidad (0,1,1) que .cliente-tarjeta
+   (0,1,0) y anulaba el display:flex, dejando el avatar arriba del nombre
+   en vez de al lado. Se iguala la especificidad aquí para que gane. */
+a.cliente-tarjeta, .cliente-tarjeta { display: flex; gap: 18px; align-items: flex-start; }
 .cliente-tarjeta .cuerpo { min-width: 0; flex: 1; }
 .cliente-tarjeta h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cliente-tarjeta .pie { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; font: var(--t-small); }
