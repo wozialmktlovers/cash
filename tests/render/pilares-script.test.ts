@@ -100,6 +100,52 @@ describe('SCRIPT_PILARES · comportamiento real (fake-dom)', () => {
   beforeEach(() => { fetchOriginal = globalThis.fetch; });
   afterEach(() => { globalThis.fetch = fetchOriginal; });
 
+  it('el CSV exporta el nombre legible de la subcategoría (data-subcategoria-nombre), no el índice estable (item 2)', async () => {
+    const doc = new FakeDocument();
+    const win = new FakeWindow();
+    const dom = construirBanco(doc);
+    const { tarjeta } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'pendiente', texto: 'Uno' });
+    // 'construirBanco' pone 'data-subcategoria' con el índice estable, como
+    // lo hace ahora 'banco.ts'; el nombre legible vive aparte.
+    tarjeta.setAttribute('data-subcategoria', 'p1-s1');
+    tarjeta.setAttribute('data-subcategoria-nombre', 'Reels de producto');
+
+    ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+    let capturado: Blob | null = null;
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+    (URL as any).createObjectURL = (b: Blob) => { capturado = b; return 'blob:mock'; };
+    (URL as any).revokeObjectURL = () => {};
+    try {
+      dom.botonCsv.dispatch('click');
+    } finally {
+      URL.createObjectURL = originalCreate;
+      URL.revokeObjectURL = originalRevoke;
+    }
+
+    const csv = await (capturado as unknown as Blob).text();
+    expect(csv).toContain('Reels de producto');
+    expect(csv).not.toContain('p1-s1');
+  });
+
+  it('editar el texto de un tema actualiza data-busqueda de inmediato, sin esperar a guardar (item 2)', () => {
+    const doc = new FakeDocument();
+    const win = new FakeWindow();
+    const dom = construirBanco(doc);
+    const { tarjeta, textoEl } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'pendiente', texto: 'Texto original' });
+    tarjeta.setAttribute('data-subcategoria-nombre', 'Sub 1');
+
+    ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+    expect(tarjeta.getAttribute('data-busqueda')).not.toContain('palabra nueva insertada');
+
+    textoEl.textContent = 'Palabra nueva insertada';
+    textoEl.dispatch('input');
+
+    expect(tarjeta.getAttribute('data-busqueda')).toContain('palabra nueva insertada');
+  });
+
   it('protege contra fórmulas también cuando la celda empieza con tab o retorno de carro (item 5)', async () => {
     const doc = new FakeDocument();
     const win = new FakeWindow();

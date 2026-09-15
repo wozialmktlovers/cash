@@ -171,6 +171,34 @@ export const SCRIPT_PILARES = `(function () {
   actualizarSubcategorias();
   aplicarFiltros();
 
+  // ── Modo edición: mantener 'data-busqueda' al día ──────────────────────
+  // El texto del tema es '[data-editable]' en modo edición (SCRIPT_FLUJO lo
+  // vuelve contenteditable), pero 'data-busqueda' se calculó una sola vez en
+  // el servidor con el texto de entonces. Sin esto, escribir un tema nuevo
+  // y buscarlo de inmediato (antes de guardar y recargar) no lo encontraba.
+  // Solo se toca 'data-busqueda': no se llama a 'aplicarFiltros()' aquí para
+  // no esconder de golpe la tarjeta que la persona sigue editando.
+  function actualizarBusqueda(tarjeta) {
+    var id = tarjeta.getAttribute('data-tema') || '';
+    var sub = tarjeta.getAttribute('data-subcategoria-nombre') || '';
+    var textoEl = tarjeta.querySelector('.tema-texto');
+    var texto = textoEl ? textoEl.textContent : '';
+    var funcionEl = tarjeta.querySelector('.etiqueta-funcion');
+    var funcion = funcionEl ? funcionEl.textContent : '';
+    var formatoEl = tarjeta.querySelector('.etiqueta-formato');
+    var formato = formatoEl ? formatoEl.textContent : '';
+    tarjeta.setAttribute('data-busqueda', normalizarTexto([id, texto, sub, funcion, formato].join(' ')));
+  }
+  var textosTema = banco.querySelectorAll('.tema-texto');
+  for (var te = 0; te < textosTema.length; te++) {
+    (function (elTexto) {
+      elTexto.addEventListener('input', function () {
+        var tarjeta = elTexto.closest('.tema-tarjeta');
+        if (tarjeta) actualizarBusqueda(tarjeta);
+      });
+    })(textosTema[te]);
+  }
+
   // ── Tarjeta de pilar (sección 03) → filtra y baja al banco ────────────
   function irAPilar(n) {
     var selPilar = banco.querySelector('[data-filtro="pilar"]');
@@ -434,7 +462,10 @@ export const SCRIPT_PILARES = `(function () {
       filas.push([
         t.getAttribute('data-tema') || '',
         t.getAttribute('data-pilar') || '',
-        t.getAttribute('data-subcategoria') || '',
+        // El CSV es para leer, no para filtrar: usa el nombre legible
+        // ('data-subcategoria-nombre'), no el identificador estable
+        // ('data-subcategoria', que ahora es 'p1-s2') que sí usa el filtro.
+        t.getAttribute('data-subcategoria-nombre') || '',
         textoEl ? textoEl.textContent : '',
         t.getAttribute('data-funcion') || '',
         t.getAttribute('data-formato') || '',

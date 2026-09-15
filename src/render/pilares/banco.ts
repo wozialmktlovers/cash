@@ -29,14 +29,20 @@ function contarAvance(temas: Tema[], avance?: Record<string, AvanceTema>): { tot
   return { total: temas.length, hechos };
 }
 
-function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: boolean, avance?: Record<string, AvanceTema>, ruta?: string, anclas = false): string {
+function tarjetaTema(t: Tema, pilarNum: number, subIndice: number, subNombre: string, interna: boolean, avance?: Record<string, AvanceTema>, ruta?: string, anclas = false): string {
   const av = avance?.[t.id];
   const estado: EstadoTema = av?.estado ?? 'pendiente';
   const busqueda = normalizar([t.id, t.texto, subNombre, ETIQUETA_FUNCION[t.funcion], ETIQUETA_FORMATO[t.formato].texto].join(' '));
   const atributos = [
     `data-tema="${escapar(t.id)}"`,
     `data-pilar="${pilarNum}"`,
-    `data-subcategoria="${escapar(subNombre)}"`,
+    // Identificador estable (posición, no nombre): el nombre de una
+    // subcategoría puede cambiar en modo edición sin que el banco de 300
+    // temas se regenere, y comparar por nombre dejaba el filtro en «0 de
+    // 300» apenas alguien renombraba. `data-subcategoria-nombre` guarda el
+    // nombre legible aparte, solo para el CSV.
+    `data-subcategoria="p${pilarNum}-s${subIndice}"`,
+    `data-subcategoria-nombre="${escapar(subNombre)}"`,
     `data-funcion="${t.funcion}"`,
     `data-formato="${t.formato}"`,
     `data-busqueda="${escapar(busqueda)}"`,
@@ -102,12 +108,20 @@ function bloquePilarOk(p: Extract<PilarMapa, { estado: 'ok' }>, indicePilar: num
       <span class="pilar-conteo">${temas.length} temas</span>
     </summary>
     <div class="pestanas" role="tablist" aria-label="Subcategorías del pilar ${p.numero}, ${escapar(ep.nombre)}">
-      ${p.subcategorias.map((s, i) => `<button type="button" role="tab" id="tab-p${p.numero}-s${i + 1}" aria-controls="panel-p${p.numero}-s${i + 1}" aria-selected="${i === 0}" tabindex="${i === 0 ? '0' : '-1'}">${escapar(s.nombre)}</button>`).join('')}
+      ${p.subcategorias.map((s, i) => `<button type="button" role="tab" id="tab-p${p.numero}-s${i + 1}" aria-controls="panel-p${p.numero}-s${i + 1}" aria-selected="${i === 0}" tabindex="${i === 0 ? '0' : '-1'}">${escapar(ep.subcategorias[i]?.nombre ?? s.nombre)}</button>`).join('')}
     </div>
-    ${p.subcategorias.map((s, i) => `<div class="panel-tema panel-subcat" role="tabpanel" id="panel-p${p.numero}-s${i + 1}" aria-labelledby="tab-p${p.numero}-s${i + 1}">
-      <h4 class="panel-titulo">${escapar(s.nombre)}</h4>
-      <div class="rejilla dos">${s.temas.map((t, j) => tarjetaTema(t, p.numero, s.nombre, interna, avance, editable ? `pilares.${indicePilar}.subcategorias.${i}.temas.${j}.texto` : undefined, anclas)).join('')}</div>
-    </div>`).join('')}
+    ${p.subcategorias.map((s, i) => {
+      // La etiqueta visible sale del nombre VIGENTE de la estrategia
+      // (`ep`), no del que el banco guardó al generarse (`s.nombre`): un
+      // renombre en modo edición no regenera los 300 temas, así que solo
+      // `ep` refleja el nombre actual. `ep.subcategorias[i]` cae de vuelta
+      // a `s.nombre` por si el modelo llegara con menos de tres.
+      const nombreVigente = ep.subcategorias[i]?.nombre ?? s.nombre;
+      return `<div class="panel-tema panel-subcat" role="tabpanel" id="panel-p${p.numero}-s${i + 1}" aria-labelledby="tab-p${p.numero}-s${i + 1}">
+      <h4 class="panel-titulo">${escapar(nombreVigente)}</h4>
+      <div class="rejilla dos">${s.temas.map((t, j) => tarjetaTema(t, p.numero, i + 1, nombreVigente, interna, avance, editable ? `pilares.${indicePilar}.subcategorias.${i}.temas.${j}.texto` : undefined, anclas)).join('')}</div>
+    </div>`;
+    }).join('')}
   </details>`;
 }
 
@@ -156,7 +170,10 @@ function avanceMini(mapa: MapaPilares, avance?: Record<string, AvanceTema>): str
 
 function herramientas(mapa: MapaPilares, interna: boolean, total: number): string {
   const opcionesPilar = mapa.estrategia.pilares.map((p, i) => `<option value="${i + 1}">${i + 1}. ${escapar(p.nombre)}</option>`).join('');
-  const opcionesSub = mapa.estrategia.pilares.flatMap((p, i) => p.subcategorias.map((s) => `<option value="${escapar(s.nombre)}" data-pilar="${i + 1}">${escapar(s.nombre)}</option>`)).join('');
+  // El valor es el identificador estable `p{n}-s{i}` (mismo que `data-subcategoria`
+  // de la tarjeta), no el nombre: así un renombre en modo edición no rompe el
+  // filtro. La etiqueta sí es el nombre vigente de `mapa.estrategia`.
+  const opcionesSub = mapa.estrategia.pilares.flatMap((p, i) => p.subcategorias.map((s, j) => `<option value="p${i + 1}-s${j + 1}" data-pilar="${i + 1}">${escapar(s.nombre)}</option>`)).join('');
   const opcionesFuncion = FUNCIONES.map((f) => `<option value="${f}">${escapar(ETIQUETA_FUNCION[f])}</option>`).join('');
   const opcionesFormato = FORMATOS.map((f) => `<option value="${f}">${escapar(ETIQUETA_FORMATO[f].texto)}</option>`).join('');
   const opcionesEstado = ESTADOS_TEMA.map((e) => `<option value="${e}">${escapar(ETIQUETA_ESTADO[e])}</option>`).join('');

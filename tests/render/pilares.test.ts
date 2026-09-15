@@ -86,6 +86,49 @@ describe('mapa de pilares · vista interna', () => {
   });
 });
 
+describe('mapa de pilares · filtro de subcategoría estable (item 2)', () => {
+  // El banco (300 temas) se genera una sola vez; un renombre posterior de la
+  // subcategoría en modo edición cambia `mapa.estrategia`, pero no
+  // regenera `mapa.pilares[n].subcategorias[i].nombre`. Comparar por nombre
+  // dejaba el filtro en «0 de 300» apenas alguien renombraba (banco.ts:39
+  // contra :152 antes del arreglo).
+  it('data-subcategoria usa el índice estable p{n}-s{i}, no el nombre', () => {
+    const html = renderizarPilares(mapaFalso(), meta, { operador, resultId: 'r1' });
+    expect(html).toContain('data-subcategoria="p1-s1"');
+    expect(html).not.toContain('data-subcategoria="Subcategoría 1.1"');
+    // El valor de la opción del filtro debe usar el mismo esquema, para que
+    // seleccionar la opción calce con las tarjetas.
+    expect(html).toContain('<option value="p1-s1" data-pilar="1">');
+  });
+
+  it('un renombre en la estrategia se refleja en la etiqueta visible, sin tocar el índice estable', () => {
+    const m = mapaFalso();
+    m.estrategia.pilares[0].subcategorias[0].nombre = 'Nombre nuevo';
+    const html = renderizarPilares(m, meta, { operador, resultId: 'r1' });
+
+    // El id estable de la tarjeta y de la opción del filtro no cambian.
+    expect(html).toContain('data-subcategoria="p1-s1"');
+    expect(html).toContain('<option value="p1-s1" data-pilar="1">Nombre nuevo</option>');
+    // Pero la etiqueta visible (pestaña, título de panel, CSV) sí sale del
+    // nombre vigente de la estrategia.
+    expect(html).toContain('>Nombre nuevo<');
+    expect(html).not.toContain('Subcategoría 1.1');
+    // El CSV usa un atributo aparte con el nombre legible (no el índice).
+    const iTarjeta = html.indexOf('data-tema="P1-S1-01"');
+    const tarjeta = html.slice(html.lastIndexOf('<article', iTarjeta), html.indexOf('</article>', iTarjeta));
+    expect(tarjeta).toContain('data-subcategoria-nombre="Nombre nuevo"');
+  });
+
+  it('data-busqueda incluye el nombre vigente de la subcategoría, no el original del banco', () => {
+    const m = mapaFalso();
+    m.estrategia.pilares[0].subcategorias[0].nombre = 'Nombre nuevo';
+    const html = renderizarPilares(m, meta, { operador, resultId: 'r1' });
+    const iTarjeta = html.indexOf('data-tema="P1-S1-01"');
+    const tarjeta = html.slice(html.lastIndexOf('<article', iTarjeta), html.indexOf('</article>', iTarjeta));
+    expect(tarjeta).toContain('nombre nuevo');
+  });
+});
+
 describe('mapa de pilares · vista pública', () => {
   const html = renderizarPilares(mapaFalso(), meta);
   it('sin controles, estados, notas ni supuestos', () => {
