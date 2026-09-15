@@ -3,6 +3,7 @@ import { db, researchJobs } from '@/db';
 import { ejecutarJob } from './pipeline';
 import { ejecutarGrowth } from '@/growth/pipeline';
 import { limpiarSesionesVencidas } from '@/lib/auth';
+import { convertirLecturasPendientes } from './convertir-lecturas';
 
 let corriendo = false;
 let arrancado = false;
@@ -50,6 +51,14 @@ export function arrancarWorker(): void {
   setInterval(() => {
     void limpiarSesionesVencidas().catch((e) => console.error('[worker] limpieza:', e));
   }, 6 * 60 * 60_000);
+
+  // Las investigaciones anteriores a la lectura para cliente se convierten
+  // solas. Espera a que termine el arranque y nunca corre sin llave.
+  if (process.env.ANTHROPIC_API_KEY && process.env.CONVERTIR_LECTURAS !== '0') {
+    setTimeout(() => {
+      void convertirLecturasPendientes().catch((e) => console.error('[lecturas]', e));
+    }, 15_000);
+  }
 
   console.log('[worker] iniciado');
 }
