@@ -153,6 +153,19 @@ const esperaRevisionRes = resumenEstadistico(tiemposRes.esperaRevision);
 const respuestaCambiosRes = resumenEstadistico(tiemposRes.respuestaCambios);
 const rondasProm = resumenEstadistico(calidadRes.rondasPorEtapaAprobada).promedio;
 
+// ── Estados vacíos (tarea I4, punto 3): "sin clientes" y "sin actividad en
+// este periodo" son cosas distintas y antes compartían el mismo mensaje
+// ("Todavía no hay actividad en este periodo"), incluso cuando la causa real
+// era que no había NINGÚN cliente visible (por el filtro de operador, o
+// porque de plano no hay clientes dados de alta). `sinClientes` manda: sin
+// clientes no hay nada que mostrar sin importar el periodo. `sinActividad`
+// solo aplica cuando SÍ hay clientes pero ninguno tuvo movimiento (etapas,
+// aprobaciones, costo o tiempos) dentro del periodo elegido.
+const sinClientes = lista.length === 0;
+const sinActividad = !sinClientes
+  && cargaRes.etapasActivas === 0 && cargaRes.aprobadasEnPeriodo === 0 && costoRes.total === 0
+  && diasAprobarRes.n === 0 && esperaRevisionRes.n === 0 && respuestaCambiosRes.n === 0;
+
 // ── Barras ────────────────────────────────────────────────────────────
 const filasDias: FilaGrafica[] = [];
 for (const et of ETAPAS) {
@@ -302,11 +315,17 @@ function textoRondas(n: number | null): string {
     </form>
   )}
 
-  {lista.length === 0 ? (
+  {sinClientes ? (
+    <div class="tarjeta vacio">
+      <Icono nombre="clientes" />
+      <strong>Todavía no hay clientes</strong>
+      {operadorFiltro ? 'Ese operador no tiene clientes asignados.' : 'En cuanto haya clientes dados de alta, aparecen aquí.'}
+    </div>
+  ) : sinActividad ? (
     <div class="tarjeta vacio">
       <Icono nombre="grafica" />
       <strong>Todavía no hay actividad en este periodo</strong>
-      {operadorFiltro ? 'Ese operador no tiene clientes asignados.' : 'En cuanto haya clientes con etapas en marcha, aparecen aquí.'}
+      Prueba con otro periodo, o vuelve cuando haya movimiento en las etapas.
     </div>
   ) : (
     <>
@@ -326,7 +345,7 @@ function textoRondas(n: number | null): string {
       <p class="secundario" style="margin-top:10px">Tiempos y rondas de las etapas aprobadas en el periodo.</p>
 
       <section class="seccion">
-        <h2>Barras</h2>
+        <h2>Días y costo por etapa</h2>
         <div class="rejilla">
           {graficaDiasHtml
             ? <Fragment set:html={graficaDiasHtml} />
@@ -349,7 +368,11 @@ function textoRondas(n: number | null): string {
                 <tr><td>Días a aprobar</td><td>{dias(diasAprobarRes.promedio)}</td><td>{dias(diasAprobarRes.mediana)}</td></tr>
                 <tr><td>Espera en revisión</td><td>{dias(esperaRevisionRes.promedio)}</td><td>{dias(esperaRevisionRes.mediana)}</td></tr>
                 <tr><td>Respuesta a cambios</td><td>{dias(respuestaCambiosRes.promedio)}</td><td>{dias(respuestaCambiosRes.mediana)}</td></tr>
-                <tr><td>Comentarios de admin por entregable</td><td colspan="2">{calidadRes.comentariosAdminPorEntregable.toFixed(1)}</td></tr>
+                {/* calidadRes.comentariosAdminPorEntregable (src/lib/desempeno.ts) suma
+                   admin Y operador — "equipo", no solo admin (tarea I4, punto 3):
+                   se renombra la etiqueta en vez de cambiar qué cuenta la función,
+                   que sigue siendo el dato útil (comentarios internos vs. del cliente). */}
+                <tr><td>Comentarios del equipo por entregable</td><td colspan="2">{calidadRes.comentariosAdminPorEntregable.toFixed(1)}</td></tr>
                 <tr><td>Comentarios de cliente por entregable</td><td colspan="2">{calidadRes.comentariosClientePorEntregable.toFixed(1)}</td></tr>
               </tbody>
             </table>
