@@ -1,38 +1,43 @@
 {
   "portada": {
     "titular": "Tu diplomado vale lo que cuesta, pero hoy se explica con el argumento equivocado",
-    "resumen": "Revisamos a tu competencia, a tus posibles alumnas y el mercado laboral de la cosmiatría en México. La conclusión es clara: no vendas el diploma, vende lo que tus egresadas pueden llegar a ganar."
+    "resumen": "Revisamos a tu competencia, a tus posibles alumnas y el mercado laboral. No vendas el diploma: vende lo que tus egresadas pueden llegar a ganar."
   },
+  "cifras": [
+    { "valor": "$36,792", "etiqueta": "Lo que cuesta tu diplomado", "tono": "neutral" },
+    { "valor": "$3,450", "etiqueta": "Un diplomado en línea con avales oficiales", "tono": "cuidar" },
+    { "valor": "$18,000", "etiqueta": "Lo que puede ganar al mes con empleo formal", "tono": "a_favor" }
+  ],
   "descubrimos": [
-    { "tipo": "cuidar", "titulo": "El diploma no puede ser tu argumento principal", "explicacion": "Hay un diplomado en línea con avales oficiales que cuesta $3,450. El tuyo cuesta $36,792. Si solo hablas del papel, la persona interesada encontrará algo parecido por mucho menos." },
-    { "tipo": "a_favor", "titulo": "Lo que ganan tus egresadas sí justifica el precio", "explicacion": "El sector paga $6,480 al mes en promedio, pero los empleos formales que piden una cosmiatra certificada pagan de $10,000 a $18,000. Esa diferencia se comprueba con datos oficiales." },
-    { "tipo": "cuidar", "titulo": "Tus planes de pago premian al que paga más lento", "explicacion": "Pagar en 12 mensualidades sale $1,416 más barato que pagar en 8. Eso anima justo la opción con más riesgo de pagos atrasados." },
-    { "tipo": "oportunidad", "titulo": "Nadie en México enseña a conseguir clientas", "explicacion": "Todas las escuelas enseñan la técnica. Ninguna escuela mexicana enseña a llenar la agenda y cobrar bien. Ese lugar está libre." }
+    { "tipo": "cuidar", "titulo": "El diploma no puede ser tu argumento principal", "resumen": "Hay opciones con avales oficiales por una décima parte de tu precio.", "detalle": "Un diplomado en línea con avales oficiales cuesta $3,450 y el tuyo $36,792. Si solo hablas del papel, la persona interesada encontrará algo parecido por mucho menos." },
+    { "tipo": "a_favor", "titulo": "Lo que ganan tus egresadas sí justifica el precio", "resumen": "Un empleo formal paga casi el triple que el promedio del sector.", "detalle": "El sector paga $6,480 al mes en promedio, pero los empleos formales que piden una cosmiatra certificada pagan de $10,000 a $18,000. Esa diferencia se comprueba con datos oficiales." },
+    { "tipo": "cuidar", "titulo": "Tus planes de pago premian al que paga más lento", "resumen": "Pagar en 12 meses sale más barato que pagar en 8.", "detalle": "La diferencia es de $1,416 a favor del plan largo. Eso anima justo la opción con más riesgo de pagos atrasados." },
+    { "tipo": "oportunidad", "titulo": "Nadie en México enseña a conseguir clientas", "resumen": "Todas enseñan la técnica; ninguna, a llenar la agenda.", "detalle": "Ninguna escuela mexicana enseña a llenar la agenda y cobrar bien. Ese lugar está libre y encaja con lo que tus alumnas quieren lograr." }
   ],
   "clienteIdeal": {
-    "quienEs": "Es una mujer de 28 a 45 años que ya trabaja en belleza, como esteticista o cosmetóloga. Tiene ingresos propios, pero siente que llegó a su techo y quiere cobrar más por un trabajo más especializado.",
-    "lePreocupa": ["Invertir mucho dinero y no recuperarlo", "Que el diploma no le sirva para conseguir mejores clientas", "No tener tiempo para estudiar mientras trabaja"],
-    "quiereLograr": ["Cobrar más por cada servicio", "Que la reconozcan como profesional seria", "Tener la agenda llena sin depender de descuentos"],
+    "quienEs": "Mujer de 28 a 45 años que ya trabaja en belleza. Tiene ingresos propios, pero siente que llegó a su techo y quiere cobrar más.",
+    "lePreocupa": ["Invertir mucho y no recuperarlo", "Que el diploma no le traiga mejores clientas", "No tener tiempo para estudiar"],
+    "quiereLograr": ["Cobrar más por cada servicio", "Que la vean como profesional seria", "Tener la agenda llena sin descuentos"],
     "perfiles": [
-      { "nombre": "Mariana", "descripcion": "34 años. Ya trabaja en cabina y tiene clientas fijas, pero sus ingresos no crecen desde hace años.", "comoHablarle": "Muéstrale con números cuánto más puede cobrar y en cuánto tiempo recupera lo que invierte." },
-      { "nombre": "Laura", "descripcion": "27 años. Terminó un curso corto y todavía no tiene clientas constantes. Duda si dar el siguiente paso.", "comoHablarle": "Háblale de acompañamiento y de cómo conseguir sus primeras clientas, no solo de la técnica." }
+      { "nombre": "Mariana", "descripcion": "34 años. Trabaja en cabina y tiene clientas fijas, pero sus ingresos no crecen desde hace años.", "frase": "Ya sé hacer el trabajo; lo que quiero es que me lo paguen mejor.", "comoHablarle": "Muéstrale con números cuánto más puede cobrar y en cuánto tiempo recupera lo que invierte." },
+      { "nombre": "Laura", "descripcion": "27 años. Terminó un curso corto y todavía no tiene clientas constantes.", "frase": "No sé si otro curso me va a servir o si solo voy a gastar.", "comoHablarle": "Háblale de acompañamiento y de cómo conseguir sus primeras clientas." }
     ]
   },
   "recomendamos": {
     "pasos": [
-      { "titulo": "Cambia el mensaje principal", "queHacer": "Deja de presentar el diplomado como un papel con validez oficial y preséntalo como el camino para ganar de $10,000 a $18,000 al mes.", "porQue": "Es el argumento que la competencia barata no puede igualar." },
-      { "titulo": "Empieza por quienes ya te siguen", "queHacer": "Ofrece el diplomado primero a las personas que ya siguen tu trabajo y asisten a tus clases gratuitas.", "porQue": "Ya te conocen y confían en ti, así que deciden más rápido." },
-      { "titulo": "Ajusta los planes de pago", "queHacer": "Haz que pagar en menos mensualidades sea la opción más conveniente.", "porQue": "Hoy el plan más lento es el más barato y eso te expone a pagos que no llegan." },
-      { "titulo": "Enseña también a conseguir clientas", "queHacer": "Agrega al diplomado una parte sobre cómo llenar la agenda y fijar precios.", "porQue": "Nadie en México lo ofrece y es justo lo que tus alumnas quieren lograr." }
+      { "titulo": "Cambia el mensaje principal", "queHacer": "Presenta el diplomado como el camino para ganar de $10,000 a $18,000 al mes, no como un papel.", "porQue": "Es lo que la competencia barata no puede igualar." },
+      { "titulo": "Empieza por quienes ya te siguen", "queHacer": "Ofrécelo primero a quienes ya siguen tu trabajo y asisten a tus clases gratuitas.", "porQue": "Ya confían en ti, así que deciden más rápido." },
+      { "titulo": "Ajusta los planes de pago", "queHacer": "Haz que pagar en menos mensualidades sea la opción más conveniente.", "porQue": "Hoy el plan más lento es el más barato." },
+      { "titulo": "Enseña a conseguir clientas", "queHacer": "Agrega una parte sobre cómo llenar la agenda y fijar precios.", "porQue": "Nadie en México lo ofrece." }
     ],
     "dondeAnunciarte": [
-      { "canal": "Instagram", "porQue": "Es donde ya está tu comunidad y donde las profesionales de belleza muestran su trabajo." },
+      { "canal": "Instagram", "porQue": "Ahí está tu comunidad y ahí muestran su trabajo las profesionales de belleza." },
       { "canal": "Facebook", "porQue": "Llega a mujeres de 28 a 45 años que ya trabajan en el oficio." }
     ],
     "precio": "Mantén el precio de $36,792 y justifícalo con lo que tus egresadas pueden ganar, no con el diploma."
   },
   "faltaConfirmar": [
-    "Los dos perfiles se construyeron con datos del mercado; conviene confirmarlos platicando con 5 a 8 alumnas actuales.",
+    "Los dos perfiles salen de datos del mercado; conviene confirmarlos con 5 a 8 alumnas actuales.",
     "Las cifras de redes sociales son de 2024 y pueden haber cambiado."
   ]
 }

@@ -3,6 +3,7 @@ import { detectarJerga, JERGA_PROHIBIDA } from '@/research/jerga';
 import { lecturaSchema, investigacionSchema } from '@/research/schemas';
 import lectura from '../fixtures/lectura-ejemplo.json';
 import completa from '../fixtures/investigacion-completa.json';
+import parcial from '../fixtures/investigacion-parcial.json';
 
 const copia = () => JSON.parse(JSON.stringify(lectura));
 
@@ -60,7 +61,7 @@ describe('lecturaSchema', () => {
 
   it('rechaza textos demasiado largos', () => {
     const l = copia();
-    l.portada.titular = 'a'.repeat(161);
+    l.portada.titular = 'a'.repeat(91);
     expect(lecturaSchema.safeParse(l).success).toBe(false);
   });
 
@@ -69,6 +70,24 @@ describe('lecturaSchema', () => {
     l.recomendamos.precio = null;
     l.faltaConfirmar = [];
     expect(lecturaSchema.safeParse(l).success).toBe(true);
+  });
+
+  it('exige de 3 a 4 cifras con tono válido', () => {
+    const l = copia();
+    l.cifras = l.cifras.slice(0, 2);
+    expect(lecturaSchema.safeParse(l).success).toBe(false);
+    const m = copia();
+    m.cifras[0].tono = 'rojo';
+    expect(lecturaSchema.safeParse(m).success).toBe(false);
+  });
+
+  it('cada hallazgo trae resumen y detalle, y cada perfil su frase', () => {
+    const l = copia();
+    delete l.descubrimos[0].resumen;
+    expect(lecturaSchema.safeParse(l).success).toBe(false);
+    const m = copia();
+    delete m.clienteIdeal.perfiles[0].frase;
+    expect(lecturaSchema.safeParse(m).success).toBe(false);
   });
 });
 
@@ -79,5 +98,9 @@ describe('investigacionSchema con lectura', () => {
   it('acepta la lectura como etapa ok o vacía', () => {
     expect(investigacionSchema.safeParse({ ...completa, lectura: { estado: 'ok', datos: lectura } }).success).toBe(true);
     expect(investigacionSchema.safeParse({ ...completa, lectura: { estado: 'vacio', razon: 'x' } }).success).toBe(true);
+  });
+
+  it('valida también el fixture parcial', () => {
+    expect(investigacionSchema.safeParse(parcial).success).toBe(true);
   });
 });

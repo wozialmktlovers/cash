@@ -110,32 +110,39 @@ export const sintesisSchema = z.object({
 const texto = (max: number) => z.string().min(1).max(max);
 
 /**
- * Lo que lee el cliente final. Los límites son holgados a propósito: fuerzan a
- * sintetizar sin rechazar una respuesta buena por unas palabras de más.
+ * Lo que lee el cliente final. Límites cortos a propósito: la primera versión
+ * tenía demasiado texto para leerse en tarjetas.
  */
 export const lecturaSchema = z.object({
-  portada: z.object({ titular: texto(160), resumen: texto(500) }),
+  portada: z.object({ titular: texto(90), resumen: texto(240) }),
+  cifras: z.array(z.object({
+    valor: texto(20),
+    etiqueta: texto(60),
+    tono: z.enum(['a_favor', 'cuidar', 'neutral']),
+  })).min(3).max(4),
   descubrimos: z.array(z.object({
     tipo: z.enum(['a_favor', 'cuidar', 'oportunidad']),
-    titulo: texto(100),
-    explicacion: texto(500),
+    titulo: texto(80),
+    resumen: texto(140),
+    detalle: texto(400),
   })).min(3).max(4),
   clienteIdeal: z.object({
-    quienEs: texto(700),
-    lePreocupa: z.array(texto(200)).length(3),
-    quiereLograr: z.array(texto(200)).length(3),
+    quienEs: texto(320),
+    lePreocupa: z.array(texto(120)).length(3),
+    quiereLograr: z.array(texto(120)).length(3),
     perfiles: z.array(z.object({
-      nombre: texto(50),
-      descripcion: texto(320),
-      comoHablarle: texto(320),
+      nombre: texto(40),
+      descripcion: texto(200),
+      frase: texto(140),
+      comoHablarle: texto(200),
     })).length(2),
   }),
   recomendamos: z.object({
-    pasos: z.array(z.object({ titulo: texto(100), queHacer: texto(420), porQue: texto(360) })).min(3).max(5),
-    dondeAnunciarte: z.array(z.object({ canal: texto(50), porQue: texto(280) })).min(1).max(4),
-    precio: texto(500).nullable(),
+    pasos: z.array(z.object({ titulo: texto(60), queHacer: texto(200), porQue: texto(160) })).min(3).max(5),
+    dondeAnunciarte: z.array(z.object({ canal: texto(40), porQue: texto(140) })).min(1).max(4),
+    precio: texto(280).nullable(),
   }),
-  faltaConfirmar: z.array(texto(240)).max(5),
+  faltaConfirmar: z.array(texto(160)).max(5),
 }).superRefine((lectura, ctx) => {
   const halladas = detectarJerga(lectura);
   if (halladas.length) {

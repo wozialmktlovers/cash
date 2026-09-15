@@ -30,7 +30,7 @@ export function seccionDescubrimos(l: Lectura): string {
     ${l.descubrimos.map((d) => `<article class="tarjeta">
       <span class="etiqueta ${d.tipo}">${ETIQUETA[d.tipo]}</span>
       <h3>${escapar(d.titulo)}</h3>
-      <p>${escapar(d.explicacion)}</p>
+      <p>${escapar(d.resumen)}</p>
     </article>`).join('')}
   </section>`;
 }

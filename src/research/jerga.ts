@@ -20,14 +20,16 @@ const PATRONES = JERGA_PROHIBIDA.map((termino) => ({
   regex: new RegExp(`(^|[^\\p{L}\\p{N}])${escaparRegex(normalizar(termino))}(?=$|[^\\p{L}\\p{N}])`, 'u'),
 }));
 
-function textos(valor: unknown, salida: string[] = []): string[] {
+/** Todos los textos de un valor anidado. Los números cuentan como texto: una cifra también es contenido. */
+export function recogerTextos(valor: unknown, salida: string[] = []): string[] {
   if (typeof valor === 'string') salida.push(valor);
-  else if (Array.isArray(valor)) valor.forEach((v) => textos(v, salida));
-  else if (valor && typeof valor === 'object') Object.values(valor).forEach((v) => textos(v, salida));
+  else if (typeof valor === 'number') salida.push(String(valor));
+  else if (Array.isArray(valor)) valor.forEach((v) => recogerTextos(v, salida));
+  else if (valor && typeof valor === 'object') Object.values(valor).forEach((v) => recogerTextos(v, salida));
   return salida;
 }
 
 export function detectarJerga(valor: unknown): string[] {
-  const todo = normalizar(textos(valor).join('\n'));
+  const todo = normalizar(recogerTextos(valor).join('\n'));
   return PATRONES.filter((p) => p.regex.test(todo)).map((p) => p.termino);
 }
