@@ -1,5 +1,5 @@
 ---
-import { asc, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, ne } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import { db, clients, clienteEtapas, etapaEventos, comentarios, researchJobs, users } from '@/db';
@@ -53,9 +53,12 @@ function enlacePeriodo(clave: ClavePeriodo): string {
 }
 
 // Solo admin ve el select, y lo ve aunque el filtro actual no traiga
-// resultados (para poder quitarlo).
+// resultados (para poder quitarlo). Solo admin/operador activos (fix wave,
+// #10): un usuario inactivo ya no puede tener clientes propios, y listarlo
+// aquí solo confundiría el filtro.
 const operadoresSelect = esAdmin
-  ? await db.select({ id: users.id, nombre: users.nombre, email: users.email }).from(users).where(ne(users.rol, 'cliente')).orderBy(users.nombre)
+  ? await db.select({ id: users.id, nombre: users.nombre, email: users.email })
+      .from(users).where(and(ne(users.rol, 'cliente'), eq(users.activo, true))).orderBy(users.nombre)
   : [];
 const nombreOperador = new Map<string, string>(
   esAdmin ? operadoresSelect.map((o) => [o.id, o.nombre ?? o.email]) : [[usuario.id, usuario.nombre ?? usuario.email]],
@@ -94,7 +97,21 @@ const comentariosFilas = ids.length
   : [];
 const comentariosM: ComentarioM[] = comentariosFilas;
 
-const jobsFilas = ids.length ? await db.select().from(researchJobs).where(inArray(researchJobs.clientId, ids)) : [];
+// Solo las columnas que usa `costo()`, y acotado por `desde` cuando el
+// periodo lo tiene (fix wave, #10): a diferencia de los eventos —que
+// necesitan el historial completo para emparejar duraciones que empezaron
+// antes del periodo—, un job fuera de rango nunca cuenta para `costo()`
+// (que sí filtra por periodo), así que no hace falta traerlo.
+const jobsFilas = ids.length
+  ? await db
+      .select({ clientId: researchJobs.clientId, tipo: researchJobs.tipo, costoUsd: researchJobs.costoUsd, creadoPor: researchJobs.creadoPor, createdAt: researchJobs.createdAt })
+      .from(researchJobs)
+      .where(
+        periodoActual.desde
+          ? and(inArray(researchJobs.clientId, ids), gte(researchJobs.createdAt, periodoActual.desde))
+          : inArray(researchJobs.clientId, ids),
+      )
+  : [];
 // costo_usd es numeric: postgres-js lo entrega como string. Un valor corrupto
 // cuenta como 0 en vez de volver NaN todas las sumas del tablero.
 const jobs: JobM[] = jobsFilas.map((j) => {
@@ -128,19 +145,28 @@ const { eventos: eventosCerrados, comentarios: comentariosCerrados } = enPeriodo
 const tiemposRes = tiemposPorEtapa(eventosCerrados);
 const calidadRes = calidad(eventosCerrados, comentariosCerrados);
 
-const diasAprobarProm = resumenEstadistico(Object.values(tiemposRes.duracion).flat()).promedio;
-const esperaRevisionProm = resumenEstadistico(tiemposRes.esperaRevision).promedio;
+// ── Formato de números (spec: días «4.2 días», dinero «$12.34 USD», % «63%») ──
+const dias = (n: number | null) => (n === null ? '—' : `${n.toFixed(1)} días`);
+const dinero = (n: number) => `$${n.toFixed(2)} USD`;
+const pct = (n: number) => `${Math.round(n)}%`;
+
+// §5: promedio y mediana de cada métrica de tiempo, sobre las etapas
+// "cerradas" en el periodo (enPeriodoCerrado arriba). resumenEstadistico ya
+// trae la mediana (D1); antes solo se leía `.promedio` de dos de las tres, y
+// la respuesta a cambios y los comentarios por entregable no se mostraban
+// en ningún lado de la página (fix wave, #4).
+const diasAprobarRes = resumenEstadistico(Object.values(tiemposRes.duracion).flat());
+const esperaRevisionRes = resumenEstadistico(tiemposRes.esperaRevision);
+const respuestaCambiosRes = resumenEstadistico(tiemposRes.respuestaCambios);
 const rondasProm = resumenEstadistico(calidadRes.rondasPorEtapaAprobada).promedio;
 
 // ── Barras ────────────────────────────────────────────────────────────
-const formatoDias = (n: number) => `${n.toFixed(1)} días`;
-
 const filasDias: FilaGrafica[] = [];
 for (const et of ETAPAS) {
   const r = resumenEstadistico(tiemposRes.duracion[et]);
   if (r.promedio !== null) filasDias.push({ nombre: NOMBRE_ETAPA[et], min: r.promedio, max: r.promedio, destacada: false });
 }
-const graficaDiasHtml = graficaBarras(filasDias, 'Días promedio por etapa', formatoDias);
+const graficaDiasHtml = graficaBarras(filasDias, 'Días promedio por etapa', (n) => dias(n));
 
 const NOMBRE_TIPO: Record<'research' | 'pilares' | 'growth', string> = {
   research: 'Investigación', pilares: 'Mapa de pilares', growth: 'Manual de campaña',
@@ -148,7 +174,10 @@ const NOMBRE_TIPO: Record<'research' | 'pilares' | 'growth', string> = {
 const filasCosto: FilaGrafica[] = (['research', 'pilares', 'growth'] as const).map((t) => ({
   nombre: NOMBRE_TIPO[t], min: costoRes.porEtapa[t], max: costoRes.porEtapa[t], destacada: false,
 }));
-const graficaCostoHtml = costoRes.total > 0 ? graficaBarras(filasCosto, 'Costo por tipo') : '';
+// Formateador de dinero USD con 2 decimales (fix wave, #3): sin pasarlo,
+// graficaBarras usaba su formateador por omisión (formatearMonto, pesos sin
+// decimales), que no coincidía ni con costo_usd ni con las tarjetas de arriba.
+const graficaCostoHtml = costoRes.total > 0 ? graficaBarras(filasCosto, 'Costo por tipo', dinero) : '';
 
 // ── Tabla «Por operador» (admin) ─────────────────────────────────────────
 const ORDEN_ETAPA = new Map(ETAPAS.map((e, i) => [e, i]));
@@ -215,11 +244,6 @@ const filasPorCliente = lista.map((c) => ({
   operador: c.operadorId ? (nombreOperador.get(c.operadorId) ?? 'Operador') : 'Sin asignar',
   costo: costoRes.porCliente.get(c.id) ?? 0,
 }));
-
-// ── Formato de números (spec: días «4.2 días», dinero «$12.34 USD», % «63%») ──
-const dias = (n: number | null) => (n === null ? '—' : `${n.toFixed(1)} días`);
-const dinero = (n: number) => `$${n.toFixed(2)} USD`;
-const pct = (n: number) => `${Math.round(n)}%`;
 ---
 
 <Base titulo="Desempeño" activo="desempeno">
@@ -272,8 +296,8 @@ const pct = (n: number) => `${Math.round(n)}%`;
       </section>
 
       <section class="indicadores" aria-label="Tiempos, calidad y costo" style="margin-top:12px">
-        <div class="indicador rosa"><Icono nombre="reloj" /><span class="valor cifra">{dias(diasAprobarProm)}</span><span class="nombre">Días promedio a aprobar</span></div>
-        <div class="indicador azul"><Icono nombre="reloj" /><span class="valor cifra">{dias(esperaRevisionProm)}</span><span class="nombre">Espera promedio en revisión</span></div>
+        <div class="indicador rosa"><Icono nombre="reloj" /><span class="valor cifra">{dias(diasAprobarRes.promedio)}</span><span class="nombre">Días promedio a aprobar</span></div>
+        <div class="indicador azul"><Icono nombre="reloj" /><span class="valor cifra">{dias(esperaRevisionRes.promedio)}</span><span class="nombre">Espera promedio en revisión</span></div>
         <div class="indicador amarillo"><Icono nombre="alerta" /><span class="valor cifra">{rondasProm === null ? '—' : rondasProm.toFixed(1)}</span><span class="nombre">Rondas de cambios promedio</span></div>
         <div class="indicador verde"><Icono nombre="dinero" /><span class="valor cifra">{dinero(costoRes.total)}</span><span class="nombre">Costo del periodo</span></div>
       </section>
@@ -289,6 +313,26 @@ const pct = (n: number) => `${Math.round(n)}%`;
             ? <Fragment set:html={graficaCostoHtml} />
             : <div class="tarjeta vacio"><Icono nombre="dinero" /><strong>Todavía no hay actividad en este periodo</strong>Sin costo registrado en el periodo elegido.</div>}
         </div>
+      </section>
+
+      <section class="seccion">
+        <h2>Detalle de tiempos y calidad</h2>
+        <section class="tarjeta">
+          <div class="tabla-envoltura">
+            <table>
+              <thead>
+                <tr><th>Métrica</th><th>Promedio</th><th>Mediana</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Días a aprobar</td><td>{dias(diasAprobarRes.promedio)}</td><td>{dias(diasAprobarRes.mediana)}</td></tr>
+                <tr><td>Espera en revisión</td><td>{dias(esperaRevisionRes.promedio)}</td><td>{dias(esperaRevisionRes.mediana)}</td></tr>
+                <tr><td>Respuesta a cambios</td><td>{dias(respuestaCambiosRes.promedio)}</td><td>{dias(respuestaCambiosRes.mediana)}</td></tr>
+                <tr><td>Comentarios de admin por entregable</td><td colspan="2">{calidadRes.comentariosAdminPorEntregable.toFixed(1)}</td></tr>
+                <tr><td>Comentarios de cliente por entregable</td><td colspan="2">{calidadRes.comentariosClientePorEntregable.toFixed(1)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
 
       {esAdmin && (

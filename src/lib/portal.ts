@@ -86,25 +86,71 @@ export async function clientePortal(usuario: UsuarioSesion, query: URLSearchPara
 
 export type EventoActividad = { id: string; etiqueta: string; creadoEn: Date };
 
+// Artículo y concordancia de género de «listo/lista» por etapa (fix wave de
+// revisión final: «{Etapa} está listo para ti» sonaba mal en «Investigación
+// está listo» — se prefirió el mapa de artículos explícito sobre una regla
+// genérica de género gramatical, que no existe de forma confiable en JS).
+const ARTICULO_ETAPA: Record<Etapa, 'la' | 'el'> = {
+  investigacion: 'la',
+  pilares: 'el',
+  desarrollo_mensual: 'el',
+  manual_campana: 'el',
+};
+const LISTO_ETAPA: Record<Etapa, 'lista' | 'listo'> = {
+  investigacion: 'lista',
+  pilares: 'listo',
+  desarrollo_mensual: 'listo',
+  manual_campana: 'listo',
+};
+
+/** «la Investigación ya está lista para ti» / «el Manual de campaña ya está listo para ti». Pura, para poder probarla sin tocar la base. */
+export function fraseEtapaLista(etapa: Etapa): string {
+  return `${ARTICULO_ETAPA[etapa]} ${NOMBRE_ETAPA[etapa]} ya está ${LISTO_ETAPA[etapa]} para ti`;
+}
+
 /**
  * Actividad reciente de la portada (ruling C1 #4): las últimas 8 entradas
  * visibles para el cliente, mezclando dos fuentes —
- * - aprobaciones (`accion = 'aprobar'`) de las etapas visibles, «{Etapa} está
- *   listo para ti»;
- * - respuestas del equipo (autor no-cliente) a comentarios que el cliente
- *   dejó (`respuestaDe` apunta a un comentario con `autorRol = 'cliente'`).
+ * - aprobaciones (`accion = 'aprobar'`) de las etapas visibles, con
+ *   `fraseEtapaLista`;
+ * - respuestas del equipo (autor no-cliente) a comentarios que dejó un
+ *   cliente (`respuestaDe` apunta a un comentario con `autorRol = 'cliente'`).
  *
  * Nunca otras transiciones ni comentarios internos. Dos consultas en
  * paralelo, sin N+1: nunca una por etapa ni una por comentario.
+ *
+ * `usuarioId`/`vistaPrevia` (fix wave): en el portal real, las respuestas
+ * solo cuentan si el comentario padre lo dejó ESTE usuario — un cliente no
+ * debe ver la actividad de otro usuario de la misma empresa. En vista previa
+ * interna (admin/operador) no hay «este usuario» del lado del cliente: se
+ * muestra la actividad de toda la empresa, igual que antes de este fix.
  */
-export async function actividadPortal(etapasVisibles: { id: string; etapa: Etapa }[]): Promise<EventoActividad[]> {
+export async function actividadPortal(
+  etapasVisibles: { id: string; etapa: Etapa }[],
+  usuarioId: string,
+  vistaPrevia: boolean,
+): Promise<EventoActividad[]> {
   const etapaIds = etapasVisibles.map((e) => e.id);
   if (etapaIds.length === 0) return [];
+  const etapaDe = new Map(etapasVisibles.map((e) => [e.id, e.etapa]));
   const nombreDe = new Map(etapasVisibles.map((e) => [e.id, NOMBRE_ETAPA[e.etapa]]));
 
   // Alias del propio `comentarios` para el auto-join: el padre es el
   // comentario del cliente al que responde el equipo.
   const comentarioPadre = alias(comentarios, 'comentario_padre');
+
+  const condicionRespuestas = vistaPrevia
+    ? and(
+        inArray(comentarios.etapaId, etapaIds),
+        eq(comentarioPadre.autorRol, 'cliente'),
+        ne(comentarios.autorRol, 'cliente'),
+      )
+    : and(
+        inArray(comentarios.etapaId, etapaIds),
+        eq(comentarioPadre.autorRol, 'cliente'),
+        eq(comentarioPadre.autorId, usuarioId),
+        ne(comentarios.autorRol, 'cliente'),
+      );
 
   const [aprobaciones, respuestas] = await Promise.all([
     db.select({ etapaId: etapaEventos.etapaId, creadoEn: etapaEventos.creadoEn })
@@ -115,11 +161,7 @@ export async function actividadPortal(etapasVisibles: { id: string; etapa: Etapa
     db.select({ id: comentarios.id, etapaId: comentarios.etapaId, creadoEn: comentarios.creadoEn })
       .from(comentarios)
       .innerJoin(comentarioPadre, eq(comentarios.respuestaDe, comentarioPadre.id))
-      .where(and(
-        inArray(comentarios.etapaId, etapaIds),
-        eq(comentarioPadre.autorRol, 'cliente'),
-        ne(comentarios.autorRol, 'cliente'),
-      ))
+      .where(condicionRespuestas)
       .orderBy(desc(comentarios.creadoEn))
       .limit(8),
   ]);
@@ -127,7 +169,7 @@ export async function actividadPortal(etapasVisibles: { id: string; etapa: Etapa
   const eventos: EventoActividad[] = [
     ...aprobaciones.map((a) => ({
       id: `aprobacion-${a.etapaId}-${a.creadoEn.getTime()}`,
-      etiqueta: `${nombreDe.get(a.etapaId) ?? 'Tu etapa'} está listo para ti`,
+      etiqueta: etapaDe.has(a.etapaId) ? fraseEtapaLista(etapaDe.get(a.etapaId)!) : 'Tu etapa ya está lista para ti',
       creadoEn: a.creadoEn,
     })),
     ...respuestas.map((r) => ({

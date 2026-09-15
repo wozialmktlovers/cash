@@ -209,6 +209,11 @@ const historial: ItemHistorial[] = [
   </div>
 
   <div style="margin-top:24px">
+    {operable && (
+      <div style="margin-bottom:10px">
+        <a class="btn fantasma chico" href={`/portal?cliente=${cliente.id}`}><Icono nombre="ojo" />Ver portal del cliente</a>
+      </div>
+    )}
     <LineaEtapas clientId={cliente.id} tarjetas={tarjetasEtapas} contratacion={contratacionVM} />
   </div>
 

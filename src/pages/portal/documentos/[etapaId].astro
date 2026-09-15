@@ -17,7 +17,7 @@
 import { and, eq } from 'drizzle-orm';
 import PortalBase from '@/layouts/PortalBase.astro';
 import Icono from '@/components/Icono.astro';
-import { db, clienteEtapas, documentoVersiones, clientLinks } from '@/db';
+import { db, clienteEtapas, documentoVersiones, clientLinks, growthResults } from '@/db';
 import { esUuid } from '@/lib/visibilidad';
 import { clientePortal } from '@/lib/portal';
 import { puedeComentar } from '@/flujo/reglas';
@@ -107,11 +107,21 @@ if (listaParaCliente) {
       } else {
         const [sitio] = await db.select().from(clientLinks)
           .where(and(eq(clientLinks.clientId, cliente.id), eq(clientLinks.tipo, 'sitio'))).limit(1);
+        // UTM (fix wave, #2): `construirUrls` arma utm_campaign con la fecha
+        // de creación del RESULTADO (`growth_results.createdAt`), no la de la
+        // versión aprobada (que se mueve cada vez que se re-aprueba) — mismo
+        // dato que usan /growth/[id] y /p/*. Se resuelve con un select mínimo
+        // (solo createdAt) por documentoId; si el resultado ya no existe
+        // (dato inconsistente), se cae a la fecha de la versión antes que
+        // reventar.
+        const [resultadoGrowth] = await db.select({ createdAt: growthResults.createdAt })
+          .from(growthResults).where(eq(growthResults.id, version.documentoId)).limit(1);
+        const creadoEnGrowth = resultadoGrowth?.createdAt ?? version.creadoEn;
         html = renderizarManual(
           version.datos as any,
           {
-            cliente: cliente.nombre, producto: cliente.producto, fecha,
-            ciudad: cliente.ciudad ?? undefined, destino: sitio?.url, creadoEn: version.creadoEn,
+            cliente: cliente.nombre, producto: cliente.producto, fecha: creadoEnGrowth.toISOString().slice(0, 10),
+            ciudad: cliente.ciudad ?? undefined, destino: sitio?.url, creadoEn: creadoEnGrowth,
           },
           '', false, flujo,
           { volverHref, volverTexto: VOLVER_TEXTO, ayudaComentarios: permiteObservaciones ? AYUDA_OBSERVACIONES : undefined },
@@ -124,7 +134,12 @@ if (listaParaCliente) {
   }
 }
 
+// «No listo» es un estado normal (el equipo sigue trabajando) → 404, igual
+// que el resto del portal. Un fallo real al rendir es un error del lado del
+// servidor → 500 (fix wave, #8): antes caía en 200 con una página de error,
+// lo que le ocultaba el problema a cualquier monitoreo externo.
 if (motivoSinHtml === 'no_listo') Astro.response.status = 404;
+else if (motivoSinHtml === 'error') Astro.response.status = 500;
 ---
 
 {html ? (
@@ -144,7 +159,7 @@ if (motivoSinHtml === 'no_listo') Astro.response.status = 404;
           <p>En cuanto tu equipo lo apruebe, lo vas a ver aquí.</p>
         </>
       )}
-      <a class="btn suave chico" href="/portal">{VOLVER_TEXTO}</a>
+      <a class="btn suave chico" href={volverHref}>{VOLVER_TEXTO}</a>
     </div>
   </PortalBase>
 )}

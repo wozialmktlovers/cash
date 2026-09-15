@@ -10,13 +10,20 @@ import { clientePortal, resumenPortal, actividadPortal, type EtapaClientePortal 
 const usuario = Astro.locals.usuario;
 const resultado = await clientePortal(usuario, Astro.url.searchParams);
 
-// Sin acceso: para admin u operador es un 404 en blanco, como en el resto
-// del Studio (regla de la casa). Para un cliente cuya cuenta no tiene
-// clientId (dato inconsistente que no debería pasar) es distinto: un 404 en
-// blanco lo dejaría sin ninguna forma de cerrar sesión, así que se sigue
-// renderizando la página con un mensaje amable y el botón Salir de
-// PortalBase, con el código de estado en 404 igual (ruling C1 #1).
-if (!resultado && usuario.rol !== 'cliente') return new Response(null, { status: 404 });
+// Sin acceso: para un cliente cuya cuenta no tiene clientId (dato
+// inconsistente que no debería pasar), un 404 en blanco lo dejaría sin
+// ninguna forma de cerrar sesión, así que se sigue renderizando la página
+// con un mensaje amable y el botón Salir de PortalBase, con el código de
+// estado en 404 igual (ruling C1 #1).
+//
+// Para admin u operador sin acceso hay dos casos distintos (fix wave, #8):
+// sin `?cliente=` en la URL todavía no eligió a quién previsualizar — no es
+// un error, así que se muestra una página amable con el enlace a /clientes
+// en vez de un 404 en blanco; con `?cliente=` presente pero inválido o sin
+// permiso, se mantiene el 404 en blanco (regla de la casa: no confirmar la
+// existencia de un cliente ajeno).
+const clienteParam = Astro.url.searchParams.get('cliente') ?? '';
+if (!resultado && usuario.rol !== 'cliente' && clienteParam) return new Response(null, { status: 404 });
 if (!resultado) Astro.response.status = 404;
 
 let datos: {
@@ -32,7 +39,7 @@ if (resultado) {
   // Sin etapas visibles no puede haber actividad que mostrar (ni aprobaciones
   // ni respuestas): se evita la consulta.
   const actividad = resumen.tarjetas.length > 0
-    ? await actividadPortal(resumen.tarjetas.map((t) => ({ id: t.etapaId, etapa: t.etapa })))
+    ? await actividadPortal(resumen.tarjetas.map((t) => ({ id: t.etapaId, etapa: t.etapa })), usuario.id, resultado.vistaPrevia)
     : [];
   datos = { cliente: resultado.cliente, vistaPrevia: resultado.vistaPrevia, resumen, actividad };
 }
@@ -43,7 +50,16 @@ if (resultado) {
 // que vería el cliente, no el de quien está mirando.
 const saludoNombre = datos ? (datos.vistaPrevia ? datos.cliente.nombre : (usuario.nombre ?? datos.cliente.nombre)) : null;
 
-const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'America/Mexico_City' });
+
+// Enlace a un documento del portal, preservando `?cliente=` en vista previa
+// interna (fix wave, #1): sin esto, admin/operador entraban a
+// `/portal/documentos/<id>` sin el parámetro y `clientePortal` los rechazaba
+// con 404 — un enlace muerto justo donde se esperaba poder seguir mirando.
+const hrefDocumento = (etapaId: string, hash?: string) => {
+  const params = datos?.vistaPrevia ? `?cliente=${datos.cliente.id}` : '';
+  return `/portal/documentos/${etapaId}${params}${hash ?? ''}`;
+};
 
 // Anillo de avance: SVG con stroke-dasharray/stroke-dashoffset según el
 // porcentaje (ruling C1 #7).
@@ -58,11 +74,20 @@ const desplazamiento = Math.round(CIRCUNFERENCIA * (1 - avance / 100) * 100) / 1
   nombreEmpresa={datos ? datos.cliente.nombre : 'Wozial'}
   vistaPrevia={datos?.vistaPrevia ? { clienteId: datos.cliente.id } : undefined}
 >
-  {!datos && (
+  {!datos && usuario.rol === 'cliente' && (
     <div class="tarjeta vacio">
       <Icono nombre="alerta" />
       <strong>Todavía no podemos abrir tu portal</strong>
       <p>Tu cuenta no está vinculada a ninguna empresa. Escríbenos y lo resolvemos cuanto antes.</p>
+    </div>
+  )}
+
+  {!datos && usuario.rol !== 'cliente' && (
+    <div class="tarjeta vacio">
+      <Icono nombre="clientes" />
+      <strong>Elige un cliente desde su ficha</strong>
+      <p>Abre la ficha del cliente que quieres previsualizar y usa el enlace «Ver portal del cliente».</p>
+      <a class="btn suave chico" href="/clientes">Ir a clientes</a>
     </div>
   )}
 
@@ -103,9 +128,9 @@ const desplazamiento = Math.round(CIRCUNFERENCIA * (1 - avance / 100) * 100) / 1
                   </div>
                 </div>
                 <div class="acciones">
-                  {t.listo && <a class="btn suave chico" href={`/portal/documentos/${t.etapaId}`}>Ver documento</a>}
+                  {t.listo && <a class="btn suave chico" href={hrefDocumento(t.etapaId)}>Ver documento</a>}
                   {t.listo && t.puedeComentar && (
-                    <a class="btn fantasma chico" href={`/portal/documentos/${t.etapaId}#observaciones`}>Dejar observaciones</a>
+                    <a class="btn fantasma chico" href={hrefDocumento(t.etapaId, '#observaciones')}>Dejar observaciones</a>
                   )}
                   {t.proximamente && <span class="etiqueta marca">Próximamente</span>}
                 </div>

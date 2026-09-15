@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resumenPortal, type EtapaClientePortal } from '@/lib/portal';
+import { resumenPortal, fraseEtapaLista, type EtapaClientePortal } from '@/lib/portal';
 
 // Fábrica de EtapaClientePortal con valores por omisión razonables, siguiendo
 // el patrón de tests/flujo/reglas.test.ts.
@@ -81,5 +81,20 @@ describe('resumenPortal', () => {
     const r = resumenPortal([et('investigacion', { contratada: false })]);
     expect(r.avance).toBe(0);
     expect(r.tarjetas).toEqual([]);
+  });
+});
+
+describe('fraseEtapaLista', () => {
+  // Fix wave: «{Etapa} está listo para ti» no concordaba en género
+  // («Investigación está listo»). El mapa de artículo/concordancia cubre las
+  // cuatro etapas, no solo el caso que se notó en revisión.
+  it('investigacion usa artículo y concordancia femeninos', () => {
+    expect(fraseEtapaLista('investigacion')).toBe('la Investigación ya está lista para ti');
+  });
+
+  it('pilares, desarrollo_mensual y manual_campana usan artículo y concordancia masculinos', () => {
+    expect(fraseEtapaLista('pilares')).toBe('el Mapa de pilares ya está listo para ti');
+    expect(fraseEtapaLista('desarrollo_mensual')).toBe('el Desarrollo mensual ya está listo para ti');
+    expect(fraseEtapaLista('manual_campana')).toBe('el Manual de campaña ya está listo para ti');
   });
 });

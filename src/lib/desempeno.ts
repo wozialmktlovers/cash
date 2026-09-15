@@ -177,6 +177,15 @@ function siguienteConAccion(evs: Evento[], desdeIndex: number, acciones: string[
 
 const ETAPAS_VACIAS: Etapa[] = ['investigacion', 'pilares', 'desarrollo_mensual', 'manual_campana'];
 
+// Nota (fix wave, #11): a propósito, `tiemposPorEtapa` y `calidad` no filtran
+// por `interna` — reciben el `eventos`/`comentarios` que les pase la página,
+// que hoy incluye las etapas internas. Los tiempos y las rondas de cambio
+// miden el esfuerzo real del equipo, y una etapa interna (la que un cliente
+// no contrató pero se hizo como dependencia de otra) es trabajo del equipo
+// igual que cualquier otra. En cambio `carga` (abajo) sí excluye lo interno
+// de `etapasActivas` y `avancePromedio`: esas dos son de cara al cliente —
+// "cuánto está avanzando/activo lo que contrató" — y una etapa interna no es
+// algo que el cliente vea ni haya pedido.
 export function tiemposPorEtapa(eventos: Evento[]): {
   duracion: Record<Etapa, number[]>;
   esperaRevision: number[];
