@@ -332,7 +332,13 @@ html.modo-edicion [data-editable]:focus-visible{outline-style:solid;}
 .barra-edicion{position:fixed;left:50%;translate:-50% 0;bottom:16px;z-index:400;
   display:flex;flex-wrap:wrap;align-items:center;gap:16px;min-height:44px;padding:10px 18px;border-radius:999px;
   background:var(--s3);color:var(--hi);border:1px solid var(--line-2);box-shadow:var(--sh-1);font-size:.82rem;font-weight:600;}
-.barra-edicion[hidden]{display:none;}
+/* Regla global: '.recuadro-comentario' y '.respuesta-area' declaran su
+   propio 'display' (grid), con la misma especificidad que la hoja del
+   navegador para '[hidden]{display:none}' — como su regla viene después en
+   el documento, gana y el elemento se queda visible aun con el atributo
+   puesto. Una sola regla de mayor peso para todo '[hidden]' evita repetirla
+   por cada clase nueva que el flujo del cliente vaya agregando. */
+[hidden]{display:none!important;}
 .barra-edicion-estado{color:var(--dim);font-weight:500;}
 .barra-edicion-botones{display:flex;gap:8px;}
 .barra-edicion-botones button{min-height:44px;padding:0 16px;border-radius:var(--r-xs);border:1px solid var(--line-2);

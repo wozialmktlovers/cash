@@ -71,3 +71,15 @@ describe('integridad de los tokens', () => {
     expect(ESTILOS_GROWTH).toMatch(/body\{padding-top/);
   });
 });
+
+describe('atributo [hidden]', () => {
+  it('gana por encima de cualquier display propio de la clase', () => {
+    // '.recuadro-comentario' y '.respuesta-area' declaran 'display:grid' con
+    // la misma especificidad que '[hidden]{display:none}' del navegador;
+    // como vienen después en la hoja, ganaban y el elemento no se ocultaba
+    // pese al atributo. La regla global con '!important' debe estar
+    // presente y no dentro de un '@media print' (debe regir siempre).
+    const sinPrint = ESTILOS_GROWTH.replace(/@media print\{[^}]*\}/g, '');
+    expect(sinPrint).toMatch(/\[hidden\]\s*\{\s*display:\s*none\s*!important;?\s*\}/);
+  });
+});
