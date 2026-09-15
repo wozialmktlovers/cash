@@ -331,6 +331,7 @@ html.modo-edicion [data-editable]:focus-visible{outline-style:solid;}
 
 dialog.dialogo-versiones{width:min(520px,calc(100vw - 32px));border:1px solid var(--line-2);border-radius:var(--radius);
   padding:24px;display:grid;gap:14px;background:var(--s2);color:var(--mid);box-shadow:var(--sh-1);}
+dialog.dialogo-versiones:not([open]){display:none;}
 dialog.dialogo-versiones::backdrop{background:rgba(0,0,0,.55);}
 .dialogo-cabecera{display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .dialogo-cabecera h3{color:var(--hi);}
@@ -364,7 +365,8 @@ html.modo-comentar [data-ancla]:hover{outline:2px dashed var(--blue);outline-off
 
 dialog.dialogo-comentarios{width:min(420px,calc(100vw - 32px));max-height:min(640px,calc(100vh - 64px));border:1px solid var(--line-2);border-radius:var(--radius);
   padding:24px;display:grid;gap:14px;background:var(--s2);color:var(--mid);box-shadow:var(--sh-1);
-  position:fixed;inset-block-start:16px;inset-inline-end:16px;margin:0;}
+  position:fixed;inset:16px 16px auto auto;margin:0;}
+dialog.dialogo-comentarios:not([open]){display:none;}
 dialog.dialogo-comentarios::backdrop{background:transparent;}
 .comentarios-filtros{display:flex;gap:8px;flex-wrap:wrap;}
 .filtro-comentarios{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line-2);background:transparent;color:var(--mid);font-size:.78rem;cursor:pointer;}

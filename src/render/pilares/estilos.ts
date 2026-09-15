@@ -175,6 +175,7 @@ const PILARES = `
 
 dialog.panel-nota{width:min(480px,calc(100vw - 32px));border:1px solid var(--linea);border-radius:var(--r);
   padding:24px;display:grid;gap:14px;background:var(--tarjeta);color:var(--texto);box-shadow:var(--sombra);}
+dialog.panel-nota:not([open]){display:none;}
 dialog.panel-nota::backdrop{background:color-mix(in srgb,var(--tinta) 45%,transparent);}
 .panel-nota-titulo{font:var(--t-h3);color:var(--tinta);}
 dialog.panel-nota textarea{min-height:140px;padding:12px;border-radius:var(--r-sm);border:1px solid var(--linea);

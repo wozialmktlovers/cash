@@ -209,6 +209,7 @@ html.modo-edicion [data-editable]:focus-visible{outline-style:solid;}
 
 dialog.dialogo-versiones{width:min(520px,calc(100vw - 32px));border:1px solid var(--linea);border-radius:var(--r);
   padding:24px;display:grid;gap:14px;background:var(--tarjeta);color:var(--texto);box-shadow:var(--sombra);}
+dialog.dialogo-versiones:not([open]){display:none;}
 dialog.dialogo-versiones::backdrop{background:color-mix(in srgb,var(--tinta) 45%,transparent);}
 .dialogo-cabecera{display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .dialogo-cabecera h3{font:var(--t-h3);color:var(--tinta);}
@@ -241,7 +242,8 @@ html.modo-comentar [data-ancla]:hover{outline:2px dashed var(--azul);outline-off
 
 dialog.dialogo-comentarios{width:min(420px,calc(100vw - 32px));max-height:min(640px,calc(100vh - 64px));border:1px solid var(--linea);border-radius:var(--r);
   padding:24px;display:grid;gap:14px;background:var(--tarjeta);color:var(--texto);box-shadow:var(--sombra);
-  position:fixed;inset-block-start:16px;inset-inline-end:16px;margin:0;}
+  position:fixed;inset:16px 16px auto auto;margin:0;}
+dialog.dialogo-comentarios:not([open]){display:none;}
 dialog.dialogo-comentarios::backdrop{background:transparent;}
 .comentarios-filtros{display:flex;gap:8px;flex-wrap:wrap;}
 .filtro-comentarios{min-height:44px;padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--linea);background:transparent;color:var(--texto);font:var(--t-small);cursor:pointer;}
