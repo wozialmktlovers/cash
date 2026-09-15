@@ -1,66 +1,92 @@
 ---
 import '@/styles/global.css';
+import Icono from '@/components/Icono.astro';
+import TemaSwitch from '@/components/TemaSwitch.astro';
+import Paleta from '@/components/Paleta';
+import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
+
+type Seccion = 'inicio' | 'clientes' | 'entregables';
 
 interface Props {
   titulo: string;
-  migas?: string;
+  activo?: Seccion;
+  volver?: { href: string; texto: string };
 }
 
-const { titulo, migas } = Astro.props;
+const { titulo, activo, volver } = Astro.props;
+
+const NAV: Array<{ clave: Seccion; href: string; texto: string; icono: 'inicio' | 'clientes' | 'entregables' }> = [
+  { clave: 'inicio', href: '/', texto: 'Inicio', icono: 'inicio' },
+  { clave: 'clientes', href: '/clientes', texto: 'Clientes', icono: 'clientes' },
+  { clave: 'entregables', href: '/entregables', texto: 'Entregables', icono: 'entregables' },
+];
 ---
 
 <html lang="es-MX">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="robots" content="noindex,nofollow" />
     <title>{titulo} · Wozial Studio</title>
+    <meta name="theme-color" content={COLOR_BARRA.claro} />
+    <script is:inline set:html={SCRIPT_TEMA}></script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="mask-icon" href="/favicon.svg" color="#d4688a" />
-    <meta name="theme-color" content="#08080b" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <div class="sitio">
-      <header class="barra">
+    <a class="saltar" href="#contenido">Saltar al contenido</a>
+    <div class="app">
+      <aside class="lateral">
         <a href="/" class="marca" aria-label="Wozial Studio · inicio">
-          <img src="/logo-wozial.png" alt="Wozial" width="545" height="194" />
+          <img class="logo" src="/logo-wozial.png" alt="Wozial" width="545" height="194" />
           <span>Studio</span>
         </a>
-        {migas && (
-          <nav class="migas" aria-label="Dónde estás">
-            {migas.split('›').map((paso, i) => (
-              <>
-                {i > 0 && <span class="migas-sep" aria-hidden="true">/</span>}
-                <span class={i === migas.split('›').length - 1 ? 'migas-actual' : ''}>
-                  {paso.trim()}
-                </span>
-              </>
+        <nav aria-label="Principal">
+          <ul>
+            {NAV.map((n) => (
+              <li>
+                <a href={n.href} class:list={['nav-item', { activo: activo === n.clave }]} aria-current={activo === n.clave ? 'page' : undefined}>
+                  <Icono nombre={n.icono} />{n.texto}
+                </a>
+              </li>
             ))}
-          </nav>
-        )}
-        <form method="POST" action="/api/logout">
-          <button type="submit" class="btn fantasma chico">Salir</button>
-        </form>
-        <!-- Tira de calibración. En un estudio es lo que se usa para comprobar
-             que lo que sale es fiel al original, y verificar es exactamente lo
-             que hace este producto. Cada segmento es uno de los cuatro colores
-             con los que se clasifica el contenido. -->
-        <div class="calibre" aria-hidden="true">
-          <i style="--c:var(--pink)"></i>
-          <i style="--c:var(--blue)"></i>
-          <i style="--c:var(--yellow)"></i>
-          <i style="--c:var(--green)"></i>
-        </div>
-      </header>
-      <main class="contenido">
-        <slot />
-      </main>
+          </ul>
+        </nav>
+        <a href="/clientes/nuevo" class="btn"><Icono nombre="mas" />Nuevo cliente</a>
+      </aside>
+
+      <div class="principal-col">
+        <header class="superior">
+          <a href="/" class="marca" aria-label="Wozial Studio · inicio">
+            <img class="logo" src="/logo-wozial.png" alt="Wozial" width="545" height="194" />
+          </a>
+          <button type="button" class="buscador-disparador" data-abrir-paleta aria-label="Buscar cliente">
+            <Icono nombre="buscar" /><span>Busca un cliente…</span><kbd>⌘K</kbd>
+          </button>
+          <TemaSwitch />
+          <form method="POST" action="/api/logout">
+            <button type="submit" class="btn fantasma chico">Salir</button>
+          </form>
+        </header>
+
+        <main id="contenido" class="contenido">
+          {volver && <a class="volver" href={volver.href}><Icono nombre="atras" />{volver.texto}</a>}
+          <slot />
+        </main>
+      </div>
     </div>
+
+    <nav class="barra-pestanas" aria-label="Principal">
+      <a href="/" class:list={[{ activo: activo === 'inicio' }]} aria-current={activo === 'inicio' ? 'page' : undefined}><Icono nombre="inicio" />Inicio</a>
+      <a href="/clientes" class:list={[{ activo: activo === 'clientes' }]} aria-current={activo === 'clientes' ? 'page' : undefined}><Icono nombre="clientes" />Clientes</a>
+      <a href="/clientes/nuevo" class="nuevo" aria-label="Nuevo cliente"><Icono nombre="mas" /></a>
+      <a href="/entregables" class:list={[{ activo: activo === 'entregables' }]} aria-current={activo === 'entregables' ? 'page' : undefined}><Icono nombre="entregables" />Entregables</a>
+    </nav>
+
+    <Paleta client:load />
+    <div class="toasts" id="toasts"></div>
   </body>
 </html>
