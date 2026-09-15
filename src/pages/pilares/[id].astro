@@ -1,21 +1,25 @@
 ---
 import { eq, and, desc } from 'drizzle-orm';
-import { db, pilaresResults, pilaresTemas, clients, shareLinks, users } from '@/db';
+import { db, pilaresTemas, shareLinks, users } from '@/db';
 import { renderizarPilares } from '@/render/pilares/documento';
 import { slugificar } from '@/lib/slug';
+import { puedeOperarCliente } from '@/lib/permisos';
+import { documentoVisible } from '@/lib/visibilidad';
 import type { AvanceTema } from '@/pilares/avance';
 
+const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
 
-const [r] = await db.select().from(pilaresResults).where(eq(pilaresResults.id, id!)).limit(1);
-if (!r) return new Response('Mapa no encontrado', { status: 404 });
+const doc = await documentoVisible(usuario, 'pilares', id!);
+if (!doc) return new Response(null, { status: 404 });
+const { resultado: r, cliente: c } = doc;
+const operable = puedeOperarCliente(usuario, c);
 
-const [c] = await db.select().from(clients).where(eq(clients.id, r.clientId)).limit(1);
-if (!c) return new Response('Cliente no encontrado', { status: 404 });
-
-const links = await db.select().from(shareLinks)
-  .where(and(eq(shareLinks.documentoId, r.id), eq(shareLinks.documentoTipo, 'pilares')))
-  .orderBy(desc(shareLinks.createdAt));
+const links = operable
+  ? await db.select().from(shareLinks)
+      .where(and(eq(shareLinks.documentoId, r.id), eq(shareLinks.documentoTipo, 'pilares')))
+      .orderBy(desc(shareLinks.createdAt))
+  : [];
 
 const activo = links.find((l) => !l.revocado) ?? null;
 const base = (process.env.PUBLIC_BASE_URL ?? Astro.url.origin).replace(/\/+$/, '');
@@ -40,10 +44,12 @@ const html = renderizarPilares(
   r.datos as any,
   { cliente: c.nombre, fecha: r.createdAt.toISOString().slice(0, 10) },
   {
-    operador: {
-      clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
-      version: r.version, tipo: 'pilares', tokenActivo: activo?.token ?? null, base,
-    },
+    operador: operable
+      ? {
+          clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
+          version: r.version, tipo: 'pilares', tokenActivo: activo?.token ?? null, base,
+        }
+      : undefined,
     avance,
     resultId: r.id,
   },

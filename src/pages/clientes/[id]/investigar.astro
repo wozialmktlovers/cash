@@ -2,13 +2,17 @@
 import { eq } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
-import { db, clients, clientLinks, clientFiles } from '@/db';
+import { db, clientLinks, clientFiles } from '@/db';
 import { revisarAntesDeInvestigar } from '@/lib/precheck';
+import { puedeOperarCliente } from '@/lib/permisos';
+import { clienteVisible } from '@/lib/visibilidad';
 
+const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
 
-const [cliente] = await db.select().from(clients).where(eq(clients.id, id!)).limit(1);
-if (!cliente) return new Response('Cliente no encontrado', { status: 404 });
+const cliente = await clienteVisible(usuario, id!);
+if (!cliente) return new Response(null, { status: 404 });
+const operable = puedeOperarCliente(usuario, cliente);
 
 const enlaces = await db.select().from(clientLinks).where(eq(clientLinks.clientId, cliente.id));
 const archivos = await db.select().from(clientFiles).where(eq(clientFiles.clientId, cliente.id));
@@ -75,7 +79,7 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
       <p class="aviso" style="margin-top:16px">Al alcanzar el tope, las etapas que falten se declaran vacías en lugar de continuar.</p>
       <div class="aviso rosa" id="error" role="alert" style="margin-top:12px" hidden></div>
       <div class="acciones">
-        <button type="button" class="btn ancho-total" id="lanzar">Lanzar investigación</button>
+        <button type="button" class="btn ancho-total" id="lanzar" disabled={!operable}>Lanzar investigación</button>
         <a href={`/clientes/${cliente.id}`} class="btn fantasma ancho-total">Cancelar</a>
       </div>
     </aside>

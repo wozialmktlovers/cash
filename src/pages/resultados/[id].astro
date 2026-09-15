@@ -1,31 +1,39 @@
 ---
 import { eq, and, desc } from 'drizzle-orm';
-import { db, researchResults, clients, shareLinks } from '@/db';
+import { db, shareLinks } from '@/db';
 import { renderizarInvestigacion } from '@/render/investigacion/documento';
 import { slugificar } from '@/lib/slug';
+import { puedeOperarCliente } from '@/lib/permisos';
+import { documentoVisible } from '@/lib/visibilidad';
 
+const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
 
-const [r] = await db.select().from(researchResults).where(eq(researchResults.id, id!)).limit(1);
-if (!r) return new Response('Resultado no encontrado', { status: 404 });
+const doc = await documentoVisible(usuario, 'research', id!);
+if (!doc) return new Response(null, { status: 404 });
+const { resultado: r, cliente: c } = doc;
+const operable = puedeOperarCliente(usuario, c);
 
-const [c] = await db.select().from(clients).where(eq(clients.id, r.clientId)).limit(1);
-if (!c) return new Response('Cliente no encontrado', { status: 404 });
-
-const links = await db.select().from(shareLinks)
-  .where(and(eq(shareLinks.documentoId, r.id), eq(shareLinks.documentoTipo, 'research')))
-  .orderBy(desc(shareLinks.createdAt));
+const links = operable
+  ? await db.select().from(shareLinks)
+      .where(and(eq(shareLinks.documentoId, r.id), eq(shareLinks.documentoTipo, 'research')))
+      .orderBy(desc(shareLinks.createdAt))
+  : [];
 
 const activo = links.find((l) => !l.revocado) ?? null;
 const base = (process.env.PUBLIC_BASE_URL ?? Astro.url.origin).replace(/\/+$/, '');
 
+// La cabecera de la investigación trae su propio botón Compartir; sin permiso
+// de operar, se le pasa `undefined` y esa cabecera queda como la ve el cliente.
 const html = renderizarInvestigacion(
   r.datos as any,
   { cliente: c.nombre, giro: c.giro, fecha: r.createdAt.toISOString().slice(0, 10) },
-  {
-    clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
-    version: r.version, tipo: 'research', tokenActivo: activo?.token ?? null, base,
-  },
+  operable
+    ? {
+        clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
+        version: r.version, tipo: 'research', tokenActivo: activo?.token ?? null, base,
+      }
+    : undefined,
 );
 ---
 

@@ -1,7 +1,8 @@
 import type { APIRoute } from 'astro';
 import { and, eq } from 'drizzle-orm';
-import { db, clientLinks, clients } from '@/db';
+import { db, clientLinks } from '@/db';
 import { validarUrl, normalizarUrl } from '@/lib/links';
+import { clienteOperable } from '@/lib/visibilidad';
 
 const TIPOS = ['sitio', 'instagram', 'facebook', 'tiktok', 'youtube', 'ventas', 'otro'] as const;
 type Tipo = (typeof TIPOS)[number];
@@ -12,7 +13,7 @@ const json = (cuerpo: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-export const POST: APIRoute = async ({ params, request }) => {
+export const POST: APIRoute = async ({ params, request, locals }) => {
   const clientId = params.id!;
 
   let crudo: { tipo?: string; url?: string };
@@ -30,8 +31,7 @@ export const POST: APIRoute = async ({ params, request }) => {
   if (!validarUrl(url)) errores.push('La URL no es válida. Debe ser http o https y tener dominio.');
   if (errores.length) return json({ ok: false, errores }, 400);
 
-  const [cliente] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, clientId)).limit(1);
-  if (!cliente) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
+  if (!(await clienteOperable(locals.usuario, clientId))) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
 
   const [creado] = await db
     .insert(clientLinks)
@@ -41,10 +41,12 @@ export const POST: APIRoute = async ({ params, request }) => {
   return json({ ok: true, enlace: creado }, 201);
 };
 
-export const DELETE: APIRoute = async ({ params, url }) => {
+export const DELETE: APIRoute = async ({ params, url, locals }) => {
   const clientId = params.id!;
   const linkId = url.searchParams.get('linkId');
   if (!linkId) return json({ ok: false, errores: ['Falta linkId'] }, 400);
+
+  if (!(await clienteOperable(locals.usuario, clientId))) return json({ ok: false, errores: ['El enlace no existe'] }, 404);
 
   const [borrado] = await db
     .delete(clientLinks)

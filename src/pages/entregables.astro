@@ -4,16 +4,20 @@ import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import { db, clients, researchResults, growthResults, pilaresResults, shareLinks } from '@/db';
 import { slugificar } from '@/lib/slug';
+import { condicionClientes } from '@/lib/visibilidad';
+
+const usuario = Astro.locals.usuario;
+const cond = condicionClientes(usuario);
 
 const investigaciones = await db
   .select({ id: researchResults.id, version: researchResults.version, createdAt: researchResults.createdAt, clientId: clients.id, nombre: clients.nombre })
-  .from(researchResults).innerJoin(clients, eq(clients.id, researchResults.clientId));
+  .from(researchResults).innerJoin(clients, eq(clients.id, researchResults.clientId)).where(cond);
 const manuales = await db
   .select({ id: growthResults.id, version: growthResults.version, createdAt: growthResults.createdAt, clientId: clients.id, nombre: clients.nombre })
-  .from(growthResults).innerJoin(clients, eq(clients.id, growthResults.clientId));
+  .from(growthResults).innerJoin(clients, eq(clients.id, growthResults.clientId)).where(cond);
 const mapas = await db
   .select({ id: pilaresResults.id, version: pilaresResults.version, createdAt: pilaresResults.createdAt, clientId: clients.id, nombre: clients.nombre })
-  .from(pilaresResults).innerJoin(clients, eq(clients.id, pilaresResults.clientId));
+  .from(pilaresResults).innerJoin(clients, eq(clients.id, pilaresResults.clientId)).where(cond);
 
 const documentos = [
   ...investigaciones.map((d) => ({ ...d, tipo: 'research' as const })),

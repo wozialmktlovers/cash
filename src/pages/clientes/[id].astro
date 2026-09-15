@@ -7,12 +7,16 @@ import FilesUploader from '@/components/FilesUploader';
 import { puedeGenerarPilares, contarEtapasConDatos } from '@/lib/precheck';
 import { iniciales, tinte } from '@/lib/ui/cliente-visual';
 import { ETIQUETA_ESTADO } from '@/lib/ui/progreso';
-import { db, clients, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults } from '@/db';
+import { puedeOperarCliente } from '@/lib/permisos';
+import { clienteVisible } from '@/lib/visibilidad';
+import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults } from '@/db';
 
+const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
 
-const [cliente] = await db.select().from(clients).where(eq(clients.id, id!)).limit(1);
-if (!cliente) return new Response('Cliente no encontrado', { status: 404 });
+const cliente = await clienteVisible(usuario, id!);
+if (!cliente) return new Response(null, { status: 404 });
+const operable = puedeOperarCliente(usuario, cliente);
 
 const enlaces = await db.select().from(clientLinks).where(eq(clientLinks.clientId, cliente.id));
 const archivos = await db.select().from(clientFiles).where(eq(clientFiles.clientId, cliente.id));
@@ -51,7 +55,7 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
         <Icono nombre="puntos" />
       </button>
       <ul class="menu-lista" id="menu-lista" hidden>
-        <li><button type="button" id="borrar">Eliminar cliente</button></li>
+        {operable && <li><button type="button" id="borrar">Eliminar cliente</button></li>}
       </ul>
     </div>
   </div>
@@ -66,7 +70,11 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
           ? `Última: ${fecha(ultimaInvestigacion.createdAt)} · ${dinero(Number(ultimaInvestigacion.costoUsd))}`
           : 'Nunca investigado'}
       </p>
-      <a href={`/clientes/${cliente.id}/investigar`} class="btn">Investigar</a>
+      {operable ? (
+        <a href={`/clientes/${cliente.id}/investigar`} class="btn">Investigar</a>
+      ) : (
+        <span class="btn" aria-disabled="true">Investigar</span>
+      )}
     </section>
 
     <section class="tarjeta accion">
@@ -80,7 +88,7 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
       ) : (
         <p class="secundario">Requiere una investigación con datos. El manual parte de ella.</p>
       )}
-      <button type="button" class="btn" id="generar-growth" disabled={!puedeGrowth}>Generar</button>
+      <button type="button" class="btn" id="generar-growth" disabled={!puedeGrowth || !operable}>Generar</button>
     </section>
 
     <section class="tarjeta accion">
@@ -94,7 +102,7 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
       ) : (
         <p class="secundario">{puedePilares.razon}</p>
       )}
-      {puedePilares.ok ? (
+      {puedePilares.ok && operable ? (
         <a href={`/clientes/${cliente.id}/pilares`} class="btn">Generar</a>
       ) : (
         <span class="btn" aria-disabled="true">Generar</span>
@@ -120,7 +128,7 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
         <div class="campo ancho"><label for="contacto">Contacto</label><input id="contacto" name="contacto" value={cliente.contacto ?? ''} /></div>
         <div class="campo ancho"><label for="notas">Notas del operador</label><textarea id="notas" name="notas">{cliente.notas ?? ''}</textarea></div>
       </div>
-      <div class="acciones"><button type="submit" class="btn" id="guardar">Guardar cambios</button></div>
+      {operable && <div class="acciones"><button type="submit" class="btn" id="guardar">Guardar cambios</button></div>}
     </form>
   </section>
 
@@ -206,11 +214,12 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
   });
   mostrar(location.hash.slice(1) || 'datos');
 
-  // ── Guardar datos
+  // ── Guardar datos. Sin permiso de operar, el botón no se renderiza.
   const forma = document.getElementById('forma') as HTMLFormElement;
-  const guardar = document.getElementById('guardar') as HTMLButtonElement;
+  const guardar = document.getElementById('guardar') as HTMLButtonElement | null;
   forma.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!guardar) return;
     guardar.disabled = true;
     try {
       const res = await fetch(`/api/clientes/${clientId}`, {
@@ -227,7 +236,7 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
     guardar.disabled = false;
   });
 
-  // ── Menú ⋯ y borrado en dos pasos
+  // ── Menú ⋯ y borrado en dos pasos. Sin permiso de operar, «Eliminar» no se renderiza.
   const menuBoton = document.getElementById('menu-boton') as HTMLButtonElement;
   const menuLista = document.getElementById('menu-lista') as HTMLElement;
   const dialogo = document.getElementById('dialogo-borrar') as HTMLDialogElement;
@@ -240,7 +249,7 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
   });
   document.addEventListener('click', cerrarMenu);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarMenu(); });
-  document.getElementById('borrar')!.addEventListener('click', () => { cerrarMenu(); dialogo.showModal(); });
+  document.getElementById('borrar')?.addEventListener('click', () => { cerrarMenu(); dialogo.showModal(); });
   document.getElementById('cancelar-borrado')!.addEventListener('click', () => dialogo.close());
   const borrarDeVerdad = document.getElementById('borrar-de-verdad') as HTMLButtonElement;
   borrarDeVerdad.addEventListener('click', async () => {

@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
-import { db, researchJobs, researchResults, growthResults, pilaresResults } from '@/db';
+import { db, researchResults, growthResults, pilaresResults } from '@/db';
+import { jobVisible } from '@/lib/visibilidad';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -8,11 +9,12 @@ const json = (cuerpo: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-export const GET: APIRoute = async ({ params }) => {
+export const GET: APIRoute = async ({ params, locals }) => {
   const id = params.id!;
 
-  const [job] = await db.select().from(researchJobs).where(eq(researchJobs.id, id)).limit(1);
-  if (!job) return json({ ok: false, errores: ['La investigación no existe'] }, 404);
+  const visible = await jobVisible(locals.usuario, id);
+  if (!visible) return json({ ok: false, errores: ['La investigación no existe'] }, 404);
+  const { job } = visible;
 
   // El resultado vive en una tabla u otra según el tipo del job.
   const tabla = job.tipo === 'growth' ? growthResults : job.tipo === 'pilares' ? pilaresResults : researchResults;

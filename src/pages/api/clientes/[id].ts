@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { db, clients } from '@/db';
 import { validarCliente } from '@/lib/clientes';
+import { clienteOperable } from '@/lib/visibilidad';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -9,8 +10,10 @@ const json = (cuerpo: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-export const PATCH: APIRoute = async ({ params, request }) => {
+export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const id = params.id!;
+
+  if (!(await clienteOperable(locals.usuario, id))) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
 
   let crudo: unknown;
   try {
@@ -32,8 +35,10 @@ export const PATCH: APIRoute = async ({ params, request }) => {
   return json({ ok: true, id: actualizado.id });
 };
 
-export const DELETE: APIRoute = async ({ params }) => {
+export const DELETE: APIRoute = async ({ params, locals }) => {
   const id = params.id!;
+
+  if (!(await clienteOperable(locals.usuario, id))) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
 
   const [borrado] = await db
     .delete(clients)

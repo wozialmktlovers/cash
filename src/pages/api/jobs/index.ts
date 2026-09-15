@@ -1,7 +1,8 @@
 import type { APIRoute } from 'astro';
 import { and, eq, or } from 'drizzle-orm';
-import { db, researchJobs, researchResults, clients } from '@/db';
+import { db, researchJobs, researchResults } from '@/db';
 import { puedeGenerarGrowth, puedeGenerarPilares, contarEtapasConDatos, investigacionUtil } from '@/lib/precheck';
+import { clienteOperable } from '@/lib/visibilidad';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -9,7 +10,7 @@ const json = (cuerpo: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, locals }) => {
   let crudo: { clientId?: string; tipo?: string };
   try {
     crudo = await request.json();
@@ -22,12 +23,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const tipo = crudo.tipo === 'growth' ? 'growth' : crudo.tipo === 'pilares' ? 'pilares' : 'research';
 
-  const [cliente] = await db
-    .select({ id: clients.id })
-    .from(clients)
-    .where(eq(clients.id, clientId))
-    .limit(1);
-  if (!cliente) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
+  if (!(await clienteOperable(locals.usuario, clientId))) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
 
   // El manual y el mapa de pilares parten de la investigación: sin ella no hay nada que razonar.
   if (tipo !== 'research') {
@@ -56,7 +52,7 @@ export const POST: APIRoute = async ({ request }) => {
 
   const [creado] = await db
     .insert(researchJobs)
-    .values({ clientId, tipo, estado: 'encolado', etapas: {} })
+    .values({ clientId, tipo, estado: 'encolado', etapas: {}, creadoPor: locals.usuario.id })
     .returning({ id: researchJobs.id });
 
   return json({ ok: true, id: creado.id }, 201);

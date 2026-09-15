@@ -2,14 +2,15 @@
 import { eq } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import ProgresoJob from '@/components/ProgresoJob';
-import { db, researchJobs, researchResults, growthResults, pilaresResults, clients } from '@/db';
+import { db, researchResults, growthResults, pilaresResults } from '@/db';
+import { jobVisible } from '@/lib/visibilidad';
 
+const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
 
-const [job] = await db.select().from(researchJobs).where(eq(researchJobs.id, id!)).limit(1);
-if (!job) return new Response('Investigación no encontrada', { status: 404 });
-
-const [cliente] = await db.select().from(clients).where(eq(clients.id, job.clientId)).limit(1);
+const visible = await jobVisible(usuario, id!);
+if (!visible) return new Response(null, { status: 404 });
+const { job, cliente } = visible;
 // El resultado vive en una tabla u otra según el tipo del job.
 const tabla = job.tipo === 'growth' ? growthResults : job.tipo === 'pilares' ? pilaresResults : researchResults;
 const [resultado] = await db.select({ id: tabla.id }).from(tabla).where(eq(tabla.jobId, job.id)).limit(1);

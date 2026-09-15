@@ -1,8 +1,9 @@
 import type { APIRoute } from 'astro';
 import { and, eq } from 'drizzle-orm';
-import { db, clientFiles, clients } from '@/db';
+import { db, clientFiles } from '@/db';
 import { guardarArchivo, borrarArchivo, mimePermitido, MAX_BYTES } from '@/lib/files';
 import { extraerTexto, recortarTexto } from '@/lib/extract';
+import { clienteOperable } from '@/lib/visibilidad';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -10,15 +11,10 @@ const json = (cuerpo: unknown, status = 200) =>
     headers: { 'Content-Type': 'application/json' },
   });
 
-export const POST: APIRoute = async ({ params, request }) => {
+export const POST: APIRoute = async ({ params, request, locals }) => {
   const clientId = params.id!;
 
-  const [cliente] = await db
-    .select({ id: clients.id })
-    .from(clients)
-    .where(eq(clients.id, clientId))
-    .limit(1);
-  if (!cliente) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
+  if (!(await clienteOperable(locals.usuario, clientId))) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
 
   let form: FormData;
   try {
@@ -73,10 +69,12 @@ export const POST: APIRoute = async ({ params, request }) => {
   return json({ ok: true, archivo: creado }, 201);
 };
 
-export const DELETE: APIRoute = async ({ params, url }) => {
+export const DELETE: APIRoute = async ({ params, url, locals }) => {
   const clientId = params.id!;
   const fileId = url.searchParams.get('fileId');
   if (!fileId) return json({ ok: false, errores: ['Falta fileId'] }, 400);
+
+  if (!(await clienteOperable(locals.usuario, clientId))) return json({ ok: false, errores: ['El archivo no existe'] }, 404);
 
   const [borrado] = await db
     .delete(clientFiles)
