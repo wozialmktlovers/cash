@@ -2,60 +2,54 @@
 import Base from '@/layouts/Base.astro';
 ---
 
-<Base titulo="Nuevo cliente" migas="Clientes › Nuevo">
+<Base titulo="Nuevo cliente" activo="clientes" volver={{ href: '/clientes', texto: 'Clientes' }}>
   <div class="encabezado">
     <div>
+      <p class="eyebrow">Alta</p>
       <h1>Nuevo cliente</h1>
       <p class="sub">Nombre, giro y producto son obligatorios. Lo demás mejora la investigación.</p>
     </div>
   </div>
 
   <form class="tarjeta" id="forma">
-    <div class="aviso rosa" id="errores" hidden></div>
-
     <div class="campos">
       <div class="campo">
         <label for="nombre">Nombre <span class="req">*</span></label>
         <input id="nombre" name="nombre" required autofocus />
       </div>
-
       <div class="campo">
         <label for="giro">Giro <span class="req">*</span></label>
         <input id="giro" name="giro" required placeholder="Cosmetología, gimnasio, repostería…" />
       </div>
-
       <div class="campo ancho">
         <label for="producto">Producto o servicio <span class="req">*</span></label>
         <input id="producto" name="producto" required placeholder="Diplomado presencial de 6 meses" />
       </div>
-
       <div class="campo">
         <label for="ciudad">Ciudad</label>
         <input id="ciudad" name="ciudad" placeholder="Guadalajara" />
         <p class="ayuda">Sin ciudad, el foco geográfico será nacional.</p>
       </div>
-
       <div class="campo">
         <label for="ticket">Ticket</label>
         <input id="ticket" name="ticket" placeholder="$36,792" />
         <p class="ayuda">Determina si el ciclo de compra es largo.</p>
       </div>
-
       <div class="campo ancho">
         <label for="contacto">Contacto</label>
         <input id="contacto" name="contacto" placeholder="Nombre, teléfono o correo" />
       </div>
-
       <div class="campo ancho">
         <label for="notas">Notas del operador</label>
-        <textarea id="notas" name="notas" placeholder="Lo que sepas y no esté en los documentos."
-        ></textarea>
+        <textarea id="notas" name="notas" placeholder="Lo que sepas y no esté en los documentos."></textarea>
       </div>
     </div>
 
+    <div class="aviso rosa" id="errores" role="alert" style="margin-top:18px" hidden></div>
+
     <div class="acciones">
       <button type="submit" class="btn" id="guardar">Guardar cliente</button>
-      <a href="/" class="btn fantasma">Cancelar</a>
+      <a href="/clientes" class="btn fantasma">Cancelar</a>
     </div>
   </form>
 </Base>
