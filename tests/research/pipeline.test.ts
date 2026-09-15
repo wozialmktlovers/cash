@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { decidirEtapasPendientes, superaTope, repartirPorTope } from '@/research/pipeline';
+import { decidirEtapasPendientes, superaTope, repartirPorTope, ETAPAS, hayDatosParaLectura } from '@/research/pipeline';
 
 describe('reanudación', () => {
   it('omite las etapas ya completadas', () => {
     const p = decidirEtapasPendientes({ competencia: 'ok', audiencia: 'ok' });
-    expect(p).toEqual(['canales','mercado','sintesis']);
+    expect(p).toEqual(['canales','mercado','sintesis','lectura']);
   });
 
   it('reintenta las etapas que fallaron', () => {
@@ -12,8 +12,8 @@ describe('reanudación', () => {
     expect(p).toContain('audiencia');
   });
 
-  it('con estado vacío corre las cinco', () => {
-    expect(decidirEtapasPendientes({})).toHaveLength(5);
+  it('con estado vacío corre las seis', () => {
+    expect(decidirEtapasPendientes({})).toHaveLength(6);
   });
 });
 
@@ -79,5 +79,19 @@ describe('reparto con freno de costo', () => {
     let publicaciones = 0;
     await repartirPorTope(['competencia'], 15, { valor: 0 }, estado, async () => {}, () => { publicaciones++; });
     expect(publicaciones).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('lectura para cliente', () => {
+  it('es la última etapa', () => {
+    expect(ETAPAS[ETAPAS.length - 1]).toBe('lectura');
+  });
+  it('corre si al menos una etapa previa trajo datos', () => {
+    expect(hayDatosParaLectura({ mercado: { datos: [] } })).toBe(true);
+    expect(hayDatosParaLectura({ sintesis: {} })).toBe(true);
+  });
+  it('no corre sin datos previos', () => {
+    expect(hayDatosParaLectura({})).toBe(false);
+    expect(hayDatosParaLectura({ lectura: {} })).toBe(false);
   });
 });

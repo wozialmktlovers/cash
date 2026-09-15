@@ -9,6 +9,7 @@ const INVESTIGACION: Etapa[] = [
   { clave: 'canales', titulo: 'Canales', detalle: 'Plataformas, formatos, horarios y advertencias regulatorias.' },
   { clave: 'mercado', titulo: 'Mercado', detalle: 'Datos oficiales, salarios, regulación y crecimiento.' },
   { clave: 'sintesis', titulo: 'Síntesis', detalle: 'Decisiones estratégicas. Espera a las cuatro anteriores.' },
+  { clave: 'lectura', titulo: 'Lectura para cliente', detalle: 'Versión en lenguaje sencillo para tu cliente. Espera a la síntesis.' },
 ];
 
 const GROWTH: Etapa[] = [

@@ -18,7 +18,7 @@ describe('etapasDe', () => {
 describe('porcentaje', () => {
   it('cuenta solo etapas ok sobre el total del tipo', () => {
     expect(porcentaje({ estructura: 'ok', creativos: 'ok', google: 'corriendo' }, 'growth')).toBe(50);
-    expect(porcentaje({ competencia: 'ok', audiencia: 'fallo' }, 'research')).toBe(20);
+    expect(porcentaje({ competencia: 'ok', audiencia: 'fallo' }, 'research')).toBe(17);
     expect(porcentaje({}, 'research')).toBe(0);
   });
   it('ignora claves que no son del tipo', () => {

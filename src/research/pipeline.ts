@@ -6,9 +6,10 @@ import { correrAudiencia } from './agents/audiencia';
 import { correrCanales } from './agents/canales';
 import { correrMercado } from './agents/mercado';
 import { correrSintesis } from './agents/sintesis';
+import { correrLectura } from './agents/lectura';
 import { calcularCosto } from '@/lib/cost';
 
-export const ETAPAS = ['competencia','audiencia','canales','mercado','sintesis'] as const;
+export const ETAPAS = ['competencia','audiencia','canales','mercado','sintesis','lectura'] as const;
 export type Etapa = typeof ETAPAS[number];
 
 export function decidirEtapasPendientes(estado: Record<string, string>): Etapa[] {
@@ -17,6 +18,13 @@ export function decidirEtapasPendientes(estado: Record<string, string>): Etapa[]
 
 export function superaTope(costoAcumulado: number, tope: number): boolean {
   return costoAcumulado >= tope;
+}
+
+const PREVIAS_A_LECTURA = ['competencia', 'audiencia', 'canales', 'mercado', 'sintesis'];
+
+/** La lectura reescribe lo investigado: sin nada investigado no hay qué explicar. */
+export function hayDatosParaLectura(resultados: Record<string, unknown>): boolean {
+  return PREVIAS_A_LECTURA.some((k) => Boolean(resultados[k]));
 }
 
 /**
@@ -100,10 +108,11 @@ export async function ejecutarJob(jobId: string): Promise<void> {
     canales:     () => correrCanales(ctx, vigilar(modeloInv)),
     mercado:     () => correrMercado(ctx, vigilar(modeloInv)),
     sintesis:    () => correrSintesis(ctx, resultados as any, vigilar(modeloSin)),
+    lectura:     () => correrLectura(ctx, resultados as any, vigilar(modeloSin)),
   };
 
   const pendientes = decidirEtapasPendientes(estado);
-  const paralelas = pendientes.filter((e) => e !== 'sintesis');
+  const paralelas = pendientes.filter((e) => e !== 'sintesis' && e !== 'lectura');
 
   const guardarProgreso = async () => {
     await db.update(researchJobs).set({
@@ -147,6 +156,25 @@ export async function ejecutarJob(jobId: string): Promise<void> {
       } catch (e) {
         estado.sintesis = 'fallo';
         console.error(`[${jobId}] síntesis:`, e);
+      }
+    }
+  }
+
+  // La lectura para el cliente espera a la síntesis y reescribe todo lo anterior.
+  if (pendientes.includes('lectura') && hayDatosParaLectura(resultados)) {
+    if (superaTope(gasto.valor, tope)) {
+      estado.lectura = 'omitido_por_costo';
+    } else {
+      estado.lectura = 'corriendo';
+      await db.update(researchJobs).set({ etapaActual: 'lectura', etapas: estado }).where(eq(researchJobs.id, jobId));
+      try {
+        const r = await corredores.lectura();
+        resultados.lectura = r.datos;
+        tIn += r.tokensEntrada; tOut += r.tokensSalida;
+        estado.lectura = 'ok';
+      } catch (e) {
+        estado.lectura = 'fallo';
+        console.error(`[${jobId}] lectura:`, e);
       }
     }
   }
