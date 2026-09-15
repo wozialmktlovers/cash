@@ -186,15 +186,12 @@ export const SCRIPT_CABECERA_COMPARTIR = `(function () {
     var candidatos = candidatosFoco();
     return candidatos.length ? candidatos[0] : null;
   }
-  // stopImmediatePropagation, no solo stopPropagation (que no hace nada
-  // entre listeners del mismo document): SCRIPT_CABECERA_COMPARTIR se
-  // imprime antes que SCRIPT_FLUJO (comunes.ts), así que este listener queda
-  // registrado primero y, sin cortar aquí, el mismo Escape que cierra este
-  // panel seguía su curso hasta el de SCRIPT_FLUJO y también preguntaba
-  // '¿salir sin guardar?' o salía del modo comentar - fix wave, punto 9. El
-  // diálogo de notas de pilares tiene el mismo problema pendiente (se
-  // resuelve después de que aterrice el trabajo concurrente sobre pilares).
-  function alEscape(e) { if (e.key === 'Escape') { e.stopImmediatePropagation(); cerrar(true); } }
+  // Se escucha en fase de captura: este listener se registra al abrir el
+  // panel, después del de SCRIPT_FLUJO (que se registra al cargar), así que
+  // en fase de burbuja llegaría tarde. En captura corre antes y corta el
+  // Escape para que no pregunte «¿salir sin guardar?» ni salga del modo
+  // comentar mientras solo se cierra este panel.
+  function alEscape(e) { if (e.key === 'Escape') { e.stopPropagation(); cerrar(true); } }
   function alClicFuera(e) {
     if (panel.contains(e.target) || boton.contains(e.target)) return;
     cerrar(false);
@@ -206,14 +203,14 @@ export const SCRIPT_CABECERA_COMPARTIR = `(function () {
     posicionarPanel();
     var f = primerControl();
     if (f) f.focus();
-    document.addEventListener('keydown', alEscape);
+    document.addEventListener('keydown', alEscape, true);
     document.addEventListener('click', alClicFuera, true);
   }
   function cerrar(devolverFoco) {
     panelAbierto = false;
     panel.hidden = true;
     boton.setAttribute('aria-expanded', 'false');
-    document.removeEventListener('keydown', alEscape);
+    document.removeEventListener('keydown', alEscape, true);
     document.removeEventListener('click', alClicFuera, true);
     if (devolverFoco) boton.focus();
   }
