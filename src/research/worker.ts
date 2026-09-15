@@ -10,6 +10,29 @@ import { avisarJob } from '@/flujo/avisos';
 
 let corriendo = false;
 let arrancado = false;
+// La conversión se intenta una sola vez por arranque (spec §3: si se detiene
+// por falta de saldo, reintenta en el "siguiente arranque", no en el
+// siguiente tick). Se marca ANTES de correrla para que un tick que entra
+// mientras tanto no la vuelva a agendar; el candado `corriendo` ya la cubre
+// mientras está en curso, esta bandera cubre el resto del proceso.
+let conversionIntentada = false;
+
+/**
+ * Decide si toca arrancar la conversión de lecturas en este tick. Función
+ * pura (punto 1 de la corrección: "probar la lógica de decisión con una
+ * función pura") para no tener que montar el worker completo solo para
+ * probar la regla. Las cuatro condiciones son necesarias a la vez: cola
+ * vacía (un job real siempre va primero), no intentada ya en este arranque,
+ * llave de Anthropic presente y la bandera de apagado no está activa.
+ */
+export function debeConvertirLecturas(input: {
+  colaVacia: boolean;
+  yaIntentada: boolean;
+  tieneApiKey: boolean;
+  activada: boolean;
+}): boolean {
+  return input.colaVacia && !input.yaIntentada && input.tieneApiKey && input.activada;
+}
 
 /**
  * Job fallido (spec §3, Avisos): avisa a quien lo lanzó. Los pipelines
@@ -33,13 +56,38 @@ async function avisarSiJobFallido(job: typeof researchJobs.$inferSelect): Promis
   }).catch((e) => console.error('[avisos] job_fallido:', e));
 }
 
-async function tick() {
+export async function tick() {
   if (corriendo) return;
 
   const [siguiente] = await db.select().from(researchJobs)
     .where(or(eq(researchJobs.estado, 'encolado'), eq(researchJobs.estado, 'corriendo')))
     .orderBy(asc(researchJobs.createdAt)).limit(1);
-  if (!siguiente) return;
+
+  if (!siguiente) {
+    // Cola vacía: el hueco natural para la conversión de lecturas (punto 1:
+    // "ejecutarla desde tick() cuando la cola está vacía, una sola vez por
+    // arranque, con el mismo candado"). Se corre AQUÍ, dentro del mismo tick
+    // y bajo el mismo `corriendo`, en vez de dispararla aparte con
+    // `setTimeout` como antes: así un tick posterior que sí encuentra trabajo
+    // ve `corriendo=true` mientras la conversión sigue viva y no toma jobs.
+    if (debeConvertirLecturas({
+      colaVacia: true,
+      yaIntentada: conversionIntentada,
+      tieneApiKey: !!process.env.ANTHROPIC_API_KEY,
+      activada: process.env.CONVERTIR_LECTURAS !== '0',
+    })) {
+      conversionIntentada = true;
+      corriendo = true;
+      try {
+        await convertirLecturasPendientes();
+      } catch (e) {
+        console.error('[lecturas]', e);
+      } finally {
+        corriendo = false;
+      }
+    }
+    return;
+  }
 
   corriendo = true;
   try {
@@ -80,13 +128,9 @@ export function arrancarWorker(): void {
     void limpiarSesionesVencidas().catch((e) => console.error('[worker] limpieza:', e));
   }, 6 * 60 * 60_000);
 
-  // Las investigaciones anteriores a la lectura para cliente se convierten
-  // solas. Espera a que termine el arranque y nunca corre sin llave.
-  if (process.env.ANTHROPIC_API_KEY && process.env.CONVERTIR_LECTURAS !== '0') {
-    setTimeout(() => {
-      void convertirLecturasPendientes().catch((e) => console.error('[lecturas]', e));
-    }, 15_000);
-  }
-
+  // La conversión de lecturas antiguas ya no se agenda aparte con
+  // `setTimeout`: eso la dejaba correr en paralelo con un job real, porque
+  // no respetaba `corriendo`. Ahora vive dentro de `tick()` (arriba), que la
+  // arranca sola cuando la cola está vacía, bajo el mismo candado.
   console.log('[worker] iniciado');
 }
