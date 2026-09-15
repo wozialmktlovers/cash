@@ -52,9 +52,35 @@ function expandir(texto: string, match: RegExpMatchArray): number[] {
   return mult === 1 ? [crudo] : [crudo, Math.round(valor * mult)];
 }
 
-/** Todos los números de un texto, cada uno en sus lecturas posibles (con y sin multiplicador). */
-function numerosDe(texto: string): number[] {
-  return [...texto.matchAll(NUMERO)].flatMap((m) => expandir(texto, m));
+// Una URL de la fuente (enlace de referencia, imagen, etc.) trae dígitos que
+// no son cifras del contenido: un año en la ruta ('/2024/'), un id, un
+// parámetro de versión ('?v=12'). Se quita antes de buscar números, no solo
+// al principio del texto: puede venir pegada a una frase ("Fuente:
+// https://sitio.com/reporte-2024").
+const URL_REGEX = /https?:\/\/\S+/gi;
+const sinUrls = (texto: string): string => texto.replace(URL_REGEX, ' ');
+
+/** true si justo después del número (con o sin un espacio) viene un signo de porcentaje. */
+function esPorcentaje(texto: string, match: RegExpMatchArray): boolean {
+  const resto = texto.slice((match.index ?? 0) + match[0].length);
+  return /^\s?%/.test(resto);
+}
+
+type Lectura = { valor: number; porcentaje: boolean };
+
+/**
+ * Todos los números de un texto, cada uno en sus lecturas posibles (con y sin
+ * multiplicador), marcado cada uno con si es un porcentaje («24%») o no. La
+ * marca importa para `cifrasSinRespaldo`: un porcentaje de portada solo debe
+ * respaldarse con un porcentaje de la fuente, no con cualquier número que
+ * comparta el mismo valor (un «24%» no es lo mismo que un «24» a secas).
+ */
+function lecturasDe(texto: string): Lectura[] {
+  const limpio = sinUrls(texto);
+  return [...limpio.matchAll(NUMERO)].flatMap((m) => {
+    const porcentaje = esPorcentaje(limpio, m);
+    return expandir(limpio, m).map((valor) => ({ valor, porcentaje }));
+  });
 }
 
 /**
@@ -63,7 +89,7 @@ function numerosDe(texto: string): number[] {
  * el crudo — el crudo de una cifra con multiplicador no es la cifra, es una
  * coincidencia de dígitos («300» de «300 mil» contra un «300 seguidores» de
  * la fuente no respalda nada). La fuente sigue conservando sus dos lecturas
- * en `numerosDe`/`expandir`, porque ella sí puede escribir el mismo número
+ * en `lecturasDe`/`expandir`, porque ella sí puede escribir el mismo número
  * con o sin la abreviatura.
  */
 function valorPortada(texto: string, match: RegExpMatchArray): number {
@@ -79,14 +105,24 @@ function valorPortada(texto: string, match: RegExpMatchArray): number {
  * la portada solo cuenta el valor multiplicado cuando lo trae: «$180» no
  * vale como prefijo de «18,000» aunque comparta dígitos, y «300 mil» no se
  * respalda con un «300 seguidores» de la fuente aunque el crudo coincida.
+ *
+ * Un porcentaje de portada («24%») solo se respalda con un porcentaje de la
+ * fuente: un «24» a secas (24 clientes, 24 días) no es el mismo dato aunque
+ * comparta el número, así que las lecturas de la fuente se guardan en dos
+ * conjuntos separados según traigan o no el signo de %. Las URLs de la
+ * fuente no aportan números (ver `sinUrls`): un enlace no es una cifra del
+ * contenido, aunque su ruta tenga dígitos.
  */
 export function cifrasSinRespaldo(lectura: { cifras: { valor: string }[] }, fuente: unknown): string[] {
-  const disponibles = new Set(recogerTextos(fuente).flatMap(numerosDe));
+  const lecturasFuente = recogerTextos(fuente).flatMap(lecturasDe);
+  const disponiblesPct = new Set(lecturasFuente.filter((l) => l.porcentaje).map((l) => l.valor));
+  const disponiblesResto = new Set(lecturasFuente.filter((l) => !l.porcentaje).map((l) => l.valor));
 
   return lectura.cifras
     .filter((c) => {
       const [primero] = [...c.valor.matchAll(NUMERO)];
       if (!primero) return true; // sin ningún dígito: no hay nada que verificar contra la fuente.
+      const disponibles = esPorcentaje(c.valor, primero) ? disponiblesPct : disponiblesResto;
       return !disponibles.has(valorPortada(c.valor, primero));
     })
     .map((c) => c.valor);

@@ -64,4 +64,26 @@ describe('cifrasSinRespaldo', () => {
   it('sigue rechazando un valor sin multiplicador que solo coincide como prefijo de un rango', () => {
     expect(cifrasSinRespaldo(con('$180'), { t: 'de $10,000 a $18,000' })).toEqual(['$180']);
   });
+
+  // Punto 3 (M3) de la corrección: un porcentaje de portada solo se respalda
+  // con un porcentaje de la fuente, no con cualquier número que comparta el
+  // mismo valor por casualidad.
+  it('un porcentaje de portada no se respalda con un número suelto igual en la fuente', () => {
+    expect(cifrasSinRespaldo(con('24%'), { t: 'Atendimos a 24 clientes este mes' })).toEqual(['24%']);
+  });
+  it('un porcentaje de portada sí se respalda con el mismo porcentaje en la fuente', () => {
+    expect(cifrasSinRespaldo(con('24%'), { t: 'El 24% de los clientes vuelve' })).toEqual([]);
+  });
+  it('un número de portada sin % no se respalda con un porcentaje igual en la fuente', () => {
+    expect(cifrasSinRespaldo(con('24 clientes'), { t: 'El 24% de los clientes vuelve' })).toEqual(['24 clientes']);
+  });
+
+  // Punto 3 (M3): las URLs de la fuente no aportan números — un año o un id
+  // en la ruta no es una cifra del contenido.
+  it('una URL de la fuente no respalda una cifra que solo aparece en su ruta', () => {
+    expect(cifrasSinRespaldo(con('2024'), { t: 'Fuente: https://sitio.com/reporte-2024' })).toEqual(['2024']);
+  });
+  it('el mismo número sigue respaldado si además aparece fuera de la URL', () => {
+    expect(cifrasSinRespaldo(con('2024'), { t: 'Datos de 2024. Fuente: https://sitio.com/reporte-2024' })).toEqual([]);
+  });
 });
