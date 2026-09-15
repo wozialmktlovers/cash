@@ -109,6 +109,45 @@ describe('SCRIPT_EDITORIAL · pestañas por tablist', () => {
     expect(b[0].tab.getAttribute('aria-selected')).toBe('true');
   });
 
+  // El banco de pilares apaga sus pestañas con aria-disabled mientras hay un
+  // filtro activo (para que las tres subcategorías se vean a la vez), pero
+  // aria-disabled no es un atributo que el navegador haga cumplir por sí
+  // solo: sin esta revisión, un tab que seguía con tabindex="0" (el que
+  // estaba elegido antes del filtro) se podía alcanzar con Tab y su
+  // clic/Enter/flecha revertía el estado igual, aunque el mouse ya no
+  // pudiera tocarlo (eso lo cubre pointer-events:none, que no llega a un
+  // teclado).
+  it('con aria-disabled en el tab, un clic o una flecha no cambian la selección ni los paneles', () => {
+    const { a, b } = armarDosTablists();
+    for (const { tab } of a) tab.setAttribute('aria-disabled', 'true');
+
+    a[1].tab.dispatch('click');
+    expect(a[1].tab.getAttribute('aria-selected')).toBe('false');
+    expect(a[0].tab.getAttribute('aria-selected')).toBe('true');
+    expect(a[0].panel.hidden).toBe(false);
+    expect(a[1].panel.hidden).toBe(true);
+
+    a[0].tab.dispatch('keydown', { key: 'ArrowRight' });
+    a[0].tab.dispatch('keydown', { key: 'End' });
+    expect(a[0].tab.getAttribute('aria-selected')).toBe('true');
+    expect(a[0].panel.hidden).toBe(false);
+
+    // El grupo B, sin aria-disabled, sigue funcionando normalmente.
+    b[1].tab.dispatch('click');
+    expect(b[1].tab.getAttribute('aria-selected')).toBe('true');
+    expect(b[1].panel.hidden).toBe(false);
+  });
+
+  it('con aria-disabled en el propio [role="tablist"], sus pestañas también quedan bloqueadas', () => {
+    const { a } = armarDosTablists();
+    const tablistA = a[0].tab.parent!;
+    tablistA.setAttribute('aria-disabled', 'true');
+
+    a[1].tab.dispatch('click');
+    expect(a[1].tab.getAttribute('aria-selected')).toBe('false');
+    expect(a[0].panel.hidden).toBe(false);
+  });
+
   it('la investigación (un solo tablist) se comporta exactamente igual que antes', () => {
     const doc = new FakeDocument();
     const win = new FakeWindow();

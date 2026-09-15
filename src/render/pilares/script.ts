@@ -46,12 +46,22 @@ export const SCRIPT_PILARES = `(function () {
   // normalmente esconden) para que un match en la subcategoría 2 o 3 no
   // quede detrás de la pestaña 1. Al limpiar los filtros se restaura
   // exactamente el tab que estaba elegido (su aria-selected no se toca).
+  //
+  // aria-disabled solo (sin tabindex="-1") no alcanza para un teclado: el
+  // tab que seguía seleccionado se quedaba con tabindex="0", así que se
+  // podía tabular hasta él y su Enter/flecha (que SCRIPT_EDITORIAL ahora
+  // rechaza si ve aria-disabled, pero más vale no depender solo de eso)
+  // volvía a esconder las otras subcategorías sin que aria-disabled
+  // cambiara. Sacarlos del tab order es la otra mitad del arreglo.
   function mostrarTodasLasSubcategorias() {
     if (contenedorBloques) contenedorBloques.classList.add('filtro-activo');
     var paneles = banco.querySelectorAll('.panel-subcat');
     for (var i = 0; i < paneles.length; i++) paneles[i].hidden = false;
     var tabs = banco.querySelectorAll('.pestanas [role="tab"]');
-    for (var j = 0; j < tabs.length; j++) tabs[j].setAttribute('aria-disabled', 'true');
+    for (var j = 0; j < tabs.length; j++) {
+      tabs[j].setAttribute('aria-disabled', 'true');
+      tabs[j].setAttribute('tabindex', '-1');
+    }
   }
   function restaurarPestanaElegida() {
     if (contenedorBloques) contenedorBloques.classList.remove('filtro-activo');
@@ -61,6 +71,9 @@ export const SCRIPT_PILARES = `(function () {
       for (var j = 0; j < tabs.length; j++) {
         tabs[j].removeAttribute('aria-disabled');
         var activa = tabs[j].getAttribute('aria-selected') === 'true';
+        // Tabindex en rueda (roving tabindex): solo el tab elegido vuelve a
+        // ser alcanzable con Tab, como antes de que el filtro los apagara.
+        tabs[j].setAttribute('tabindex', activa ? '0' : '-1');
         var panel = document.getElementById(tabs[j].getAttribute('aria-controls'));
         if (panel) panel.hidden = !activa;
       }

@@ -30,6 +30,18 @@ export const SCRIPT_EDITORIAL = `(function () {
   // cada grupo se comporta como si fuera el único en la página — flechas,
   // Home/End y la selección inicial no cruzan de un tablist a otro.
   var listasDePestanas = document.querySelectorAll('[role="tablist"]');
+  // El banco de pilares apaga sus pestañas (aria-disabled, en el propio tab
+  // o en el tablist entero) mientras hay un filtro activo: las tres
+  // subcategorías se muestran a la vez y elegir un tab volvería a esconder
+  // las otras dos. aria-disabled por sí solo no basta (no es un atributo
+  // que el navegador haga cumplir, a diferencia de disabled): si esto no
+  // lo revisara, un teclado podía tabular al tab que seguía con
+  // tabindex="0" y su Enter/flecha revertía el estado igual.
+  function pestanaDeshabilitada(tab) {
+    if (tab.getAttribute('aria-disabled') === 'true') return true;
+    var lista = tab.closest ? tab.closest('[role="tablist"]') : null;
+    return !!(lista && lista.getAttribute('aria-disabled') === 'true');
+  }
   function elegir(tabsDelGrupo, tab, enfocar) {
     for (var j = 0; j < tabsDelGrupo.length; j++) {
       var activa = tabsDelGrupo[j] === tab;
@@ -45,8 +57,12 @@ export const SCRIPT_EDITORIAL = `(function () {
       var tabsDelGrupo = grupo.querySelectorAll('[role="tab"]');
       for (var k = 0; k < tabsDelGrupo.length; k++) {
         (function (indice) {
-          tabsDelGrupo[indice].addEventListener('click', function () { elegir(tabsDelGrupo, tabsDelGrupo[indice], false); });
+          tabsDelGrupo[indice].addEventListener('click', function () {
+            if (pestanaDeshabilitada(tabsDelGrupo[indice])) return;
+            elegir(tabsDelGrupo, tabsDelGrupo[indice], false);
+          });
           tabsDelGrupo[indice].addEventListener('keydown', function (e) {
+            if (pestanaDeshabilitada(tabsDelGrupo[indice])) return;
             if (e.key === 'Home') { e.preventDefault(); elegir(tabsDelGrupo, tabsDelGrupo[0], true); return; }
             if (e.key === 'End') { e.preventDefault(); elegir(tabsDelGrupo, tabsDelGrupo[tabsDelGrupo.length - 1], true); return; }
             var paso = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
