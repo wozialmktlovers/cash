@@ -128,13 +128,18 @@ export async function ejecutarGrowth(jobId: string): Promise<void> {
     jobId, clientId: job.clientId, datos, version: previas.length + 1,
   }).returning({ id: growthResults.id });
 
-  try {
-    await registrarEntregable(job.clientId, 'growth', resultado.id, job.creadoPor);
-  } catch (e) {
-    console.error('[flujo] registrarEntregable growth:', e);
-  }
-
   const todasFallaron = ETAPAS_GROWTH.every((e) => estado[e] !== 'ok');
+
+  // Igual que research: el pipeline inserta el resultado aunque las cuatro
+  // etapas hayan fallado, para dejar constancia del intento. Esa fila vacía
+  // (puro `_huecos`) no debe mover la etapa a en_proceso.
+  if (!todasFallaron) {
+    try {
+      await registrarEntregable(job.clientId, 'growth', resultado.id, job.creadoPor);
+    } catch (e) {
+      console.error('[flujo] registrarEntregable growth:', e);
+    }
+  }
   await db.update(researchJobs).set({
     estado: todasFallaron ? 'fallido' : 'completado',
     etapas: estado, etapaActual: null, finishedAt: new Date(),

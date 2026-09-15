@@ -151,10 +151,16 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
     jobId, clientId: job.clientId, datos: { estrategia, pilares, revision }, version: previas.length + 1,
   }).returning({ id: pilaresResults.id });
 
-  try {
-    await registrarEntregable(job.clientId, 'pilares', resultado.id, job.creadoPor);
-  } catch (e) {
-    console.error('[flujo] registrarEntregable pilares:', e);
+  // La estrategia fallida ya corta el job antes de este punto (arriba, con
+  // `fallar`), pero los cinco pilares pueden fallar los cinco y aun así
+  // llegar aquí con un resultado insertado sin un solo tema: esa fila no
+  // tiene nada que mostrar y no debe registrarse como entregable.
+  if (finales.length > 0) {
+    try {
+      await registrarEntregable(job.clientId, 'pilares', resultado.id, job.creadoPor);
+    } catch (e) {
+      console.error('[flujo] registrarEntregable pilares:', e);
+    }
   }
 
   await db.update(researchJobs).set({

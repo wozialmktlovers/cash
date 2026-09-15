@@ -3,7 +3,7 @@
 // pipelines. Aquí sí hay acceso a base de datos; las reglas puras viven en
 // ./reglas.ts (B2) y no se tocan.
 
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import {
   db, clienteEtapas, etapaEventos, comentarios, documentoVersiones,
   researchResults, growthResults, pilaresResults,
@@ -53,10 +53,15 @@ export function planContratacion(seleccion: Etapa[]): { etapa: Etapa; contratada
  * Aplica `planContratacion` a un cliente: crea o actualiza las 4 filas.
  * Idempotente, así que sirve tanto para el alta (todo nuevo) como para el
  * PUT de la ficha (upsert sobre lo que ya exista).
+ *
+ * Acepta un `ejecutor` opcional para que quien ya tiene abierta una
+ * transacción propia (el alta de cliente: insertar la fila de `clients` y
+ * contratar sus etapas debe ser todo o nada) pase su `tx` y esto no abra una
+ * segunda transacción anidada. Sin `ejecutor`, abre la suya.
  */
-export async function aplicarPlanContratacion(clientId: string, seleccion: Etapa[]): Promise<void> {
+export async function aplicarPlanContratacion(clientId: string, seleccion: Etapa[], ejecutor?: Ejecutor): Promise<void> {
   const plan = planContratacion(seleccion);
-  await db.transaction(async (tx) => {
+  const aplicar = async (tx: Ejecutor) => {
     for (const p of plan) {
       await tx.insert(clienteEtapas)
         .values({ clientId, etapa: p.etapa, contratada: p.contratada, interna: p.interna })
@@ -65,7 +70,9 @@ export async function aplicarPlanContratacion(clientId: string, seleccion: Etapa
           set: { contratada: p.contratada, interna: p.interna, actualizadoEn: new Date() },
         });
     }
-  });
+  };
+  if (ejecutor) await aplicar(ejecutor);
+  else await db.transaction((tx) => aplicar(tx));
 }
 
 /**
@@ -189,16 +196,29 @@ export async function registrarEntregable(
   if (usuarioId) await notificar([usuarioId], { tipo: 'entregable_generado', etapaId, clientId, documentoTipo: tipo, documentoId });
 }
 
-/** Comentarios abiertos de la versión vigente de la etapa (0 si todavía no hay documento). */
+/**
+ * Comentarios abiertos del documento vigente de la etapa (0 si todavía no hay
+ * documento). Cuenta por `documentoTipo`+`documentoId`, sin filtrar por
+ * `versionNumero`: un comentario se deja sobre una versión concreta, pero
+ * sigue pendiente aunque `guardarVersion` guarde una versión más nueva
+ * encima — una versión nueva nunca debe hacer desaparecer en silencio un
+ * comentario sin atender. Solo cuenta comentarios de primer nivel
+ * (`respuestaDe IS NULL`): una respuesta no es un pendiente aparte, es parte
+ * del hilo del comentario al que respondió.
+ */
 async function comentariosAbiertosVigentes(ejecutor: Ejecutor, fila: FilaEtapa): Promise<number> {
   const tipo = tipoDocumentoDe(fila.etapa);
   if (!fila.documentoId || !tipo) return 0;
-  const numero = await ultimaVersion(ejecutor, tipo, fila.documentoId);
-  if (numero === undefined) return 0;
   const [{ n }] = await ejecutor
     .select({ n: sql<number>`count(*)::int` })
     .from(comentarios)
-    .where(and(eq(comentarios.etapaId, fila.id), eq(comentarios.versionNumero, numero), eq(comentarios.estado, 'abierto')));
+    .where(and(
+      eq(comentarios.etapaId, fila.id),
+      eq(comentarios.documentoTipo, tipo),
+      eq(comentarios.documentoId, fila.documentoId),
+      eq(comentarios.estado, 'abierto'),
+      isNull(comentarios.respuestaDe),
+    ));
   return n;
 }
 
@@ -209,10 +229,10 @@ export type ResultadoTransicion =
 /**
  * `ejecutarTransicion`: carga la etapa y el cliente, aplica `aplicarAccion` y
  * actualiza de forma segura frente a carreras (la condición del UPDATE exige
- * el estado leído; si otra petición ya lo cambió, 409 «cambió mientras
- * tanto»). Si aprueba, guarda la versión aprobada; si pide cambios o reabre
- * con comentario general, lo crea con ancla `general`. Todo en una sola
- * transacción.
+ * el estado y el documento vigente leídos; si cualquiera de los dos cambió
+ * mientras tanto, 409 «cambió mientras tanto»). Si aprueba, guarda la versión
+ * aprobada; si pide cambios o reabre con comentario general, lo crea con
+ * ancla `general`. Todo en una sola transacción.
  */
 export async function ejecutarTransicion(o: {
   etapaId: string;
@@ -230,17 +250,23 @@ export async function ejecutarTransicion(o: {
   const cliente = await clienteOperable(usuario, fila.clientId);
   if (!cliente) return { ok: false, status: 404, razon: 'La etapa no existe' };
 
-  let hayInvestigacionConDatos = true;
-  if (fila.etapa === 'pilares' || fila.etapa === 'manual_campana') {
-    const investigaciones = await db
-      .select({ datos: researchResults.datos, version: researchResults.version })
-      .from(researchResults)
-      .where(eq(researchResults.clientId, cliente.id));
-    hayInvestigacionConDatos = Boolean(investigacionUtil(investigaciones));
+  // `dependencias` solo lo mira `aplicarAccion` para `iniciar` (las demás
+  // acciones ignoran el campo): para el resto no vale la pena la consulta de
+  // investigación ni la de las 4 etapas del cliente.
+  let dependencias: { ok: boolean; razon: string } = { ok: true, razon: '' };
+  if (accion === 'iniciar') {
+    let hayInvestigacionConDatos = true;
+    if (fila.etapa === 'pilares' || fila.etapa === 'manual_campana') {
+      const investigaciones = await db
+        .select({ datos: researchResults.datos, version: researchResults.version })
+        .from(researchResults)
+        .where(eq(researchResults.clientId, cliente.id));
+      hayInvestigacionConDatos = Boolean(investigacionUtil(investigaciones));
+    }
+    const etapasCliente = await db.select().from(clienteEtapas).where(eq(clienteEtapas.clientId, cliente.id));
+    dependencias = dependenciasCumplidas(fila.etapa, etapasCliente.map(paraReglas), hayInvestigacionConDatos);
   }
 
-  const etapasCliente = await db.select().from(clienteEtapas).where(eq(clienteEtapas.clientId, cliente.id));
-  const dependencias = dependenciasCumplidas(fila.etapa, etapasCliente.map(paraReglas), hayInvestigacionConDatos);
   const comentariosAbiertos = await comentariosAbiertosVigentes(db, fila);
   const comentarioGeneral = (comentario ?? '').trim();
   const esOperadorAsignado = cliente.operadorId === usuario.id;
@@ -256,12 +282,21 @@ export async function ejecutarTransicion(o: {
   });
   if (!r.ok) return { ok: false, status: 409, razon: r.razon };
 
+  // La condición del UPDATE también fija `documento_id` al leído: sin esto,
+  // un `generado` que llega entre la lectura y el UPDATE (el operador pide
+  // autorización justo cuando el pipeline termina un documento nuevo) deja
+  // pasar la condición de `estado` igual y `aprobar` enlazaría la versión del
+  // documento nuevo como si fuera la que el admin acaba de revisar.
+  const condicionDocumento = fila.documentoId === null
+    ? isNull(clienteEtapas.documentoId)
+    : eq(clienteEtapas.documentoId, fila.documentoId);
+
   try {
     const actualizada = await db.transaction(async (tx) => {
       const [fresca] = await tx
         .update(clienteEtapas)
         .set({ estado: r.nuevo, actualizadoEn: new Date() })
-        .where(and(eq(clienteEtapas.id, fila.id), eq(clienteEtapas.estado, fila.estado)))
+        .where(and(eq(clienteEtapas.id, fila.id), eq(clienteEtapas.estado, fila.estado), condicionDocumento))
         .returning();
       if (!fresca) throw new CambioConcurrenteError();
 
