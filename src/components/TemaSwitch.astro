@@ -1,0 +1,15 @@
+---
+import Icono from './Icono.astro';
+---
+<div class="tema-switch" role="radiogroup" aria-label="Tema de color">
+  <button type="button" role="radio" aria-checked="false" data-tema-valor="claro" aria-label="Día" title="Día">
+    <Icono nombre="sol" />
+  </button>
+  <button type="button" role="radio" aria-checked="false" data-tema-valor="oscuro" aria-label="Noche" title="Noche">
+    <Icono nombre="luna" />
+  </button>
+</div>
+
+<script>
+  import '@/scripts/tema-switch';
+</script>
