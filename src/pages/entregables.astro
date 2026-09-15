@@ -1,0 +1,126 @@
+---
+import { desc, eq, and, inArray } from 'drizzle-orm';
+import Base from '@/layouts/Base.astro';
+import Icono from '@/components/Icono.astro';
+import { db, clients, researchResults, growthResults, shareLinks } from '@/db';
+import { slugificar } from '@/lib/slug';
+
+const investigaciones = await db
+  .select({ id: researchResults.id, version: researchResults.version, createdAt: researchResults.createdAt, clientId: clients.id, nombre: clients.nombre })
+  .from(researchResults).innerJoin(clients, eq(clients.id, researchResults.clientId));
+const manuales = await db
+  .select({ id: growthResults.id, version: growthResults.version, createdAt: growthResults.createdAt, clientId: clients.id, nombre: clients.nombre })
+  .from(growthResults).innerJoin(clients, eq(clients.id, growthResults.clientId));
+
+const documentos = [
+  ...investigaciones.map((d) => ({ ...d, tipo: 'research' as const })),
+  ...manuales.map((d) => ({ ...d, tipo: 'growth' as const })),
+].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+const links = documentos.length
+  ? await db.select().from(shareLinks)
+      .where(and(eq(shareLinks.revocado, false), inArray(shareLinks.documentoId, documentos.map((d) => d.id))))
+      .orderBy(desc(shareLinks.createdAt))
+  : [];
+// Si un documento tiene varios links vivos se muestra el más reciente.
+const linkPorDocumento = new Map<string, (typeof links)[number]>();
+for (const l of links) if (!linkPorDocumento.has(l.documentoId)) linkPorDocumento.set(l.documentoId, l);
+
+const base = process.env.PUBLIC_BASE_URL?.replace(/\/+$/, '') || Astro.url.origin;
+const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+---
+
+<Base titulo="Entregables" activo="entregables">
+  <div class="encabezado">
+    <div>
+      <h1>Entregables</h1>
+      <p class="sub">Presentaciones de Social Research y manuales de campaña.</p>
+    </div>
+  </div>
+
+  {documentos.length === 0 ? (
+    <div class="tarjeta vacio">
+      <Icono nombre="vacio" />
+      <strong>Todavía no hay entregables</strong>
+      Aparecen aquí cuando termina una investigación o un manual.
+      <div><a href="/clientes" class="btn">Lanza tu primera investigación</a></div>
+    </div>
+  ) : (
+    <>
+      <div class="chips" role="group" aria-label="Filtrar por tipo">
+        <button type="button" class="chip" data-filtro="todos" aria-pressed="true">Todos</button>
+        <button type="button" class="chip" data-filtro="research" aria-pressed="false">Investigaciones</button>
+        <button type="button" class="chip" data-filtro="growth" aria-pressed="false">Manuales</button>
+      </div>
+      <section class="tarjeta">
+        <ul class="lista">
+          {documentos.map((d) => {
+            const link = linkPorDocumento.get(d.id);
+            const url = link ? `${base}/p/${slugificar(d.nombre)}/${link.token}` : '';
+            const vista = d.tipo === 'growth' ? `/growth/${d.id}` : `/resultados/${d.id}`;
+            return (
+              <li class="renglon" data-tipo={d.tipo} data-result-id={d.id}>
+                <div class="cuerpo">
+                  <p class="eyebrow">{d.tipo === 'growth' ? 'Manual de campaña' : 'Social Research'}</p>
+                  <strong>{d.nombre}</strong>
+                  <p class="secundario">Versión {d.version} · {fecha(d.createdAt)}{link ? ` · ${link.visitas} ${link.visitas === 1 ? 'visita' : 'visitas'}` : ''}</p>
+                  <div class="link-publico" hidden={!link}>
+                    <input readonly value={url} aria-label={`Link público de ${d.nombre}`} />
+                    <button type="button" class="btn suave chico" data-copiar><Icono nombre="copiar" />Copiar</button>
+                  </div>
+                </div>
+                {!link && <button type="button" class="btn fantasma chico" data-crear><Icono nombre="enlace" />Crear link</button>}
+                <a href={vista} class="btn fantasma chico"><Icono nombre="abrir" />Abrir</a>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+    </>
+  )}
+</Base>
+
+<script>
+  import { copiar } from '@/scripts/copiar';
+  import { toast } from '@/scripts/toast';
+
+  const renglones = [...document.querySelectorAll<HTMLElement>('[data-tipo]')];
+  const chips = [...document.querySelectorAll<HTMLButtonElement>('[data-filtro]')];
+  for (const chip of chips) {
+    chip.addEventListener('click', () => {
+      for (const c of chips) c.setAttribute('aria-pressed', String(c === chip));
+      for (const r of renglones) r.hidden = chip.dataset.filtro !== 'todos' && r.dataset.tipo !== chip.dataset.filtro;
+    });
+  }
+
+  for (const r of renglones) {
+    const campo = r.querySelector<HTMLInputElement>('.link-publico input');
+    r.querySelector('[data-copiar]')?.addEventListener('click', () => copiar(campo?.value ?? '', campo));
+
+    const crear = r.querySelector<HTMLButtonElement>('[data-crear]');
+    crear?.addEventListener('click', async () => {
+      crear.disabled = true;
+      try {
+        const res = await fetch('/api/share', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resultId: r.dataset.resultId, tipo: r.dataset.tipo }),
+        });
+        const cuerpo = await res.json();
+        if (!cuerpo.ok) throw new Error((cuerpo.errores ?? []).join(' · '));
+        if (campo) campo.value = cuerpo.url;
+        (r.querySelector('.link-publico') as HTMLElement).hidden = false;
+        crear.remove();
+        await copiar(cuerpo.url, campo);
+      } catch (e) {
+        toast(e instanceof Error && e.message ? e.message : 'No se pudo crear el link.', 'error');
+        crear.disabled = false;
+      }
+    });
+  }
+</script>
+
+<style>
+  .link-publico { display: flex; gap: 8px; margin-top: 10px; max-width: 520px; }
+  .link-publico input { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+</style>
