@@ -51,3 +51,20 @@ describe('esquema del Mapa de Pilares', () => {
     expect(pilaresTemas).toBeDefined();
   });
 });
+
+describe('esquema de roles', () => {
+  it('usuarios con rol, nombre, cliente y activo', async () => {
+    const s = await import('@/db/schema');
+    expect(s.usuarioRol.enumValues).toEqual(['admin', 'operador', 'cliente']);
+    for (const c of ['rol', 'nombre', 'clientId', 'activo']) expect((s.users as any)[c]).toBeDefined();
+  });
+  it('clientes con operador y jobs con autor', async () => {
+    const s = await import('@/db/schema');
+    expect(s.clients.operadorId).toBeDefined();
+    expect(s.researchJobs.creadoPor).toBeDefined();
+  });
+  it('invitaciones', async () => {
+    const s = await import('@/db/schema');
+    for (const c of ['tokenHash', 'email', 'rol', 'clientId', 'creadoPor', 'expiraEn', 'usadaEn']) expect((s.invitaciones as any)[c]).toBeDefined();
+  });
+});

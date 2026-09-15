@@ -5,11 +5,19 @@ export const linkTipo = pgEnum('link_tipo', ['sitio','instagram','facebook','tik
 export const extraccionEstado = pgEnum('extraccion_estado', ['pendiente','ok','fallo','no_aplica']);
 /** Los documentos que produce el sistema. Un job y un link saben cuál es el suyo. */
 export const documentoTipo = pgEnum('documento_tipo', ['research','growth','pilares']);
+/** Admin crea, modifica, autoriza y asigna; operador crea y modifica; cliente solo ve y comenta lo suyo. */
+export const usuarioRol = pgEnum('usuario_rol', ['admin', 'operador', 'cliente']);
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
+  rol: usuarioRol('rol').notNull().default('operador'),
+  nombre: text('nombre'),
+  // Sin .references aquí: clients se declara más abajo en el archivo. La FK
+  // se agrega a mano en la migración generada.
+  clientId: uuid('client_id'),
+  activo: boolean('activo').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -29,6 +37,8 @@ export const clients = pgTable('clients', {
   ticket: text('ticket'),
   contacto: text('contacto'),
   notas: text('notas'),
+  // El operador que da de alta al cliente queda asignado; el admin reasigna.
+  operadorId: uuid('operador_id').references(() => users.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -63,6 +73,8 @@ export const researchJobs = pgTable('research_jobs', {
   tokensEntrada: integer('tokens_entrada').notNull().default(0),
   tokensSalida: integer('tokens_salida').notNull().default(0),
   costoUsd: numeric('costo_usd', { precision: 10, scale: 4 }).notNull().default('0'),
+  // Quién lo mandó a correr, para atribuir el costo.
+  creadoPor: uuid('creado_por').references(() => users.id, { onDelete: 'set null' }),
   error: text('error'),
   startedAt: timestamp('started_at', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
@@ -122,4 +134,17 @@ export const shareLinks = pgTable('share_links', {
   revocado: boolean('revocado').notNull().default(false),
   visitas: integer('visitas').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** El token viaja solo en el enlace; en la base queda su hash, como una contraseña. */
+export const invitaciones = pgTable('invitaciones', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  tokenHash: text('token_hash').notNull().unique(),
+  email: text('email').notNull(),
+  rol: usuarioRol('rol').notNull(),
+  clientId: uuid('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+  creadoPor: uuid('creado_por').references(() => users.id, { onDelete: 'set null' }),
+  expiraEn: timestamp('expira_en', { withTimezone: true }).notNull(),
+  usadaEn: timestamp('usada_en', { withTimezone: true }),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 });
