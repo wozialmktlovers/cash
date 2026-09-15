@@ -1,6 +1,7 @@
 import type { Investigacion, Sintesis } from '@/research/schemas';
 import { lecturaSchema } from '@/research/schemas';
 import type { OpcionesBarra } from '@/render/barra-operador';
+import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
 import { envolverDocumento } from '@/render/editorial/comunes';
 import { SCRIPT_EDITORIAL } from '@/render/editorial/interaccion';
 import { ESTILOS_INVESTIGACION } from './estilos';
@@ -17,7 +18,13 @@ export type MetaInvestigacion = { cliente: string; giro: string; fecha: string }
  */
 export const SCRIPT_DOCUMENTO = SCRIPT_EDITORIAL;
 
-export function renderizarInvestigacion(inv: Investigacion, meta: MetaInvestigacion, operador?: OpcionesBarra): string {
+export function renderizarInvestigacion(
+  inv: Investigacion,
+  meta: MetaInvestigacion,
+  operador?: OpcionesBarra,
+  editable = false,
+  flujo?: FlujoDatos,
+): string {
   // No basta con `estado === 'ok'`: los datos guardados pudieron venir de un
   // esquema anterior (v1, sin `cifras`) o llegar corruptos. Si no cumplen el
   // esquema actual, se usa el respaldo en vez de tronar a media renderización.
@@ -37,16 +44,16 @@ export function renderizarInvestigacion(inv: Investigacion, meta: MetaInvestigac
 
   const cuerpo = lectura
     ? [
-        seccionPortada({ eyebrow, titular: lectura.portada.titular, resumen: lectura.portada.resumen, cifras: lectura.cifras, conIndice: true }),
-        seccionDescubrimos(lectura),
-        seccionClienteIdeal(lectura),
-        seccionRecomendamos(lectura),
-        seccionDetalle(inv, meta.cliente, '04'),
+        seccionPortada({ eyebrow, titular: lectura.portada.titular, resumen: lectura.portada.resumen, cifras: lectura.cifras, conIndice: true, editable }),
+        seccionDescubrimos(lectura, editable),
+        seccionClienteIdeal(lectura, editable),
+        seccionRecomendamos(lectura, editable),
+        seccionDetalle(inv, meta.cliente, '04', editable),
       ].join('\n')
     : [
-        seccionPortada({ eyebrow, titular: meta.cliente, resumen: meta.giro, cifras: [], conIndice: false }),
-        sintesisEditorial(sintesis, '01'),
-        seccionDetalle(inv, meta.cliente, numDetalleRespaldo),
+        seccionPortada({ eyebrow, titular: meta.cliente, resumen: meta.giro, cifras: [], conIndice: false, editable: false }),
+        sintesisEditorial(sintesis, '01', editable),
+        seccionDetalle(inv, meta.cliente, numDetalleRespaldo, editable),
       ].join('\n');
 
   return envolverDocumento({
@@ -58,5 +65,6 @@ export function renderizarInvestigacion(inv: Investigacion, meta: MetaInvestigac
     indice,
     cuerpo,
     operador,
+    flujo,
   });
 }

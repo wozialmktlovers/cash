@@ -6,6 +6,10 @@ import { barraOperador } from '@/render/barra-operador';
 import { slugificar } from '@/lib/slug';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { documentoVisible } from '@/lib/visibilidad';
+import { etapaDelDocumento } from '@/flujo/servicio';
+import { puedeEditar as calcularPuedeEditar } from '@/flujo/edicion';
+import { puedeComentar } from '@/flujo/reglas';
+import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
 
 const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
@@ -29,6 +33,19 @@ const links = operable
 const activo = links.find((l) => !l.revocado) ?? null;
 const base = (process.env.PUBLIC_BASE_URL ?? Astro.url.origin).replace(/\/+$/, '');
 
+let flujo: FlujoDatos | undefined;
+if (operable) {
+  const etapa = await etapaDelDocumento(c.id, 'growth', r.id);
+  if (etapa) {
+    const esOperadorAsignado = c.operadorId === usuario.id;
+    flujo = {
+      tipo: 'growth', id: r.id, etapaId: etapa.id,
+      puedeEditar: calcularPuedeEditar(usuario.rol, esOperadorAsignado, etapa.estado),
+      puedeComentar: puedeComentar(usuario.rol, esOperadorAsignado, etapa.etapa),
+    };
+  }
+}
+
 const html = renderizarManual(
   r.datos as any,
   {
@@ -42,8 +59,10 @@ const html = renderizarManual(
     ? barraOperador({
         clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
         version: r.version, tipo: 'growth', tokenActivo: activo?.token ?? null, base,
-      })
+      }, Boolean(flujo?.puedeEditar))
     : undefined,
+  operable,
+  flujo,
 );
 ---
 

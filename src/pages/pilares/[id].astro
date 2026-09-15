@@ -5,6 +5,10 @@ import { renderizarPilares } from '@/render/pilares/documento';
 import { slugificar } from '@/lib/slug';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { documentoVisible } from '@/lib/visibilidad';
+import { etapaDelDocumento } from '@/flujo/servicio';
+import { puedeEditar as calcularPuedeEditar } from '@/flujo/edicion';
+import { puedeComentar } from '@/flujo/reglas';
+import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
 import type { AvanceTema } from '@/pilares/avance';
 
 const usuario = Astro.locals.usuario;
@@ -40,6 +44,19 @@ for (const f of filas) {
   };
 }
 
+let flujo: FlujoDatos | undefined;
+if (operable) {
+  const etapa = await etapaDelDocumento(c.id, 'pilares', r.id);
+  if (etapa) {
+    const esOperadorAsignado = c.operadorId === usuario.id;
+    flujo = {
+      tipo: 'pilares', id: r.id, etapaId: etapa.id,
+      puedeEditar: calcularPuedeEditar(usuario.rol, esOperadorAsignado, etapa.estado),
+      puedeComentar: puedeComentar(usuario.rol, esOperadorAsignado, etapa.etapa),
+    };
+  }
+}
+
 const html = renderizarPilares(
   r.datos as any,
   { cliente: c.nombre, fecha: r.createdAt.toISOString().slice(0, 10) },
@@ -52,6 +69,8 @@ const html = renderizarPilares(
       : undefined,
     avance,
     resultId: r.id,
+    editable: operable,
+    flujo,
   },
 );
 ---

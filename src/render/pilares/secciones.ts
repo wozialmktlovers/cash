@@ -1,5 +1,12 @@
 import type { Estrategia, Funcion, Formato } from '@/pilares/schemas';
 import { escapar, lista, encabezadoSeccion } from '@/render/editorial/comunes';
+import { rutaEditable } from '@/render/editorial/flujo-cliente';
+
+/** Como `lista()`, pero cada `<li>` lleva su propio `data-editable` cuando `editable`. */
+function listaEditable(items: string[], editable: boolean, ruta: (indice: number) => string): string {
+  if (!items.length) return '';
+  return `<ul class="lista">${items.map((i, idx) => `<li${rutaEditable(editable, ruta(idx))}>${escapar(i)}</li>`).join('')}</ul>`;
+}
 
 /** Color por número de pilar (1–5), en el orden que fija el spec. */
 export const COLOR_PILAR = ['var(--rosa)', 'var(--azul)', 'var(--amarillo)', 'var(--verde)', 'var(--tinta)'];
@@ -43,7 +50,9 @@ function cifraTarjeta(valor: string, etiqueta: string, variante?: 'cifra-texto')
 export function seccionPortada(o: {
   cliente: string; fecha: string; resumen: string; totalTemas: number;
   avanceGlobal: { total: number; hechos: number } | null;
+  editable?: boolean;
 }): string {
+  const editable = o.editable ?? false;
   const pct = o.avanceGlobal && o.avanceGlobal.total > 0 ? Math.round((o.avanceGlobal.hechos / o.avanceGlobal.total) * 100) : 0;
   const avance = o.avanceGlobal
     ? `<div class="avance-global aparece">
@@ -54,7 +63,7 @@ export function seccionPortada(o: {
   return `<section class="portada" id="inicio">
     <div class="portada-texto">
       <div class="pila"><p class="eyebrow">Mapa de pilares · ${escapar(o.cliente)} · ${escapar(o.fecha)}</p><h1>Mapa de pilares y banco de contenidos</h1></div>
-      <p class="resumen">${escapar(o.resumen)}</p>
+      <p class="resumen"${rutaEditable(editable, 'estrategia.resumen')}>${escapar(o.resumen)}</p>
     </div>
     <div class="cifras">
       ${cifraTarjeta('5', 'pilares')}
@@ -70,47 +79,47 @@ export function seccionPortada(o: {
   </section>`;
 }
 
-export function seccionPartida(e: Estrategia): string {
+export function seccionPartida(e: Estrategia, editable = false): string {
   const colores = ['var(--rosa)', 'var(--azul)', 'var(--amarillo)'];
   return `<section class="seccion" id="partida" data-seccion>
     ${encabezadoSeccion('01', 'Punto de partida', 'Las ideas de fondo que sostienen todo el mapa.')}
     <div class="rejilla tres">
       ${e.ideas.map((idea, i) => `<article class="tarjeta idea-tarjeta aparece" style="border-left:4px solid ${colores[i % colores.length]}">
-        <h3>${escapar(idea.titulo)}</h3>
-        <p>${escapar(idea.texto)}</p>
+        <h3${rutaEditable(editable, `estrategia.ideas.${i}.titulo`)}>${escapar(idea.titulo)}</h3>
+        <p${rutaEditable(editable, `estrategia.ideas.${i}.texto`)}>${escapar(idea.texto)}</p>
       </article>`).join('')}
     </div>
   </section>`;
 }
 
-export function seccionPrincipios(e: Estrategia): string {
+export function seccionPrincipios(e: Estrategia, editable = false): string {
   return `<section class="seccion alterna" id="principios" data-seccion>
     ${encabezadoSeccion('02', 'No negociables', 'Los principios que guían cada tema del banco.')}
     <div class="rejilla tres">
       ${e.principios.map((p, i) => `<article class="tarjeta principio-tarjeta aparece">
         <span class="principio-num">${String(i + 1).padStart(2, '0')}</span>
-        <h3>${escapar(p.titulo)}</h3>
-        <p>${escapar(p.texto)}</p>
+        <h3${rutaEditable(editable, `estrategia.principios.${i}.titulo`)}>${escapar(p.titulo)}</h3>
+        <p${rutaEditable(editable, `estrategia.principios.${i}.texto`)}>${escapar(p.texto)}</p>
       </article>`).join('')}
     </div>
   </section>`;
 }
 
-export function seccionPilares(e: Estrategia): string {
+export function seccionPilares(e: Estrategia, editable = false): string {
   return `<section class="seccion" id="pilares" data-seccion>
     ${encabezadoSeccion('03', 'Los 5 pilares', 'De qué habla cada pilar y cómo se reparte el banco.')}
     <div class="pilares-fila">
       ${e.pilares.map((p, i) => `<article class="tarjeta pilar-tarjeta aparece" style="--color-pilar:${COLOR_PILAR[i]}" data-ir-pilar="${i + 1}" role="button" tabindex="0" aria-label="Ver los temas del pilar ${i + 1}, ${escapar(p.nombre)}, en el banco">
         <span class="pilar-num">${i + 1}</span>
-        <h3>${escapar(p.nombre)}</h3>
-        <p class="suave">${escapar(p.pregunta)}</p>
-        <ul class="chips">${p.subcategorias.map((s) => `<li>${escapar(s.nombre)}</li>`).join('')}</ul>
+        <h3${rutaEditable(editable, `estrategia.pilares.${i}.nombre`)}>${escapar(p.nombre)}</h3>
+        <p class="suave"${rutaEditable(editable, `estrategia.pilares.${i}.pregunta`)}>${escapar(p.pregunta)}</p>
+        <ul class="chips">${p.subcategorias.map((s, j) => `<li${rutaEditable(editable, `estrategia.pilares.${i}.subcategorias.${j}.nombre`)}>${escapar(s.nombre)}</li>`).join('')}</ul>
       </article>`).join('')}
     </div>
     <div class="pila">
       <h3 class="subtitulo">Frontera entre pilares</h3>
       <div class="rejilla dos">
-        ${e.pilares.map((p, i) => `<div class="tarjeta aparece" style="border-left:4px solid ${COLOR_PILAR[i]}"><h4>${escapar(p.nombre)}</h4><p class="suave">${escapar(p.frontera)}</p></div>`).join('')}
+        ${e.pilares.map((p, i) => `<div class="tarjeta aparece" style="border-left:4px solid ${COLOR_PILAR[i]}"><h4>${escapar(p.nombre)}</h4><p class="suave"${rutaEditable(editable, `estrategia.pilares.${i}.frontera`)}>${escapar(p.frontera)}</p></div>`).join('')}
       </div>
     </div>
   </section>`;
@@ -122,7 +131,7 @@ function barraMix(mix: Estrategia['mix'], fueraDeMargen: Funcion[]): string {
   </div>`;
 }
 
-export function seccionMix(e: Estrategia, interna: boolean, real: Record<Funcion, number> | null, fueraDeMargen: Funcion[]): string {
+export function seccionMix(e: Estrategia, interna: boolean, real: Record<Funcion, number> | null, fueraDeMargen: Funcion[], editable = false): string {
   const mixReal = interna && real
     ? `<div class="pila">
         <h3 class="subtitulo">Mix real del banco</h3>
@@ -137,37 +146,37 @@ export function seccionMix(e: Estrategia, interna: boolean, real: Record<Funcion
       ${barraMix(e.mix, [])}
     </div>
     <div class="rejilla tres">
-      ${e.mix.map((m) => `<article class="tarjeta aparece" style="border-left:4px solid ${COLOR_FUNCION[m.funcion]}">
+      ${e.mix.map((m, i) => `<article class="tarjeta aparece" style="border-left:4px solid ${COLOR_FUNCION[m.funcion]}">
         <span class="etiqueta-funcion ${m.funcion}">${escapar(ETIQUETA_FUNCION[m.funcion])}</span>
         <p class="dato-grande">${m.porcentaje}%</p>
-        <p class="suave">${escapar(m.descripcion)}</p>
+        <p class="suave"${rutaEditable(editable, `estrategia.mix.${i}.descripcion`)}>${escapar(m.descripcion)}</p>
       </article>`).join('')}
     </div>
     ${mixReal}
   </section>`;
 }
 
-export function seccionConversion(e: Estrategia): string {
+export function seccionConversion(e: Estrategia, editable = false): string {
   const c = e.conversion;
   return `<section class="seccion" id="conversion" data-seccion>
     ${encabezadoSeccion('05', 'Conversión', 'Cómo se acompaña a quien ya está listo para comprar.')}
     <article class="tarjeta destacado aparece">
-      <h3>${escapar(c.titulo)}</h3>
-      <p>${escapar(c.texto)}</p>
+      <h3${rutaEditable(editable, 'estrategia.conversion.titulo')}>${escapar(c.titulo)}</h3>
+      <p${rutaEditable(editable, 'estrategia.conversion.texto')}>${escapar(c.texto)}</p>
       <ol class="pasos-conversion">
-        ${c.pasos.map((p) => `<li><h4>${escapar(p.nombre)}</h4><p>${escapar(p.texto)}</p></li>`).join('')}
+        ${c.pasos.map((p, i) => `<li><h4${rutaEditable(editable, `estrategia.conversion.pasos.${i}.nombre`)}>${escapar(p.nombre)}</h4><p${rutaEditable(editable, `estrategia.conversion.pasos.${i}.texto`)}>${escapar(p.texto)}</p></li>`).join('')}
       </ol>
     </article>
   </section>`;
 }
 
 /** Regla especial y supuestos: van antes del pie común (logo + fecha) de `envolverDocumento`. */
-export function seccionCierre(e: Estrategia, interna: boolean): string {
+export function seccionCierre(e: Estrategia, interna: boolean, editable = false): string {
   const regla = e.reglaEspecial
-    ? `<article class="tarjeta destacado aparece"><h3>Regla especial</h3><p>${escapar(e.reglaEspecial)}</p></article>`
+    ? `<article class="tarjeta destacado aparece"><h3>Regla especial</h3><p${rutaEditable(editable, 'estrategia.reglaEspecial')}>${escapar(e.reglaEspecial)}</p></article>`
     : '';
   const supuestos = interna && e.supuestos.length
-    ? `<div class="pila aparece"><h3 class="subtitulo">Supuestos</h3>${lista(e.supuestos)}</div>`
+    ? `<div class="pila aparece"><h3 class="subtitulo">Supuestos</h3>${listaEditable(e.supuestos, editable, (i) => `estrategia.supuestos.${i}`)}</div>`
     : '';
   if (!regla && !supuestos) return '';
   return `<div class="cierre-mapa">${regla}${supuestos}</div>`;

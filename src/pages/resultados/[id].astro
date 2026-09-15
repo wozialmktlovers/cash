@@ -5,6 +5,10 @@ import { renderizarInvestigacion } from '@/render/investigacion/documento';
 import { slugificar } from '@/lib/slug';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { documentoVisible } from '@/lib/visibilidad';
+import { etapaDelDocumento } from '@/flujo/servicio';
+import { puedeEditar as calcularPuedeEditar } from '@/flujo/edicion';
+import { puedeComentar } from '@/flujo/reglas';
+import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
 
 const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
@@ -23,6 +27,21 @@ const links = operable
 const activo = links.find((l) => !l.revocado) ?? null;
 const base = (process.env.PUBLIC_BASE_URL ?? Astro.url.origin).replace(/\/+$/, '');
 
+// Vista interna (B6, spec §3): `data-editable`/`data-flujo` y SCRIPT_FLUJO
+// solo cuando `operable` — la vista pública y el portal nunca los llevan.
+let flujo: FlujoDatos | undefined;
+if (operable) {
+  const etapa = await etapaDelDocumento(c.id, 'research', r.id);
+  if (etapa) {
+    const esOperadorAsignado = c.operadorId === usuario.id;
+    flujo = {
+      tipo: 'research', id: r.id, etapaId: etapa.id,
+      puedeEditar: calcularPuedeEditar(usuario.rol, esOperadorAsignado, etapa.estado),
+      puedeComentar: puedeComentar(usuario.rol, esOperadorAsignado, etapa.etapa),
+    };
+  }
+}
+
 // La cabecera de la investigación trae su propio botón Compartir; sin permiso
 // de operar, se le pasa `undefined` y esa cabecera queda como la ve el cliente.
 const html = renderizarInvestigacion(
@@ -34,6 +53,8 @@ const html = renderizarInvestigacion(
         version: r.version, tipo: 'research', tokenActivo: activo?.token ?? null, base,
       }
     : undefined,
+  operable,
+  flujo,
 );
 ---
 

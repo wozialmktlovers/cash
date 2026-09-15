@@ -1,5 +1,12 @@
-import { escapar, filas, listaGrowth, hueco } from './comunes';
+import { escapar, filas, hueco } from './comunes';
+import { rutaEditable } from '@/render/editorial/flujo-cliente';
 import type { Growth } from '@/growth/schemas';
+
+/** Como `listaGrowth()`, pero cada `<li>` lleva su `data-editable` cuando `editable`. */
+function listaEditable(items: string[], clase: string, editable: boolean, ruta: (indice: number) => string): string {
+  if (!items.length) return '';
+  return `<ul class="${clase}">${items.map((i, idx) => `<li${rutaEditable(editable, ruta(idx))}>${escapar(i)}</li>`).join('')}</ul>`;
+}
 
 export type MetaManual = {
   cliente: string; producto: string; fecha: string;
@@ -19,6 +26,7 @@ export function seccionPortada(
   meta: MetaManual,
   totalUrls: number,
   huecos: Record<string, string> = {},
+  editable = false,
 ): string {
   const nMeta = g.campanasMeta?.length ?? 0;
   const nGoogle = g.campanasGoogle?.length ?? 0;
@@ -48,12 +56,12 @@ export function seccionPortada(
 
     <h3 style="margin-top:var(--e4);">Bloqueantes · sin esto no se arranca</h3>
     ${g.bloqueantes?.length
-      ? listaGrowth(g.bloqueantes, 'lst lst-x')
+      ? listaEditable(g.bloqueantes, 'lst lst-x', editable, (i) => `bloqueantes.${i}`)
       : hueco(huecos.estructura ?? 'No se determinaron los bloqueantes.')}
 
     <h3 style="margin-top:var(--e3);">Reglas de copy · aplican a todo</h3>
     ${g.reglasCopy?.length
-      ? listaGrowth(g.reglasCopy, 'lst lst-yellow')
+      ? listaEditable(g.reglasCopy, 'lst lst-yellow', editable, (i) => `reglasCopy.${i}`)
       : hueco(huecos.estructura ?? 'No se determinaron las reglas de copy.')}
 
     <div style="margin-top:var(--e3);">

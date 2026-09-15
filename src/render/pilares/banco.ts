@@ -1,6 +1,7 @@
 import { FUNCIONES, FORMATOS, ESTADOS_TEMA, type MapaPilares, type PilarMapa, type Tema, type EstadoTema, type Estrategia } from '@/pilares/schemas';
 import type { AvanceTema } from '@/pilares/avance';
 import { escapar, encabezadoSeccion } from '@/render/editorial/comunes';
+import { rutaEditable } from '@/render/editorial/flujo-cliente';
 import { normalizar } from '@/lib/ui/buscar';
 import { COLOR_PILAR, ETIQUETA_FUNCION, ETIQUETA_FORMATO } from './secciones';
 
@@ -28,7 +29,7 @@ function contarAvance(temas: Tema[], avance?: Record<string, AvanceTema>): { tot
   return { total: temas.length, hechos };
 }
 
-function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: boolean, avance?: Record<string, AvanceTema>): string {
+function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: boolean, avance?: Record<string, AvanceTema>, ruta?: string): string {
   const av = avance?.[t.id];
   const estado: EstadoTema = av?.estado ?? 'pendiente';
   const busqueda = normalizar([t.id, t.texto, subNombre, ETIQUETA_FUNCION[t.funcion], ETIQUETA_FORMATO[t.formato].texto].join(' '));
@@ -56,12 +57,17 @@ function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: bool
       <span class="etiqueta-funcion ${t.funcion}">${escapar(ETIQUETA_FUNCION[t.funcion])}</span>
       <span class="etiqueta-formato">${ETIQUETA_FORMATO[t.formato].icono}${escapar(ETIQUETA_FORMATO[t.formato].texto)}</span>
     </div>
-    <p class="tema-texto">${escapar(t.texto)}</p>
+    <p class="tema-texto"${rutaEditable(Boolean(ruta), ruta ?? '')}>${escapar(t.texto)}</p>
     ${controles}
   </article>`;
 }
 
-function bloquePilarOk(p: Extract<PilarMapa, { estado: 'ok' }>, ep: Estrategia['pilares'][number], interna: boolean, avance?: Record<string, AvanceTema>): string {
+/**
+ * `indicePilar` es la posición REAL de `p` en `datos.pilares` (el arreglo tal
+ * cual se guarda), no `p.numero - 1`: aunque hoy coinciden, la ruta de
+ * `data-editable` tiene que navegar el JSON de verdad, no el número visible.
+ */
+function bloquePilarOk(p: Extract<PilarMapa, { estado: 'ok' }>, indicePilar: number, ep: Estrategia['pilares'][number], interna: boolean, avance?: Record<string, AvanceTema>, editable = false): string {
   const temas = p.subcategorias.flatMap((s) => s.temas);
   return `<details class="pilar-bloque" open data-pilar="${p.numero}" style="--color-pilar:${COLOR_PILAR[p.numero - 1]}">
     <summary class="pilar-cabecera">
@@ -74,7 +80,7 @@ function bloquePilarOk(p: Extract<PilarMapa, { estado: 'ok' }>, ep: Estrategia['
     </div>
     ${p.subcategorias.map((s, i) => `<div class="panel-tema panel-subcat" role="tabpanel" id="panel-p${p.numero}-s${i + 1}" aria-labelledby="tab-p${p.numero}-s${i + 1}">
       <h4 class="panel-titulo">${escapar(s.nombre)}</h4>
-      <div class="rejilla dos">${s.temas.map((t) => tarjetaTema(t, p.numero, s.nombre, interna, avance)).join('')}</div>
+      <div class="rejilla dos">${s.temas.map((t, j) => tarjetaTema(t, p.numero, s.nombre, interna, avance, editable ? `pilares.${indicePilar}.subcategorias.${i}.temas.${j}.texto` : undefined)).join('')}</div>
     </div>`).join('')}
   </details>`;
 }
@@ -167,14 +173,17 @@ export function seccionBanco(o: {
   clienteId?: string;
   avance?: Record<string, AvanceTema>;
   resultId?: string;
+  editable?: boolean;
 }): string {
   const { mapa, interna } = o;
+  const editable = Boolean(o.editable);
   const totalTemas = mapa.pilares.reduce((n, p) => n + (p.estado === 'ok' ? p.subcategorias.reduce((m, s) => m + s.temas.length, 0) : 0), 0);
 
   const bloques = [1, 2, 3, 4, 5].map((n) => {
-    const p = mapa.pilares.find((x) => x.numero === n) ?? { numero: n, estado: 'vacio' as const, razon: 'No se generó este pilar.' };
+    const indicePilar = mapa.pilares.findIndex((x) => x.numero === n);
+    const p = indicePilar >= 0 ? mapa.pilares[indicePilar] : { numero: n, estado: 'vacio' as const, razon: 'No se generó este pilar.' };
     const ep = mapa.estrategia.pilares[n - 1];
-    return p.estado === 'ok' ? bloquePilarOk(p, ep, interna, o.avance) : bloquePilarVacio(p, ep, interna, o.clienteId);
+    return p.estado === 'ok' ? bloquePilarOk(p, indicePilar, ep, interna, o.avance, editable) : bloquePilarVacio(p, ep, interna, o.clienteId);
   }).join('');
 
   return `<section class="seccion alterna" id="banco" data-seccion${interna && o.resultId ? ` data-result-id="${escapar(o.resultId)}"` : ''}>

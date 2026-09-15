@@ -1,4 +1,5 @@
 import { escapar, cabeceraSeccion, tablaGrowth, hueco, chips, listaGrowth } from './comunes';
+import { rutaEditable } from '@/render/editorial/flujo-cliente';
 import type { Growth } from '@/growth/schemas';
 
 /**
@@ -7,7 +8,7 @@ import type { Growth } from '@/growth/schemas';
  * con el valor exacto a capturar en cada uno»— y esa es la diferencia entre
  * un documento que se lee y uno que se ejecuta sin volver a pensar nada.
  */
-export function seccionMeta(g: Partial<Growth>, huecos: Record<string, string>): string {
+export function seccionMeta(g: Partial<Growth>, huecos: Record<string, string>, editable = false): string {
   const cab = cabeceraSeccion({
     numero: '01', kicker: 'Meta Ads', titulo: 'Estructura, audiencia y segmentación',
     lead: 'Todos los campos que pide el administrador de anuncios, con el valor exacto a capturar en cada uno.',
@@ -17,12 +18,12 @@ export function seccionMeta(g: Partial<Growth>, huecos: Record<string, string>):
 
   const campanas = g.campanasMeta?.length
     ? tablaGrowth(['Grupo', 'Campaña', 'Objetivo', 'Audiencia', 'Ángulo'],
-        g.campanasMeta.map((c) => [
+        g.campanasMeta.map((c, i) => [
           `<span class="badge b-pink">${escapar(c.grupo.toUpperCase())}</span>`,
-          `<strong>${escapar(c.nombre)}</strong>`,
-          escapar(c.objetivo),
-          `<span class="tiny">${escapar(c.audiencia)}</span>`,
-          escapar(c.angulo),
+          `<strong${rutaEditable(editable, `campanasMeta.${i}.nombre`)}>${escapar(c.nombre)}</strong>`,
+          `<span${rutaEditable(editable, `campanasMeta.${i}.objetivo`)}>${escapar(c.objetivo)}</span>`,
+          `<span class="tiny"${rutaEditable(editable, `campanasMeta.${i}.audiencia`)}>${escapar(c.audiencia)}</span>`,
+          `<span${rutaEditable(editable, `campanasMeta.${i}.angulo`)}>${escapar(c.angulo)}</span>`,
         ]))
     : hueco(huecos.estructura ?? 'La estructura de campaña no se generó.');
 
@@ -67,7 +68,7 @@ export function seccionMeta(g: Partial<Growth>, huecos: Record<string, string>):
 
     <h3 style="margin-top:var(--e4);">Perfil del target</h3>
     ${perfiles}
-    <div class="alert alert-green" style="margin-top:var(--e2);">${escapar(s.notaSegmentacion)}</div>
+    <div class="alert alert-green" style="margin-top:var(--e2);"${rutaEditable(editable, 'segmentacion.notaSegmentacion')}>${escapar(s.notaSegmentacion)}</div>
 
     <h3 style="margin-top:var(--e4);">Configuración por campaña</h3>
     ${config}

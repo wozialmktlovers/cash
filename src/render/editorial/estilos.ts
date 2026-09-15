@@ -188,6 +188,34 @@ html.js .aparece.visible{opacity:1;translate:0 0;}
   .tarjeta{box-shadow:none;break-inside:avoid;}
   .seccion.alterna{box-shadow:none;clip-path:none;}
 }
+
+/* Edición sobre el documento y versiones (B6, spec §3). */
+#btn-flujo-editar[aria-pressed="true"]{background:var(--rosa);border-color:var(--rosa);color:var(--sobre-acento);}
+
+html.modo-edicion [data-editable]{outline:2px dashed var(--rosa);outline-offset:3px;border-radius:4px;cursor:text;}
+html.modo-edicion [data-editable]:focus-visible{outline-style:solid;}
+
+.barra-edicion{position:fixed;left:50%;translate:-50% 0;bottom:16px;z-index:70;
+  display:flex;flex-wrap:wrap;align-items:center;gap:16px;min-height:44px;padding:10px 18px;border-radius:var(--r-pill);
+  background:var(--tinta);color:var(--fondo);box-shadow:var(--sombra);font:var(--t-small);font-weight:600;}
+.barra-edicion[hidden]{display:none;}
+.barra-edicion-estado{color:var(--suave);font-weight:500;}
+.barra-edicion-botones{display:flex;gap:8px;}
+.barra-edicion-botones button{min-height:44px;padding:0 16px;border-radius:var(--r-sm);border:1px solid color-mix(in srgb,var(--fondo) 30%,transparent);
+  background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer;}
+.barra-edicion-botones .barra-guardar{background:var(--rosa);border-color:var(--rosa);color:var(--sobre-acento);}
+.barra-edicion-botones button:hover{opacity:.85;}
+@media print{.barra-edicion{display:none!important;}}
+
+dialog.dialogo-versiones{width:min(520px,calc(100vw - 32px));border:1px solid var(--linea);border-radius:var(--r);
+  padding:24px;display:grid;gap:14px;background:var(--tarjeta);color:var(--texto);box-shadow:var(--sombra);}
+dialog.dialogo-versiones::backdrop{background:color-mix(in srgb,var(--tinta) 45%,transparent);}
+.dialogo-cabecera{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.dialogo-cabecera h3{font:var(--t-h3);color:var(--tinta);}
+.dialogo-versiones-lista{display:grid;gap:10px;max-height:50vh;overflow-y:auto;}
+.version-fila{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px;border:1px solid var(--linea);border-radius:var(--r-sm);}
+.version-info{display:grid;gap:2px;}
+.version-motivo{font-weight:700;color:var(--tinta);}
 `;
 
 export const ESTILOS_EDITORIAL = `${TOKENS_CSS}\n${EDITORIAL}`;

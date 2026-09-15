@@ -1,7 +1,8 @@
 import { escapar, cabeceraSeccion, hueco } from './comunes';
+import { rutaEditable } from '@/render/editorial/flujo-cliente';
 import type { Growth } from '@/growth/schemas';
 
-export function seccionPrompts(g: Partial<Growth>, huecos: Record<string, string>): string {
+export function seccionPrompts(g: Partial<Growth>, huecos: Record<string, string>, editable = false): string {
   const p = g.promptsImagen;
   const cuerpo = p
     ? `
@@ -10,12 +11,12 @@ export function seccionPrompts(g: Partial<Growth>, huecos: Record<string, string
         Es una persona real y su credibilidad es el activo central de la campaña. Todos los prompts de abajo producen fondos, texturas y escenas sin rostros identificables. La foto real se fotografía aparte y se compone encima.
       </div>
       <h3 style="margin-top:var(--e3);">Prompt base · anteponer a todos</h3>
-      <div class="pre">${escapar(p.base)}</div>
+      <div class="pre"${rutaEditable(editable, 'promptsImagen.base')}>${escapar(p.base)}</div>
       <h3 style="margin-top:var(--e3);">Uno por pieza</h3>
       ${p.porCreativo.map((t, i) => {
         const c = g.creativos?.[i];
         const etiqueta = c ? `Grupo ${c.grupo.toUpperCase()} · ${c.formato} · ${c.ratio}` : `Pieza ${i + 1}`;
-        return `<div class="kv"><div class="kv-k">${escapar(etiqueta)}</div><div class="pre">${escapar(t)}</div></div>`;
+        return `<div class="kv"><div class="kv-k">${escapar(etiqueta)}</div><div class="pre"${rutaEditable(editable, `promptsImagen.porCreativo.${i}`)}>${escapar(t)}</div></div>`;
       }).join('')}`
     : `<div style="margin-top:var(--e2);">${hueco(huecos.prompts ?? 'Los prompts no se generaron.')}</div>`;
 

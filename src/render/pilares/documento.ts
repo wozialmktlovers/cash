@@ -1,6 +1,7 @@
 import type { MapaPilares } from '@/pilares/schemas';
 import type { OpcionesBarra } from '@/render/barra-operador';
 import type { AvanceTema } from '@/pilares/avance';
+import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
 import { todosLosTemas } from '@/pilares/revision';
 import { envolverDocumento } from '@/render/editorial/comunes';
 import { ESTILOS_PILARES } from './estilos';
@@ -11,7 +12,14 @@ import { SCRIPT_PILARES } from './script';
 export { SCRIPT_PILARES };
 
 export type MetaPilares = { cliente: string; fecha: string };
-export type OpcionesPilares = { operador?: OpcionesBarra; avance?: Record<string, AvanceTema>; resultId?: string };
+export type OpcionesPilares = {
+  operador?: OpcionesBarra;
+  avance?: Record<string, AvanceTema>;
+  resultId?: string;
+  /** Solo en la vista interna: marca `data-editable` en el texto de la estrategia y del banco. */
+  editable?: boolean;
+  flujo?: FlujoDatos;
+};
 
 const INDICE: [string, string, string][] = [
   ['01', 'partida', 'Punto de partida'],
@@ -42,15 +50,17 @@ export function renderizarPilares(mapa: MapaPilares, meta: MetaPilares, opciones
       }
     : null;
 
+  const editable = Boolean(opciones?.editable);
+
   const cuerpo = [
-    seccionPortada({ cliente: meta.cliente, fecha: meta.fecha, resumen: mapa.estrategia.resumen, totalTemas: temas.length, avanceGlobal }),
-    seccionPartida(mapa.estrategia),
-    seccionPrincipios(mapa.estrategia),
-    seccionPilares(mapa.estrategia),
-    seccionMix(mapa.estrategia, interna, interna ? mapa.revision.mixReal : null, interna ? mapa.revision.fueraDeMargen : []),
-    seccionConversion(mapa.estrategia),
-    seccionBanco({ mapa, interna, clienteId: opciones?.operador?.clienteId, avance: opciones?.avance, resultId: opciones?.resultId }),
-    seccionCierre(mapa.estrategia, interna),
+    seccionPortada({ cliente: meta.cliente, fecha: meta.fecha, resumen: mapa.estrategia.resumen, totalTemas: temas.length, avanceGlobal, editable }),
+    seccionPartida(mapa.estrategia, editable),
+    seccionPrincipios(mapa.estrategia, editable),
+    seccionPilares(mapa.estrategia, editable),
+    seccionMix(mapa.estrategia, interna, interna ? mapa.revision.mixReal : null, interna ? mapa.revision.fueraDeMargen : [], editable),
+    seccionConversion(mapa.estrategia, editable),
+    seccionBanco({ mapa, interna, clienteId: opciones?.operador?.clienteId, avance: opciones?.avance, resultId: opciones?.resultId, editable }),
+    seccionCierre(mapa.estrategia, interna, editable),
   ].join('\n');
 
   return envolverDocumento({
@@ -63,5 +73,6 @@ export function renderizarPilares(mapa: MapaPilares, meta: MetaPilares, opciones
     cuerpo,
     operador: opciones?.operador,
     scriptsExtra: SCRIPT_PILARES,
+    flujo: opciones?.flujo,
   });
 }

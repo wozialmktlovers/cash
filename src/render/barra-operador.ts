@@ -20,7 +20,7 @@ export type OpcionesBarra = {
  * cabecera flotante (`src/render/investigacion/cabecera.ts`) con el mismo
  * botón Compartir, pero rediseñada como cápsula con progreso de lectura.
  */
-export function barraOperador(o: OpcionesBarra): string {
+export function barraOperador(o: OpcionesBarra, puedeEditar = false): string {
   const url = o.tokenActivo ? `${o.base}/p/${o.clienteSlug}/${o.tokenActivo}` : '';
   const regenerar = o.tipo === 'growth'
     ? `/clientes/${escapar(o.clienteId)}`
@@ -44,6 +44,8 @@ export function barraOperador(o: OpcionesBarra): string {
   <div class="bo-panel" id="bo-panel">
     <a class="bo-btn" href="/clientes/${escapar(o.clienteId)}">Cliente</a>
     <a class="bo-btn" href="${regenerar}">Regenerar</a>
+    ${puedeEditar ? `<button class="bo-btn" type="button" id="btn-flujo-editar" aria-pressed="false">Editar</button>
+    <button class="bo-btn" type="button" id="btn-flujo-versiones" aria-haspopup="dialog" aria-controls="dialog-versiones">Versiones</button>` : ''}
     <span class="bo-sep"></span>
     <span id="bo-link" class="bo-link" ${o.tokenActivo ? '' : 'hidden'}>
       <input id="bo-url" readonly value="${escapar(url)}" data-token="${escapar(o.tokenActivo ?? '')}">

@@ -3,6 +3,7 @@ import { construirUrls, type UrlEtiquetada } from '@/growth/utm';
 import { ESTILOS_GROWTH } from './estilos';
 import { NAVEGACION_GROWTH } from './navegacion';
 import { LOGO_WOZIAL_SRC } from '@/render/marca';
+import { atributoFlujo, panelVersiones, barraEdicion, SCRIPT_FLUJO, type FlujoDatos } from '@/render/editorial/flujo-cliente';
 import { escapar, seccion } from './secciones/comunes';
 import { seccionPortada, type MetaManual } from './secciones/portada';
 import { seccionMeta } from './secciones/meta';
@@ -40,6 +41,8 @@ export function renderizarManual(
   datos: Partial<Growth> & { _huecos?: Record<string, string> },
   meta: MetaManual & { destino?: string; ciudad?: string; creadoEn?: Date },
   barraOperador = '',
+  editable = false,
+  flujo?: FlujoDatos,
 ): string {
   const huecos = datos._huecos ?? {};
 
@@ -58,10 +61,10 @@ export function renderizarManual(
   }
 
   const secciones = [
-    seccion('setup', seccionPortada(datos, meta, urls.length, huecos)),
-    seccion('meta', seccionMeta(datos, huecos)),
-    seccion('creativos', seccionCreativos(datos, huecos, urls)),
-    seccion('prompts', seccionPrompts(datos, huecos)),
+    seccion('setup', seccionPortada(datos, meta, urls.length, huecos, editable)),
+    seccion('meta', seccionMeta(datos, huecos, editable)),
+    seccion('creativos', seccionCreativos(datos, huecos, urls, editable)),
+    seccion('prompts', seccionPrompts(datos, huecos, editable)),
     seccion('google', seccionGoogle(datos, huecos, urls)),
     seccion('rsa', seccionRsa(datos, huecos)),
     seccion('traza', seccionTraza(urls)),
@@ -83,7 +86,7 @@ export function renderizarManual(
 <meta name="theme-color" content="#0a0a0a">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>${ESTILOS_GROWTH}</style>
-</head><body>
+</head><body${flujo ? atributoFlujo(flujo) : ''}>
 ${barraOperador}
 <nav class="nav">
   <img src="${LOGO_WOZIAL_SRC}" alt="Wozial" class="nav-logo">
@@ -97,6 +100,8 @@ ${barraOperador}
 </nav>
 <div class="prog"><div class="prog-fill" id="pf"></div></div>
 <main>${secciones}</main>
+${flujo?.puedeEditar ? panelVersiones() + barraEdicion() : ''}
 <script>${NAVEGACION_GROWTH}</script>
+${flujo ? `<script>${SCRIPT_FLUJO}</script>` : ''}
 </body></html>`;
 }

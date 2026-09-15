@@ -4,6 +4,7 @@ import { LOGO_WOZIAL_SRC } from '@/render/marca';
 import type { OpcionesBarra } from '@/render/barra-operador';
 import { cabeceraDocumento, SCRIPT_CABECERA } from './cabecera';
 import { SCRIPT_EDITORIAL } from './interaccion';
+import { atributoFlujo, SCRIPT_FLUJO, type FlujoDatos } from './flujo-cliente';
 
 export { escapar };
 
@@ -38,6 +39,8 @@ export function envolverDocumento(o: {
   cuerpo: string;
   operador?: OpcionesBarra;
   scriptsExtra?: string;
+  /** Solo en la vista interna: activa `data-flujo` en `<body>` y `SCRIPT_FLUJO` (edición y versiones — B6). */
+  flujo?: FlujoDatos;
 }): string {
   return `<!DOCTYPE html>
 <html lang="es-MX"><head>
@@ -53,8 +56,8 @@ export function envolverDocumento(o: {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>${o.estilos}</style>
-</head><body>
-${cabeceraDocumento({ etiqueta: o.etiqueta, cliente: o.cliente, operador: o.operador })}
+</head><body${o.flujo ? atributoFlujo(o.flujo) : ''}>
+${cabeceraDocumento({ etiqueta: o.etiqueta, cliente: o.cliente, operador: o.operador, puedeEditar: o.flujo?.puedeEditar })}
 <div class="pagina"><div class="marco">
   <nav class="indice-lateral" aria-label="Secciones">
     <ol>${o.indice.map(([num, id, nombre]) => `<li><a href="#${id}"><span>${num}</span>${nombre}</a></li>`).join('')}</ol>
@@ -69,6 +72,7 @@ ${o.cuerpo}
 </footer>
 <script>${SCRIPT_EDITORIAL}</script>
 <script>${SCRIPT_CABECERA}</script>
+${o.flujo ? `<script>${SCRIPT_FLUJO}</script>` : ''}
 ${o.scriptsExtra ? `<script>${o.scriptsExtra}</script>` : ''}
 </body></html>`;
 }

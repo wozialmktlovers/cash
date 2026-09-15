@@ -114,6 +114,19 @@ export async function etapasDelCliente(clientId: string): Promise<FilaEtapa[]> {
   return filas.sort((a, b) => (orden.get(a.etapa) ?? 0) - (orden.get(b.etapa) ?? 0));
 }
 
+/**
+ * La etapa cuyo documento vigente es exactamente (tipo, documentoId); si
+ * ninguna calza (se está editando/restaurando una versión que ya no es la
+ * vigente de su etapa), cae a la etapa de ese tipo del cliente — B6 permite
+ * editar igual un documento que no es el vigente (spec §3).
+ */
+export async function etapaDelDocumento(clientId: string, tipo: TipoDocumento, documentoId: string): Promise<FilaEtapa | null> {
+  const etapas = await etapasDelCliente(clientId);
+  const vigente = etapas.find((e) => e.documentoTipo === tipo && e.documentoId === documentoId);
+  if (vigente) return vigente;
+  return etapas.find((e) => e.etapa === etapaDeTipo(tipo)) ?? null;
+}
+
 /** Datos vigentes del documento (research, growth o pilares) por su id. */
 async function datosDelDocumento(ejecutor: Ejecutor, tipo: TipoDocumento, documentoId: string): Promise<unknown> {
   const tabla = tipo === 'growth' ? growthResults : tipo === 'pilares' ? pilaresResults : researchResults;

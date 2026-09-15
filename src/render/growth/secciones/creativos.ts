@@ -1,4 +1,5 @@
 import { escapar, cabeceraSeccion, hueco } from './comunes';
+import { rutaEditable } from '@/render/editorial/flujo-cliente';
 import type { UrlEtiquetada } from '@/growth/utm';
 import { RATIO_POR_FORMATO, GRUPOS, FORMATOS, type Growth, type Creativo } from '@/growth/schemas';
 
@@ -36,25 +37,34 @@ export function seccionCreativos(
   g: Partial<Growth>,
   huecos: Record<string, string>,
   urls: UrlEtiquetada[] = [],
+  editable = false,
 ): string {
   // Cada pieza lleva su URL etiquetada al lado. Quien produce el creativo no
   // debería tener que saltar a la sección de trazabilidad para encontrarla:
   // ahí es donde se pierde el UTM y la campaña deja de medirse.
   const urlPorClave = new Map(urls.map((u) => [u.clave, u.url]));
   const porClave = new Map<string, Creativo>();
-  for (const c of g.creativos ?? []) porClave.set(`${c.grupo}-${c.formato}`, c);
+  // Índice ORIGINAL en `datos.creativos` (no la posición dentro de este
+  // recorrido por grupo/formato): es lo que necesita `data-editable` para
+  // apuntar a la ruta real del JSON.
+  const indicePorCreativo = new Map<Creativo, number>();
+  (g.creativos ?? []).forEach((c, i) => {
+    porClave.set(`${c.grupo}-${c.formato}`, c);
+    indicePorCreativo.set(c, i);
+  });
 
   const razon = huecos.creativos ?? 'Los textos de anuncio no se generaron.';
 
   const grupos = GRUPOS.map((grupo) => {
     const piezas = FORMATOS.map((formato) => {
       const c = porClave.get(`${grupo}-${formato}`);
+      const indiceC = c ? indicePorCreativo.get(c) : undefined;
       const ratio = c?.ratio ?? RATIO_POR_FORMATO[formato];
       const medidas = c?.medidas ?? MEDIDAS[ratio];
       const piezas = ARCHIVOS[formato] ?? [{ etiqueta: 'Pieza', ratio }];
       const copys = c
-        ? `<div class="kv"><div class="kv-k">Opción A</div><div class="copy">${escapar(c.copyA)}</div></div>
-           <div class="kv"><div class="kv-k">Opción B</div><div class="copy">${escapar(c.copyB)}</div></div>`
+        ? `<div class="kv"><div class="kv-k">Opción A</div><div class="copy"${rutaEditable(editable, `creativos.${indiceC}.copyA`)}>${escapar(c.copyA)}</div></div>
+           <div class="kv"><div class="kv-k">Opción B</div><div class="copy"${rutaEditable(editable, `creativos.${indiceC}.copyB`)}>${escapar(c.copyB)}</div></div>`
         : `<p class="tiny" style="margin-top:var(--e1);">Sin copy: ${escapar(razon)}</p>`;
       const url = urlPorClave.get(`g${grupo}_${formato}`);
       return `<div class="fmt">
@@ -78,11 +88,12 @@ export function seccionCreativos(
       </div>`;
     }).join('');
 
-    const angulo = porClave.get(`${grupo}-imagen`)?.angulo;
+    const creativoAngulo = porClave.get(`${grupo}-imagen`);
+    const indiceAngulo = creativoAngulo ? indicePorCreativo.get(creativoAngulo) : undefined;
     return `<div class="grp grp-${escapar(grupo)}">
       <div class="grp-hd">
         <span class="badge b-pink">Grupo ${escapar(grupo.toUpperCase())}</span>
-        ${angulo ? `<strong style="margin-left:10px;">${escapar(angulo)}</strong>` : ''}
+        ${creativoAngulo ? `<strong style="margin-left:10px;"${rutaEditable(editable, `creativos.${indiceAngulo}.angulo`)}>${escapar(creativoAngulo.angulo)}</strong>` : ''}
       </div>
       <div class="grp-bd"><div class="g3">${piezas}</div></div>
     </div>`;

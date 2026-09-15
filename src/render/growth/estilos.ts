@@ -311,6 +311,37 @@ body{padding-top:64px; overflow-y:auto; overflow-x:hidden; min-height:100vh;}
   .slots-car{grid-template-columns:repeat(2,1fr);}
   .gcols,.g5{grid-template-columns:1fr;}
 }
+
+/* ── Edición sobre el documento y versiones (B6, spec §3) ────────── */
+#btn-flujo-editar[aria-pressed="true"]{background:var(--pink);border-color:var(--pink);color:#fff;}
+
+html.modo-edicion [data-editable]{outline:2px dashed var(--pink);outline-offset:3px;border-radius:4px;cursor:text;}
+html.modo-edicion [data-editable]:focus-visible{outline-style:solid;}
+
+.barra-edicion{position:fixed;left:50%;translate:-50% 0;bottom:16px;z-index:400;
+  display:flex;flex-wrap:wrap;align-items:center;gap:16px;min-height:44px;padding:10px 18px;border-radius:999px;
+  background:var(--s3);color:var(--hi);border:1px solid var(--line-2);box-shadow:var(--sh-1);font-size:.82rem;font-weight:600;}
+.barra-edicion[hidden]{display:none;}
+.barra-edicion-estado{color:var(--dim);font-weight:500;}
+.barra-edicion-botones{display:flex;gap:8px;}
+.barra-edicion-botones button{min-height:44px;padding:0 16px;border-radius:var(--r-xs);border:1px solid var(--line-2);
+  background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer;}
+.barra-edicion-botones .barra-guardar{background:var(--pink);border-color:var(--pink);color:#fff;}
+.barra-edicion-botones button:hover{opacity:.85;}
+
+dialog.dialogo-versiones{width:min(520px,calc(100vw - 32px));border:1px solid var(--line-2);border-radius:var(--radius);
+  padding:24px;display:grid;gap:14px;background:var(--s2);color:var(--mid);box-shadow:var(--sh-1);}
+dialog.dialogo-versiones::backdrop{background:rgba(0,0,0,.55);}
+.dialogo-cabecera{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.dialogo-cabecera h3{color:var(--hi);}
+.dialogo-versiones-lista{display:grid;gap:10px;max-height:50vh;overflow-y:auto;}
+.version-fila{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px;border:1px solid var(--line);border-radius:var(--r-xs);}
+.version-info{display:grid;gap:2px;}
+.version-motivo{font-weight:700;color:var(--hi);}
+.dialogo-versiones .panel-boton,.dialogo-versiones-lista .panel-boton{min-height:40px;padding:0 14px;border-radius:var(--r-xs);
+  border:1px solid var(--line-2);background:transparent;color:var(--mid);font:inherit;font-weight:600;cursor:pointer;}
+.dialogo-versiones .panel-boton:hover{border-color:var(--pink);color:#fff;}
+.panel-estado{color:var(--dim);font-size:.78rem;min-height:16px;}
 `;
 
 export const ESTILOS_GROWTH = `${TOKENS}
