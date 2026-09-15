@@ -46,3 +46,58 @@ export function validarCambioUsuario(
 
   return { ok: true };
 }
+
+/** Lo mínimo para mostrar a una persona: si aún no tiene nombre, su correo. */
+export type UsuarioMostrable = { nombre: string | null; apellido: string | null; email: string };
+
+const MAXIMO_NOMBRE = 60;
+const MAXIMO_CORREO = 200;
+// Deliberadamente laxa: solo descarta lo que claramente no es un correo. La
+// verdad la tiene el buzón de la persona, no una expresión regular.
+const CORREO = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)+$/;
+
+export function nombreVisible(u: UsuarioMostrable): string {
+  const completo = [u.nombre, u.apellido].map((p) => p?.trim() ?? '').filter(Boolean).join(' ');
+  return completo || u.email;
+}
+
+/** Comparador para `sort`: apellido, nombre, y al final quien no tenga ninguno. */
+export function ordenUsuarios(a: UsuarioMostrable, b: UsuarioMostrable): number {
+  const cmp = (x: string, y: string) => x.localeCompare(y, 'es', { sensitivity: 'base' });
+  const conNombre = (u: UsuarioMostrable) => Boolean(u.nombre?.trim() || u.apellido?.trim());
+  if (conNombre(a) !== conNombre(b)) return conNombre(a) ? -1 : 1;
+  if (!conNombre(a)) return cmp(a.email, b.email);
+  const porApellido = cmp(a.apellido?.trim() ?? '', b.apellido?.trim() ?? '');
+  return porApellido !== 0 ? porApellido : cmp(a.nombre?.trim() ?? '', b.nombre?.trim() ?? '');
+}
+
+export type DatosUsuario = { nombre?: string | null; apellido?: string | null; email?: string };
+
+/**
+ * Reglas para editar los datos de identidad de alguien. Pura: la unicidad del
+ * correo la decide la restricción única de la base, no esta función.
+ */
+export function validarDatosUsuario(
+  actor: UsuarioSesion,
+  objetivoId: string,
+  datos: DatosUsuario,
+): { ok: true; datos: DatosUsuario } | { ok: false; error: string } {
+  const pide = (c: keyof DatosUsuario) => datos[c] !== undefined;
+  if (!pide('nombre') && !pide('apellido') && !pide('email')) return { ok: false, error: 'sin-cambios' };
+  if (actor.rol !== 'admin' && actor.id !== objetivoId) return { ok: false, error: 'solo-admin' };
+  if (pide('email') && actor.rol !== 'admin') return { ok: false, error: 'solo-admin-correo' };
+
+  const limpios: DatosUsuario = {};
+  for (const campo of ['nombre', 'apellido'] as const) {
+    if (!pide(campo)) continue;
+    const valor = (datos[campo] ?? '').trim();
+    if (valor.length > MAXIMO_NOMBRE) return { ok: false, error: `${campo}-largo` };
+    limpios[campo] = valor || null;
+  }
+  if (pide('email')) {
+    const valor = (datos.email ?? '').trim().toLowerCase();
+    if (!valor || valor.length > MAXIMO_CORREO || !CORREO.test(valor)) return { ok: false, error: 'correo-invalido' };
+    limpios.email = valor;
+  }
+  return { ok: true, datos: limpios };
+}
