@@ -101,8 +101,19 @@ export function etapasParaAvance<T extends { contratada: boolean; interna: boole
   return etapas.filter((e) => e.contratada && !e.interna && e.etapa !== 'desarrollo_mensual');
 }
 
-/** % de avance: promedio redondeado del peso de las etapas visibles (`etapasParaAvance`); 0 si no hay ninguna. */
-export function avanceCliente(etapas: EtapaCliente[]): number {
+/**
+ * % de avance: promedio redondeado del peso de las etapas visibles
+ * (`etapasParaAvance`); 0 si no hay ninguna.
+ *
+ * Recibe solo `contratada`/`interna`/`etapa`/`estado` (no `EtapaCliente`
+ * completo) para que también la use directamente la tabla «Por cliente» de
+ * `src/pages/desempeno.astro` (M3, punto 7 del controlador), cuyas filas
+ * (`EtapaM`, `src/lib/desempeno.ts`) no traen `documentoId`. Esa tabla tenía
+ * su propia `avanceDeCliente` que SÍ contaba `desarrollo_mensual`: el mismo
+ * cliente podía ver un % distinto en el portal, en la tarjeta de carga del
+ * tablero (`carga()`, punto 6) y en esta tabla.
+ */
+export function avanceCliente(etapas: Pick<EtapaCliente, 'contratada' | 'interna' | 'etapa' | 'estado'>[]): number {
   const visibles = etapasParaAvance(etapas);
   if (visibles.length === 0) return 0;
   const suma = visibles.reduce((acc, e) => acc + PESOS[e.estado], 0);

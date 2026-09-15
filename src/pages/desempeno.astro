@@ -4,7 +4,7 @@ import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import { db, clients, clienteEtapas, etapaEventos, comentarios, researchJobs, users } from '@/db';
 import { condicionClientes, esUuid } from '@/lib/visibilidad';
-import { ETAPAS, NOMBRE_ETAPA, PESOS, type Etapa, type Estado } from '@/flujo/reglas';
+import { ETAPAS, NOMBRE_ETAPA, avanceCliente, type Etapa, type Estado } from '@/flujo/reglas';
 import {
   periodo, resumenEstadistico, tiemposPorEtapa, calidad, carga, costo, operadorDeJob,
   enPeriodoCerrado, agruparClientesPorOperador, desglosePorEtapa,
@@ -229,12 +229,11 @@ const filasDesgloseOperador = filasPorOperador.map((f) => {
 });
 
 // ── Tabla «Por cliente» ──────────────────────────────────────────────────
-function avanceDeCliente(etapasCliente: EtapaM[]): number {
-  const visibles = etapasCliente.filter((e) => e.contratada && !e.interna);
-  if (visibles.length === 0) return 0;
-  const suma = visibles.reduce((s, e) => s + PESOS[e.estado], 0);
-  return Math.round(suma / visibles.length);
-}
+// avanceDeCliente propia (que SÍ contaba desarrollo_mensual) se quita: esta
+// columna ahora reutiliza avanceCliente de src/flujo/reglas.ts, la misma
+// función que ya usa el portal del cliente (M3, punto 7 del controlador) y
+// que ahora también usa carga() más arriba (punto 6) — las tres pantallas
+// muestran el mismo % para el mismo cliente.
 function etapaActualDe(etapasCliente: EtapaM[]): string {
   const visibles = etapasCliente
     .filter((e) => e.contratada && !e.interna)
@@ -253,7 +252,7 @@ for (const e of etapas) {
 
 const filasPorCliente = lista.map((c) => ({
   nombre: c.nombre,
-  avance: avanceDeCliente(etapasPorCliente.get(c.id) ?? []),
+  avance: avanceCliente(etapasPorCliente.get(c.id) ?? []),
   etapaActual: etapaActualDe(etapasPorCliente.get(c.id) ?? []),
   operador: c.operadorId ? (nombreOperador.get(c.operadorId) ?? 'Operador') : 'Sin asignar',
   costo: costoRes.porCliente.get(c.id) ?? 0,
