@@ -3,6 +3,7 @@ import { ESTILOS_EDITORIAL } from '@/render/editorial/estilos';
 import { cabeceraDocumento, SCRIPT_CABECERA } from '@/render/editorial/cabecera';
 import { SCRIPT_EDITORIAL } from '@/render/editorial/interaccion';
 import { envolverDocumento } from '@/render/editorial/comunes';
+import { FakeDocument, FakeWindow, crearPestana, ejecutarScript } from '../helpers/fake-dom';
 
 const operador = { clienteId: 'c1', clienteNombre: 'Ana', clienteSlug: 'ana', documentoId: 'd1', version: 2, tipo: 'pilares' as const, tokenActivo: null, base: 'https://x' };
 
@@ -33,5 +34,95 @@ describe('base editorial', () => {
     expect(h).toContain('href="#uno"');
     expect(h).toContain('Preparado por Wozial');
     expect(h).toContain("classList.add('js')");
+  });
+});
+
+// El banco de pilares trae cinco `[role="tablist"]` (uno por pilar) en la
+// misma página, algo que la investigación nunca tuvo (un solo tablist). Esta
+// suite ejecuta SCRIPT_EDITORIAL de verdad contra una micro-DOM (sin jsdom:
+// no está instalado y el proyecto no permite `npm install`) para probar que
+// cada grupo es independiente: la selección inicial, el clic y las flechas
+// nunca cruzan de un tablist a otro.
+describe('SCRIPT_EDITORIAL · pestañas por tablist', () => {
+  function armarDosTablists() {
+    const doc = new FakeDocument();
+    const win = new FakeWindow();
+
+    const tablistA = doc.createElement('div');
+    tablistA.setAttribute('role', 'tablist');
+    doc.body.appendChild(tablistA);
+    const a = [0, 1, 2].map((i) => crearPestana(doc, tablistA, { idTab: `tabA${i}`, idPanel: `panelA${i}`, seleccionado: i === 0 }));
+
+    const tablistB = doc.createElement('div');
+    tablistB.setAttribute('role', 'tablist');
+    doc.body.appendChild(tablistB);
+    const b = [0, 1, 2].map((i) => crearPestana(doc, tablistB, { idTab: `tabB${i}`, idPanel: `panelB${i}`, seleccionado: i === 0 }));
+
+    ejecutarScript(SCRIPT_EDITORIAL, doc, win);
+    return { doc, win, a, b };
+  }
+
+  it('la selección inicial elige el primer tab de CADA tablist, no solo del primero de la página', () => {
+    const { a, b } = armarDosTablists();
+    expect(a[0].tab.getAttribute('aria-selected')).toBe('true');
+    expect(a[0].panel.hidden).toBe(false);
+    expect(a[1].panel.hidden).toBe(true);
+    expect(a[2].panel.hidden).toBe(true);
+
+    // Antes de este arreglo, `elegir(pestanas[0])` trataba las seis
+    // pestañas como una sola lista: solo tabA0 quedaba seleccionado y el
+    // panel de tabB0 (el "primero" de su propio grupo) se escondía.
+    expect(b[0].tab.getAttribute('aria-selected')).toBe('true');
+    expect(b[0].panel.hidden).toBe(false);
+    expect(b[1].panel.hidden).toBe(true);
+  });
+
+  it('un clic en un tab del grupo A no toca la selección ni los paneles del grupo B', () => {
+    const { a, b } = armarDosTablists();
+    a[1].tab.dispatch('click');
+
+    expect(a[1].tab.getAttribute('aria-selected')).toBe('true');
+    expect(a[1].panel.hidden).toBe(false);
+    expect(a[0].panel.hidden).toBe(true);
+
+    expect(b[0].tab.getAttribute('aria-selected')).toBe('true');
+    expect(b[0].panel.hidden).toBe(false);
+  });
+
+  it('ArrowRight/Home/End se quedan dentro del mismo tablist, nunca saltan al siguiente grupo', () => {
+    const { a, b } = armarDosTablists();
+
+    // Último tab del grupo A: ArrowRight debe dar la vuelta a tabA0, no
+    // "seguir" hacia tabB0 como pasaba con la lista plana.
+    a[2].tab.dispatch('click');
+    a[2].tab.dispatch('keydown', { key: 'ArrowRight' });
+    expect(a[0].tab.getAttribute('aria-selected')).toBe('true');
+    expect(b[0].tab.getAttribute('aria-selected')).toBe('true');
+
+    a[0].tab.dispatch('keydown', { key: 'End' });
+    expect(a[2].tab.getAttribute('aria-selected')).toBe('true');
+    expect(a[2].panel.hidden).toBe(false);
+    expect(b[0].tab.getAttribute('aria-selected')).toBe('true');
+
+    a[2].tab.dispatch('keydown', { key: 'Home' });
+    expect(a[0].tab.getAttribute('aria-selected')).toBe('true');
+    expect(b[0].tab.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('la investigación (un solo tablist) se comporta exactamente igual que antes', () => {
+    const doc = new FakeDocument();
+    const win = new FakeWindow();
+    const tablist = doc.createElement('div');
+    tablist.setAttribute('role', 'tablist');
+    doc.body.appendChild(tablist);
+    const tabs = [0, 1, 2, 3].map((i) => crearPestana(doc, tablist, { idTab: `t${i}`, idPanel: `p${i}`, seleccionado: i === 0 }));
+    ejecutarScript(SCRIPT_EDITORIAL, doc, win);
+
+    expect(tabs[0].panel.hidden).toBe(false);
+    for (const t of tabs.slice(1)) expect(t.panel.hidden).toBe(true);
+
+    tabs[2].tab.dispatch('click');
+    expect(tabs[2].panel.hidden).toBe(false);
+    expect(tabs[0].panel.hidden).toBe(true);
   });
 });

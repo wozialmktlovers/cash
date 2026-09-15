@@ -3,16 +3,14 @@
  * combinados del banco, el clic en una tarjeta de pilar (sección 03), el
  * ciclo de estado y la nota por PATCH, exportar CSV e imprimir.
  *
- * Una nota sobre las pestañas ARIA: `SCRIPT_EDITORIAL` (la base compartida)
- * maneja `[role="tab"]` como una sola lista plana en todo el documento, que
- * le basta a la investigación (un solo `tablist`). Aquí hay cinco, uno por
- * pilar, así que ese manejo global selecciona un tab a la vez EN TODO EL
- * DOCUMENTO y esconde los paneles de los otros cuatro pilares. En vez de
- * tocar la base compartida (la toca P5, no esta tarea), este script vuelve a
- * sincronizar cada bloque por separado después de cada clic o flecha: un
- * listener delegado en `document` siempre corre después del que puso cada
- * tab sobre sí mismo, porque la fase de burbuja llega al `document` cuando
- * ya pasó la fase del objetivo.
+ * Las pestañas ARIA de cada pilar (un `[role="tablist"]` por bloque) ya las
+ * escopa `SCRIPT_EDITORIAL` (la base compartida): cada grupo elige su propio
+ * primer tab al cargar y las flechas/Home/End no cruzan de un pilar a otro.
+ * Este script solo se mete con las pestañas para un caso propio del banco:
+ * mientras hay un filtro activo, las tres subcategorías de cada pilar se
+ * muestran a la vez (si no, un tema que hace match en la subcategoría 2
+ * quedaría escondido por la pestaña 1, que es la que está seleccionada) —
+ * ver `hayFiltrosActivos`/`aplicarModoFiltro` más abajo.
  */
 export const SCRIPT_PILARES = `(function () {
   var banco = document.getElementById('banco');
@@ -25,46 +23,51 @@ export const SCRIPT_PILARES = `(function () {
     return String(s || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
   }
 
-  // ── Pestañas por bloque: cada pilar recuerda su propia subcategoría activa ──
-  var memoriaPestanas = {};
-  function sincronizarPestanas() {
-    var bloquesTabs = banco.querySelectorAll('.pilar-bloque');
-    for (var i = 0; i < bloquesTabs.length; i++) {
-      var bloque = bloquesTabs[i];
-      var tabs = bloque.querySelectorAll('[role="tab"]');
-      if (!tabs.length) continue;
-      var clave = bloque.getAttribute('data-pilar');
-      var elegido = -1;
-      for (var j = 0; j < tabs.length; j++) { if (tabs[j].getAttribute('aria-selected') === 'true') elegido = j; }
-      if (elegido === -1) elegido = memoriaPestanas[clave] || 0;
-      memoriaPestanas[clave] = elegido;
-      for (var k = 0; k < tabs.length; k++) {
-        var activa = k === elegido;
-        tabs[k].setAttribute('aria-selected', String(activa));
-        tabs[k].setAttribute('tabindex', activa ? '0' : '-1');
-        var panel = document.getElementById(tabs[k].getAttribute('aria-controls'));
-        if (panel) panel.hidden = !activa;
-      }
-    }
-  }
-  sincronizarPestanas();
-  document.addEventListener('click', function (e) {
-    if (e.target && e.target.closest && e.target.closest('[role="tab"]')) sincronizarPestanas();
-  });
-  document.addEventListener('keydown', function (e) {
-    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.target && e.target.closest && e.target.closest('[role="tab"]')) sincronizarPestanas();
-  });
-
   // ── Filtros combinados ───────────────────────────────────────────────
   var filtros = banco.querySelectorAll('[data-filtro]');
   var tarjetas = banco.querySelectorAll('.tema-tarjeta');
   var bloques = banco.querySelectorAll('.pilar-bloque');
+  var contenedorBloques = banco.querySelector('.pilares-bloques');
   var contador = banco.querySelector('[data-contador]');
   var total = tarjetas.length;
 
   function valorFiltro(nombre) {
     var el = banco.querySelector('[data-filtro="' + nombre + '"]');
     return el ? el.value : '';
+  }
+
+  function hayFiltrosActivos() {
+    return !!(normalizarTexto(valorFiltro('texto')) || valorFiltro('pilar') || valorFiltro('subcategoria') ||
+      valorFiltro('funcion') || valorFiltro('formato') || valorFiltro('estado'));
+  }
+
+  // Mientras hay un filtro activo, las tres pestañas de cada pilar se
+  // muestran a la vez (con su título de subcategoría, que las pestañas
+  // normalmente esconden) para que un match en la subcategoría 2 o 3 no
+  // quede detrás de la pestaña 1. Al limpiar los filtros se restaura
+  // exactamente el tab que estaba elegido (su aria-selected no se toca).
+  function mostrarTodasLasSubcategorias() {
+    if (contenedorBloques) contenedorBloques.classList.add('filtro-activo');
+    var paneles = banco.querySelectorAll('.panel-subcat');
+    for (var i = 0; i < paneles.length; i++) paneles[i].hidden = false;
+    var tabs = banco.querySelectorAll('.pestanas [role="tab"]');
+    for (var j = 0; j < tabs.length; j++) tabs[j].setAttribute('aria-disabled', 'true');
+  }
+  function restaurarPestanaElegida() {
+    if (contenedorBloques) contenedorBloques.classList.remove('filtro-activo');
+    var listas = banco.querySelectorAll('.pestanas');
+    for (var i = 0; i < listas.length; i++) {
+      var tabs = listas[i].querySelectorAll('[role="tab"]');
+      for (var j = 0; j < tabs.length; j++) {
+        tabs[j].removeAttribute('aria-disabled');
+        var activa = tabs[j].getAttribute('aria-selected') === 'true';
+        var panel = document.getElementById(tabs[j].getAttribute('aria-controls'));
+        if (panel) panel.hidden = !activa;
+      }
+    }
+  }
+  function aplicarModoFiltro() {
+    if (hayFiltrosActivos()) mostrarTodasLasSubcategorias(); else restaurarPestanaElegida();
   }
 
   function actualizarSubcategorias() {
@@ -79,6 +82,15 @@ export const SCRIPT_PILARES = `(function () {
     }
   }
 
+  function actualizarContadorFiltros() {
+    var insignia = banco.querySelector('[data-filtros-contador]');
+    if (!insignia) return;
+    var claves = ['pilar', 'subcategoria', 'funcion', 'formato', 'estado'];
+    var n = 0;
+    for (var i = 0; i < claves.length; i++) { if (valorFiltro(claves[i])) n++; }
+    insignia.textContent = n > 0 ? String(n) : '';
+  }
+
   function aplicarFiltros() {
     var texto = normalizarTexto(valorFiltro('texto'));
     var pilar = valorFiltro('pilar');
@@ -88,6 +100,9 @@ export const SCRIPT_PILARES = `(function () {
     var estado = valorFiltro('estado');
     var visibles = 0;
 
+    // Recorre las 300 tarjetas sin importar en qué subcategoría estén: el
+    // contador y el CSV cuentan lo mismo, «cuántos temas hacen match en
+    // TODAS las subcategorías», nunca solo la pestaña que se ve.
     for (var i = 0; i < tarjetas.length; i++) {
       var t = tarjetas[i];
       var ok = true;
@@ -113,6 +128,8 @@ export const SCRIPT_PILARES = `(function () {
     }
 
     if (contador) contador.textContent = 'Mostrando ' + visibles + ' de ' + total;
+    actualizarContadorFiltros();
+    aplicarModoFiltro();
   }
 
   for (var f = 0; f < filtros.length; f++) {
@@ -126,6 +143,17 @@ export const SCRIPT_PILARES = `(function () {
     actualizarSubcategorias();
     aplicarFiltros();
   });
+
+  // ── Barra de herramientas compacta: bajo 1100px los filtros se esconden
+  // detrás de un botón «Filtros (n)», colapsados por defecto ────────────
+  var botonFiltros = banco.querySelector('#btn-filtros');
+  var panelFiltros = banco.querySelector('#herramientas-filtros');
+  if (botonFiltros && panelFiltros) {
+    botonFiltros.addEventListener('click', function () {
+      var abierta = panelFiltros.classList.toggle('abierta');
+      botonFiltros.setAttribute('aria-expanded', String(abierta));
+    });
+  }
 
   actualizarSubcategorias();
   aplicarFiltros();
@@ -172,6 +200,9 @@ export const SCRIPT_PILARES = `(function () {
   }
 
   // ── Botón de estado: pendiente → en_desarrollo → desarrollado → publicado → pendiente ──
+  // (ETIQUETA_ESTADO se repite aquí a propósito, en ES5 puro: si cambian los
+  // nombres o el orden de ESTADOS_TEMA en pilares/schemas.ts, hay que
+  // actualizar también el mismo mapa en render/pilares/banco.ts.)
   var CICLO_ESTADO = ['pendiente', 'en_desarrollo', 'desarrollado', 'publicado'];
   var ETIQUETA_ESTADO = { pendiente: 'Pendiente', en_desarrollo: 'En desarrollo', desarrollado: 'Desarrollado', publicado: 'Publicado' };
   function siguienteEstado(actual) {
@@ -195,9 +226,18 @@ export const SCRIPT_PILARES = `(function () {
         var m = obtenerMeta(tarjeta);
         m.el.textContent = 'Guardado';
 
+        // Un doble clic (o dos cambios de estado seguidos antes de que
+        // conteste el primero) no debe dejar que la respuesta más vieja
+        // pise el resultado del clic más nuevo: cada clic sube un contador
+        // propio del botón y solo el que sigue vigente toca el DOM.
+        var version = (boton._version || 0) + 1;
+        boton._version = version;
+
         guardarCambio(temaId, { estado: nuevo }, function (datos) {
+          if (boton._version !== version) return;
           m.el.textContent = (datos.actualizadoPor || 'Sin autor') + ' · ' + String(datos.actualizadoEn || '').slice(0, 10);
         }, function () {
+          if (boton._version !== version) return;
           tarjeta.setAttribute('data-estado', anterior);
           boton.setAttribute('data-estado-actual', anterior);
           boton.textContent = ETIQUETA_ESTADO[anterior];
@@ -247,11 +287,18 @@ export const SCRIPT_PILARES = `(function () {
 
     if (notaGuardar) notaGuardar.addEventListener('click', function () {
       if (!temaActualId) return;
+      // Se capturan aquí, no dentro de los callbacks: si el operador cierra
+      // el diálogo y abre la nota de OTRO tema antes de que conteste el
+      // PATCH, 'temaActualId'/'botonActual' ya habrán cambiado y el
+      // callback tardío terminaría marcando 'con-nota' en la tarjeta
+      // equivocada.
+      var temaEnvio = temaActualId;
+      var botonEnvio = botonActual;
       var texto = notaTexto ? notaTexto.value : '';
-      guardarCambio(temaActualId, { nota: texto }, function () {
-        if (botonActual) {
-          botonActual.setAttribute('data-nota', texto);
-          botonActual.classList.toggle('con-nota', !!texto);
+      guardarCambio(temaEnvio, { nota: texto }, function () {
+        if (botonEnvio) {
+          botonEnvio.setAttribute('data-nota', texto);
+          botonEnvio.classList.toggle('con-nota', !!texto);
         }
         if (notaEstado) notaEstado.textContent = 'Guardada.';
       }, function () {
@@ -262,13 +309,21 @@ export const SCRIPT_PILARES = `(function () {
     dialogoNota.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrarNota(); });
   }
 
-  // ── Exportar CSV, desde las tarjetas visibles ───────────────────────────
+  // ── Exportar CSV: mismas tarjetas que cuenta el contador (todas las que
+  // hacen match, no solo las de la pestaña abierta) ──────────────────────
+  function celdaSegura(v) {
+    var s = String(v == null ? '' : v);
+    // Protección contra inyección de fórmulas: si Excel/Sheets abre el CSV,
+    // una celda que empiece con = + - @ puede ejecutarse como fórmula.
+    if (/^[=+\\-@]/.test(s)) s = "'" + s;
+    return s;
+  }
   var botonCsv = banco.querySelector('[data-accion="csv"]');
   if (botonCsv) botonCsv.addEventListener('click', function () {
     var filas = [['id', 'pilar', 'subcategoria', 'tema', 'funcion', 'formato', 'estado', 'nota']];
     for (var i = 0; i < tarjetas.length; i++) {
       var t = tarjetas[i];
-      if (t.offsetParent === null) continue;
+      if (t.hidden) continue;
       var notaBtn = t.querySelector('.boton-nota');
       var textoEl = t.querySelector('.tema-texto');
       filas.push([
@@ -284,7 +339,7 @@ export const SCRIPT_PILARES = `(function () {
     }
     var csv = filas.map(function (fila) {
       return fila.map(function (v) {
-        var s = String(v == null ? '' : v).replace(/"/g, '""');
+        var s = celdaSegura(v).replace(/"/g, '""');
         return '"' + s + '"';
       }).join(',');
     }).join('\\r\\n');

@@ -2,8 +2,12 @@ import { FUNCIONES, FORMATOS, ESTADOS_TEMA, type MapaPilares, type PilarMapa, ty
 import type { AvanceTema } from '@/pilares/avance';
 import { escapar, encabezadoSeccion } from '@/render/editorial/comunes';
 import { normalizar } from '@/lib/ui/buscar';
-import { COLOR_PILAR, COLOR_FUNCION, ETIQUETA_FUNCION, ETIQUETA_FORMATO } from './secciones';
+import { COLOR_PILAR, ETIQUETA_FUNCION, ETIQUETA_FORMATO } from './secciones';
 
+// SCRIPT_PILARES (script.ts) trae su propia copia de este mapa en JS puro,
+// porque el estado cambia de nombre en el navegador sin volver a pasar por
+// este archivo. Si cambian los nombres o el orden de ESTADOS_TEMA aquí,
+// hay que actualizar también ese mapa.
 const ETIQUETA_ESTADO: Record<EstadoTema, string> = {
   pendiente: 'Pendiente',
   en_desarrollo: 'En desarrollo',
@@ -122,16 +126,25 @@ function herramientas(mapa: MapaPilares, interna: boolean, total: number): strin
   const opcionesFormato = FORMATOS.map((f) => `<option value="${f}">${escapar(ETIQUETA_FORMATO[f].texto)}</option>`).join('');
   const opcionesEstado = ESTADOS_TEMA.map((e) => `<option value="${e}">${escapar(ETIQUETA_ESTADO[e])}</option>`).join('');
 
+  // Dos envolturas (`herramientas-fila` y `herramientas-filtros`) para que la
+  // barra pueda colapsar los filtros bajo un botón en pantallas angostas sin
+  // duplicar marcado: en ≥1100px ambas pasan a `display:contents` en el CSS
+  // y todo queda en una sola fila (ver `ESTILOS_PILARES`).
   return `<div class="herramientas">
-    <input type="search" data-filtro="texto" placeholder="Buscar tema" aria-label="Buscar tema">
-    <select data-filtro="pilar" aria-label="Filtrar por pilar"><option value="">Todos los pilares</option>${opcionesPilar}</select>
-    <select data-filtro="subcategoria" aria-label="Filtrar por subcategoría"><option value="">Todas las subcategorías</option>${opcionesSub}</select>
-    <select data-filtro="funcion" aria-label="Filtrar por función"><option value="">Todas las funciones</option>${opcionesFuncion}</select>
-    <select data-filtro="formato" aria-label="Filtrar por formato"><option value="">Todos los formatos</option>${opcionesFormato}</select>
-    ${interna ? `<select data-filtro="estado" aria-label="Filtrar por estado"><option value="">Todos los estados</option>${opcionesEstado}</select>` : ''}
-    <button type="button" data-accion="limpiar">Limpiar</button>
-    <output data-contador>Mostrando ${total} de ${total}</output>
-    ${interna ? `<button type="button" data-accion="csv">Exportar CSV</button><button type="button" data-accion="imprimir">Imprimir / PDF</button>` : ''}
+    <div class="herramientas-fila">
+      <input type="search" data-filtro="texto" placeholder="Buscar tema" aria-label="Buscar tema">
+      <button type="button" class="btn-filtros" id="btn-filtros" aria-expanded="false" aria-controls="herramientas-filtros">Filtros<span class="filtros-contador" data-filtros-contador aria-hidden="true"></span></button>
+      <output data-contador>Mostrando ${total} de ${total}</output>
+    </div>
+    <div class="herramientas-filtros" id="herramientas-filtros">
+      <select data-filtro="pilar" aria-label="Filtrar por pilar"><option value="">Todos los pilares</option>${opcionesPilar}</select>
+      <select data-filtro="subcategoria" aria-label="Filtrar por subcategoría"><option value="">Todas las subcategorías</option>${opcionesSub}</select>
+      <select data-filtro="funcion" aria-label="Filtrar por función"><option value="">Todas las funciones</option>${opcionesFuncion}</select>
+      <select data-filtro="formato" aria-label="Filtrar por formato"><option value="">Todos los formatos</option>${opcionesFormato}</select>
+      ${interna ? `<select data-filtro="estado" aria-label="Filtrar por estado"><option value="">Todos los estados</option>${opcionesEstado}</select>` : ''}
+      <button type="button" data-accion="limpiar">Limpiar</button>
+      ${interna ? `<button type="button" data-accion="csv">Exportar CSV</button><button type="button" data-accion="imprimir">Imprimir / PDF</button>` : ''}
+    </div>
   </div>`;
 }
 

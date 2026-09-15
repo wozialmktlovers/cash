@@ -30,9 +30,14 @@ export const ETIQUETA_FORMATO: Record<Formato, { texto: string; icono: string }>
   story: { texto: 'Story', icono: ICONO_STORY },
 };
 
-/** Cifras de portada: valor grande + etiqueta, mismo componente que la investigación. */
-function cifraTarjeta(valor: string, etiqueta: string): string {
-  return `<div class="cifra-tarjeta aparece"><span class="cifra-valor">${escapar(valor)}</span><span class="cifra-etiqueta">${escapar(etiqueta)}</span></div>`;
+/**
+ * Cifras de portada: valor grande + etiqueta, mismo componente que la
+ * investigación. `variante` es para valores que no son un número corto (p.
+ * ej. «Facebook + Instagram»): a ese tamaño de letra, un texto así de largo
+ * se sale de la tarjeta, así que baja el tipo y permite que envuelva.
+ */
+function cifraTarjeta(valor: string, etiqueta: string, variante?: 'cifra-texto'): string {
+  return `<div class="cifra-tarjeta${variante ? ` ${variante}` : ''} aparece"><span class="cifra-valor">${escapar(valor)}</span><span class="cifra-etiqueta">${escapar(etiqueta)}</span></div>`;
 }
 
 export function seccionPortada(o: {
@@ -55,7 +60,7 @@ export function seccionPortada(o: {
       ${cifraTarjeta('5', 'pilares')}
       ${cifraTarjeta('15', 'subcategorías')}
       ${cifraTarjeta(String(o.totalTemas), 'temas')}
-      ${cifraTarjeta('Facebook + Instagram', 'Canales')}
+      ${cifraTarjeta('Facebook + Instagram', 'Canales', 'cifra-texto')}
     </div>
     ${avance}
     <nav class="accesos" aria-label="Ir a">

@@ -25,30 +25,40 @@ export const SCRIPT_EDITORIAL = `(function () {
   document.addEventListener('wozial:tema', sincronizarTema);
   sincronizarTema();
 
-  // Pestañas ARIA
-  var pestanas = document.querySelectorAll('[role="tab"]');
-  function elegir(tab, enfocar) {
-    for (var j = 0; j < pestanas.length; j++) {
-      var activa = pestanas[j] === tab;
-      pestanas[j].setAttribute('aria-selected', String(activa));
-      pestanas[j].setAttribute('tabindex', activa ? '0' : '-1');
-      var panel = document.getElementById(pestanas[j].getAttribute('aria-controls'));
+  // Pestañas ARIA, agrupadas por su propio [role="tablist"]: un documento
+  // puede traer más de uno (el banco de pilares trae cinco, uno por pilar) y
+  // cada grupo se comporta como si fuera el único en la página — flechas,
+  // Home/End y la selección inicial no cruzan de un tablist a otro.
+  var listasDePestanas = document.querySelectorAll('[role="tablist"]');
+  function elegir(tabsDelGrupo, tab, enfocar) {
+    for (var j = 0; j < tabsDelGrupo.length; j++) {
+      var activa = tabsDelGrupo[j] === tab;
+      tabsDelGrupo[j].setAttribute('aria-selected', String(activa));
+      tabsDelGrupo[j].setAttribute('tabindex', activa ? '0' : '-1');
+      var panel = document.getElementById(tabsDelGrupo[j].getAttribute('aria-controls'));
       if (panel) panel.hidden = !activa;
     }
     if (enfocar) tab.focus();
   }
-  for (var k = 0; k < pestanas.length; k++) {
-    (function (indice) {
-      pestanas[indice].addEventListener('click', function () { elegir(pestanas[indice], false); });
-      pestanas[indice].addEventListener('keydown', function (e) {
-        var paso = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-        if (!paso) return;
-        e.preventDefault();
-        elegir(pestanas[(indice + paso + pestanas.length) % pestanas.length], true);
-      });
-    })(k);
+  for (var g = 0; g < listasDePestanas.length; g++) {
+    (function (grupo) {
+      var tabsDelGrupo = grupo.querySelectorAll('[role="tab"]');
+      for (var k = 0; k < tabsDelGrupo.length; k++) {
+        (function (indice) {
+          tabsDelGrupo[indice].addEventListener('click', function () { elegir(tabsDelGrupo, tabsDelGrupo[indice], false); });
+          tabsDelGrupo[indice].addEventListener('keydown', function (e) {
+            if (e.key === 'Home') { e.preventDefault(); elegir(tabsDelGrupo, tabsDelGrupo[0], true); return; }
+            if (e.key === 'End') { e.preventDefault(); elegir(tabsDelGrupo, tabsDelGrupo[tabsDelGrupo.length - 1], true); return; }
+            var paso = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+            if (!paso) return;
+            e.preventDefault();
+            elegir(tabsDelGrupo, tabsDelGrupo[(indice + paso + tabsDelGrupo.length) % tabsDelGrupo.length], true);
+          });
+        })(k);
+      }
+      if (tabsDelGrupo.length) elegir(tabsDelGrupo, tabsDelGrupo[0], false);
+    })(listasDePestanas[g]);
   }
-  if (pestanas.length) elegir(pestanas[0], false);
 
   // Índice activo y apariciones
   var enlaces = document.querySelectorAll('.indice-lateral a');
