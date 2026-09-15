@@ -26,6 +26,12 @@ const PARES: Array<[string, string]> = [
   ['amarillo', 'fondo'], ['amarillo', 'amarillo-s'],
   ['verde', 'fondo'], ['verde', 'verde-s'],
   ['rojo', 'fondo'], ['rojo', 'rojo-s'],
+  // Texto de cuerpo (suave/tinta) sobre los tintes -s: mismo fondo que ya
+  // usan la cabecera de pilar y avisos con --*-s (banco.ts, estilos.ts), con
+  // un título o párrafo encima en el color de texto por omisión, no en el
+  // color de acento. Deferido de la revisión de I3 (~4.6–4.8, al límite).
+  ['suave', 'rosa-s'], ['suave', 'azul-s'], ['suave', 'amarillo-s'], ['suave', 'verde-s'],
+  ['tinta', 'rosa-s'], ['tinta', 'azul-s'], ['tinta', 'amarillo-s'], ['tinta', 'verde-s'],
   // Cabecera de pilar en el banco de temas (banco.ts): el eyebrow «Pilar N»
   // del quinto pilar usa --tinta sobre --gris (su --color-pilar-s, ya que
   // tinta no tiene tinte -s propio).
