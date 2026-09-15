@@ -33,7 +33,10 @@ p{max-width:68ch;}
 @media (min-width:900px){
   .pagina{width:min(85%,1600px);margin:0 auto;}
   .marco{display:grid;grid-template-columns:190px minmax(0,1fr);gap:56px;}
-  .indice-lateral{display:block;position:sticky;top:96px;align-self:start;padding-top:48px;}
+  /* z-index explícito: sin él, el clip-path de .seccion.alterna abre su
+     propio contexto de apilamiento a la altura de z-index:0 y, al venir
+     después en el DOM, pinta por encima del índice fijo. */
+  .indice-lateral{display:block;position:sticky;top:96px;align-self:start;padding-top:48px;z-index:5;}
 }
 .indice-lateral ol{list-style:none;display:flex;flex-direction:column;gap:4px;border-left:2px solid var(--linea);}
 .indice-lateral a{display:flex;gap:10px;align-items:baseline;min-height:44px;padding:10px 14px;margin-left:-2px;border-left:2px solid transparent;
@@ -97,7 +100,11 @@ p{max-width:68ch;}
 .como-hablarle b{color:var(--tinta);}
 
 .pasos{list-style:none;display:grid;gap:18px;counter-reset:paso;}
-@media (min-width:1100px){.pasos{grid-template-columns:repeat(auto-fit,minmax(0,1fr));grid-auto-flow:column;}}
+/* Sin grid-template-columns: son las auto-columns quienes reparten el ancho
+   entre las columnas que genera grid-auto-flow:column; con un template fijo
+   de por medio, auto-fit no tiene filas de sobra que colapsar y se queda en
+   una sola columna. */
+@media (min-width:1100px){.pasos{grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);}}
 .paso{counter-increment:paso;position:relative;display:grid;gap:10px;align-content:start;padding-top:60px;}
 .paso::before{content:counter(paso);position:absolute;top:0;left:0;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
   background:var(--rosa);color:var(--sobre-acento);font-weight:700;z-index:1;}
@@ -111,7 +118,10 @@ p{max-width:68ch;}
 .pestanas [role="tab"]{flex-shrink:0;min-height:48px;padding:0 20px;border:0;background:transparent;cursor:pointer;
   font:var(--t-small);font-weight:600;color:var(--suave);border-bottom:3px solid transparent;margin-bottom:-1px;}
 .pestanas [role="tab"][aria-selected="true"]{color:var(--rosa);border-bottom-color:var(--rosa);}
-.panel-tema{display:grid;gap:28px;padding-top:28px;}
+/* :not([hidden]) para no pisar el atributo que pone el script: display:grid
+   sin condición ganaba siempre sobre [hidden]{display:none} del navegador,
+   así que los cuatro paneles se veían aunque solo uno estuviera seleccionado. */
+.panel-tema:not([hidden]){display:grid;gap:28px;padding-top:28px;}
 .panel-titulo{font:var(--t-h2);}
 html.js .panel-titulo{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
 .grafica{background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--r);padding:24px;display:grid;gap:12px;}

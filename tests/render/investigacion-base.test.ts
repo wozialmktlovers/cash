@@ -45,4 +45,19 @@ describe('estilos del documento', () => {
   it('no usa márgenes entre hermanos, que ya causaron errores de especificidad', () => {
     expect(ESTILOS_INVESTIGACION).not.toMatch(/\.[\w-]+\s*\+\s*\.[\w-]+\s*\{/);
   });
+
+  // Tres hallazgos confirmados en el navegador: las pestañas no ocultaban
+  // nada, los pasos nunca quedaban en fila y el índice lateral se tapaba.
+  it('las pestañas respetan [hidden]: no queda un .panel-tema{display:grid sin excepción', () => {
+    expect(ESTILOS_INVESTIGACION).not.toMatch(/\.panel-tema\{display:grid/);
+    expect(ESTILOS_INVESTIGACION).toContain('.panel-tema:not([hidden]){display:grid');
+  });
+  it('los pasos quedan en fila: grid-auto-flow:column con grid-auto-columns, sin template fijo de por medio', () => {
+    const m = ESTILOS_INVESTIGACION.match(/\.pasos\{grid-auto-flow:column;grid-auto-columns:minmax\(0,1fr\);\}/);
+    expect(m).not.toBeNull();
+    expect(ESTILOS_INVESTIGACION).not.toMatch(/\.pasos\{[^}]*grid-template-columns/);
+  });
+  it('el índice lateral declara z-index para no quedar tapado por el fondo de las secciones alternas', () => {
+    expect(ESTILOS_INVESTIGACION).toMatch(/\.indice-lateral\{[^}]*z-index:\d/);
+  });
 });
