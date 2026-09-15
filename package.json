@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "vitest run",
-    "dev": "astro dev",
+    "dev": "node --env-file-if-exists=.env ./node_modules/astro/bin/astro.mjs dev",
     "build": "astro build",
     "start": "node ./dist/server/entry.mjs",
     "db:generate": "drizzle-kit generate",

@@ -45,7 +45,7 @@ npm install
 cp .env.example .env          # y llena los valores
 npm run db:generate           # solo si cambiaste src/db/schema.ts
 node --env-file=.env scripts/migrate.mjs
-npm run dev
+npm run dev                   # ya carga .env solo (--env-file-if-exists), no hace falta anteponerlo
 ```
 
 Para levantar Postgres con Docker:
