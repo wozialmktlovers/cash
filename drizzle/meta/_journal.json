@@ -29,6 +29,13 @@
       "when": 1789460985968,
       "tag": "0003_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789463864275,
+      "tag": "0004_flujo",
+      "breakpoints": true
     }
   ]
 }

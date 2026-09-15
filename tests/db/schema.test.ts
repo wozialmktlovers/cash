@@ -68,3 +68,54 @@ describe('esquema de roles', () => {
     for (const c of ['tokenHash', 'email', 'rol', 'clientId', 'creadoPor', 'expiraEn', 'usadaEn']) expect((s.invitaciones as any)[c]).toBeDefined();
   });
 });
+
+describe('esquema del flujo de trabajo', () => {
+  it('los enums del flujo tienen los valores esperados', async () => {
+    const s = await import('@/db/schema');
+    expect(s.etapaCliente.enumValues).toEqual(['investigacion', 'pilares', 'desarrollo_mensual', 'manual_campana']);
+    expect(s.estadoEtapa.enumValues).toEqual(['no_iniciada', 'en_proceso', 'en_revision', 'con_cambios', 'aprobada']);
+    expect(s.accionEtapa.enumValues).toEqual(['iniciar', 'solicitar', 'aprobar', 'pedir_cambios', 'reabrir']);
+    expect(s.motivoVersion.enumValues).toEqual(['generado', 'edicion', 'aprobada', 'restaurada']);
+    expect(s.estadoComentario.enumValues).toEqual(['abierto', 'atendido', 'descartado']);
+  });
+
+  it('cliente_etapas con sus columnas', async () => {
+    const s = await import('@/db/schema');
+    expect(s.clienteEtapas).toBeDefined();
+    for (const c of ['clientId', 'etapa', 'contratada', 'interna', 'estado', 'documentoTipo', 'documentoId', 'versionAprobadaId', 'actualizadoEn']) {
+      expect((s.clienteEtapas as any)[c]).toBeDefined();
+    }
+  });
+
+  it('etapa_eventos con sus columnas', async () => {
+    const s = await import('@/db/schema');
+    expect(s.etapaEventos).toBeDefined();
+    for (const c of ['etapaId', 'accion', 'de', 'a', 'usuarioId', 'comentario', 'creadoEn']) {
+      expect((s.etapaEventos as any)[c]).toBeDefined();
+    }
+  });
+
+  it('documento_versiones con sus columnas', async () => {
+    const s = await import('@/db/schema');
+    expect(s.documentoVersiones).toBeDefined();
+    for (const c of ['documentoTipo', 'documentoId', 'numero', 'datos', 'motivo', 'autorId', 'creadoEn']) {
+      expect((s.documentoVersiones as any)[c]).toBeDefined();
+    }
+  });
+
+  it('comentarios con sus columnas', async () => {
+    const s = await import('@/db/schema');
+    expect(s.comentarios).toBeDefined();
+    for (const c of ['etapaId', 'documentoTipo', 'documentoId', 'versionNumero', 'ancla', 'texto', 'autorId', 'autorRol', 'estado', 'respuestaDe', 'resueltoPor', 'resueltoEn', 'creadoEn']) {
+      expect((s.comentarios as any)[c]).toBeDefined();
+    }
+  });
+
+  it('notificaciones con sus columnas', async () => {
+    const s = await import('@/db/schema');
+    expect(s.notificaciones).toBeDefined();
+    for (const c of ['usuarioId', 'tipo', 'titulo', 'texto', 'enlace', 'leidaEn', 'creadoEn']) {
+      expect((s.notificaciones as any)[c]).toBeDefined();
+    }
+  });
+});
