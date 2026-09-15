@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
-import { db, researchResults, growthResults, clients } from '@/db';
+import { db, researchResults, growthResults, pilaresResults, clients } from '@/db';
 import { slugificar } from '@/lib/slug';
 import { crearShareLink, revocarShareLink } from '@/lib/share';
 
@@ -27,13 +27,13 @@ export const POST: APIRoute = async ({ request }) => {
   const resultId = String(crudo.resultId ?? '').trim();
   if (!resultId) return json({ ok: false, errores: ['Falta resultId'] }, 400);
 
-  const tipo = crudo.tipo === 'growth' ? 'growth' : 'research';
+  const tipo = crudo.tipo === 'growth' ? 'growth' : crudo.tipo === 'pilares' ? 'pilares' : 'research';
 
   // La tabla se elige una sola vez. Tenerla en tres ternarios separados dejó
   // la proyección apuntando a research_results mientras el FROM iba a
   // growth_results, y Drizzle revienta: «references a column ... but the table
   // is not part of the query». El botón de crear link del manual fallaba.
-  const tabla = tipo === 'growth' ? growthResults : researchResults;
+  const tabla = tipo === 'growth' ? growthResults : tipo === 'pilares' ? pilaresResults : researchResults;
   const [resultado] = await db
     .select({ id: tabla.id, clientId: tabla.clientId })
     .from(tabla)

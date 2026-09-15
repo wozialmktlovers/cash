@@ -6,7 +6,7 @@ export function generarTokenShare(): string {
   return randomBytes(32).toString('base64url');
 }
 
-export type DocumentoTipo = 'research' | 'growth';
+export type DocumentoTipo = 'research' | 'growth' | 'pilares';
 
 export async function crearShareLink(
   documentoId: string,

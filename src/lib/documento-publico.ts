@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm';
-import { db, researchResults, growthResults, clients, clientLinks } from '@/db';
+import { db, researchResults, growthResults, pilaresResults, clients, clientLinks } from '@/db';
 import { resolverShareLink } from '@/lib/share';
 import { renderizarInvestigacion } from '@/render/investigacion/documento';
 import { renderizarManual } from '@/render/growth/manual';
@@ -21,7 +21,9 @@ export async function resolverDocumentoPublico(token: string): Promise<
   const link = await resolverShareLink(token);
   if (!link) return { tipo: 'no-encontrado' };
 
-  const tabla = link.documentoTipo === 'growth' ? growthResults : researchResults;
+  const tabla = link.documentoTipo === 'growth' ? growthResults
+    : link.documentoTipo === 'pilares' ? pilaresResults
+    : researchResults;
   const [r] = await db.select().from(tabla).where(eq(tabla.id, link.documentoId)).limit(1);
   if (!r) return { tipo: 'no-encontrado' };
 
@@ -36,6 +38,7 @@ export async function resolverDocumentoPublico(token: string): Promise<
     : [undefined];
 
   // El link público nunca lleva barra de operador: es lo que ve el cliente.
+  // El render del mapa de pilares llega en P6; hasta entonces, un HTML mínimo.
   const html = link.documentoTipo === 'growth'
     ? renderizarManual(r.datos as any, {
         cliente: c.nombre, producto: c.producto, fecha,
@@ -43,6 +46,8 @@ export async function resolverDocumentoPublico(token: string): Promise<
         destino: sitio?.url,
         creadoEn: r.createdAt,
       })
+    : link.documentoTipo === 'pilares'
+    ? '<!DOCTYPE html><title>Mapa de pilares</title><p>Disponible pronto.</p>'
     : renderizarInvestigacion(r.datos as any, { cliente: c.nombre, giro: c.giro, fecha });
 
   return { tipo: 'html', html, slug: slugificar(c.nombre) };
