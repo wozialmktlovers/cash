@@ -15,6 +15,13 @@
       "when": 1786611354495,
       "tag": "0001_jazzy_blob",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789455352793,
+      "tag": "0002_pilares",
+      "breakpoints": true
     }
   ]
 }

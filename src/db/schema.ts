@@ -1,10 +1,10 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, numeric, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, numeric, pgEnum, primaryKey } from 'drizzle-orm/pg-core';
 
 export const jobEstado = pgEnum('job_estado', ['encolado','corriendo','completado','fallido','cancelado']);
 export const linkTipo = pgEnum('link_tipo', ['sitio','instagram','facebook','tiktok','youtube','ventas','otro']);
 export const extraccionEstado = pgEnum('extraccion_estado', ['pendiente','ok','fallo','no_aplica']);
-/** Los dos documentos que produce el sistema. Un job y un link saben cuál es el suyo. */
-export const documentoTipo = pgEnum('documento_tipo', ['research','growth']);
+/** Los documentos que produce el sistema. Un job y un link saben cuál es el suyo. */
+export const documentoTipo = pgEnum('documento_tipo', ['research','growth','pilares']);
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -86,6 +86,28 @@ export const growthResults = pgTable('growth_results', {
   version: integer('version').notNull().default(1),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const pilaresResults = pgTable('pilares_results', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  jobId: uuid('job_id').notNull().references(() => researchJobs.id, { onDelete: 'cascade' }),
+  clientId: uuid('client_id').notNull().references(() => clients.id, { onDelete: 'cascade' }),
+  datos: jsonb('datos').notNull(),
+  version: integer('version').notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Avance del equipo por tema. Solo existe fila para los temas que alguien tocó:
+ * sin fila, el tema está pendiente. Así un mapa nuevo no inserta 300 filas vacías.
+ */
+export const pilaresTemas = pgTable('pilares_temas', {
+  resultId: uuid('result_id').notNull().references(() => pilaresResults.id, { onDelete: 'cascade' }),
+  temaId: text('tema_id').notNull(),
+  estado: text('estado').notNull().default('pendiente'),
+  nota: text('nota'),
+  actualizadoPor: uuid('actualizado_por').references(() => users.id, { onDelete: 'set null' }),
+  actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.resultId, t.temaId] })]);
 
 export const shareLinks = pgTable('share_links', {
   token: text('token').primaryKey(),

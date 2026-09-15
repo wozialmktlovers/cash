@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { and, eq, or } from 'drizzle-orm';
 import { db, researchJobs, researchResults, clients } from '@/db';
-import { puedeGenerarGrowth, contarEtapasConDatos } from '@/lib/precheck';
+import { puedeGenerarGrowth, puedeGenerarPilares, contarEtapasConDatos } from '@/lib/precheck';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -20,7 +20,7 @@ export const POST: APIRoute = async ({ request }) => {
   const clientId = String(crudo.clientId ?? '').trim();
   if (!clientId) return json({ ok: false, errores: ['Falta clientId'] }, 400);
 
-  const tipo = crudo.tipo === 'growth' ? 'growth' : 'research';
+  const tipo = crudo.tipo === 'growth' ? 'growth' : crudo.tipo === 'pilares' ? 'pilares' : 'research';
 
   const [cliente] = await db
     .select({ id: clients.id })
@@ -29,12 +29,12 @@ export const POST: APIRoute = async ({ request }) => {
     .limit(1);
   if (!cliente) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
 
-  // El manual parte de la investigación: sin ella no hay nada que razonar.
-  if (tipo === 'growth') {
+  // El manual y el mapa de pilares parten de la investigación: sin ella no hay nada que razonar.
+  if (tipo !== 'research') {
     const previos = await db.select({ datos: researchResults.datos })
       .from(researchResults).where(eq(researchResults.clientId, clientId));
     const mejor = Math.max(0, ...previos.map((p) => contarEtapasConDatos(p.datos)));
-    const r = puedeGenerarGrowth({ etapasConDatos: mejor });
+    const r = tipo === 'growth' ? puedeGenerarGrowth({ etapasConDatos: mejor }) : puedeGenerarPilares({ etapasConDatos: mejor });
     if (!r.ok) return json({ ok: false, errores: [r.razon] }, 409);
   }
 

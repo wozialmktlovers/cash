@@ -31,6 +31,14 @@ export function puedeGenerarGrowth(d: { etapasConDatos: number }):
   return { ok: true, razon: '' };
 }
 
+/** El mapa de pilares, como el manual, parte de una investigación con datos. */
+export function puedeGenerarPilares(d: { etapasConDatos: number }): { ok: boolean; razon: string } {
+  if (d.etapasConDatos === 0) {
+    return { ok: false, razon: 'Este cliente aún no tiene una investigación con datos. El mapa de pilares parte de ella.' };
+  }
+  return { ok: true, razon: '' };
+}
+
 /** Cuenta las etapas que sí produjeron datos en un resultado de investigación. */
 export function contarEtapasConDatos(datos: unknown): number {
   if (!datos || typeof datos !== 'object') return 0;

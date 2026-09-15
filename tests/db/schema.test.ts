@@ -39,3 +39,15 @@ describe('esquema del Growth', () => {
     expect(shareLinks.resultId).toBeDefined();
   });
 });
+
+describe('esquema del Mapa de Pilares', () => {
+  it('documento_tipo admite pilares', () => {
+    expect(schema.documentoTipo.enumValues).toContain('pilares');
+  });
+
+  it('existen pilares_results y pilares_temas', async () => {
+    const { pilaresResults, pilaresTemas } = await import('@/db/schema');
+    expect(pilaresResults).toBeDefined();
+    expect(pilaresTemas).toBeDefined();
+  });
+});

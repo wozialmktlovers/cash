@@ -2,6 +2,7 @@ import { eq, or, asc } from 'drizzle-orm';
 import { db, researchJobs } from '@/db';
 import { ejecutarJob } from './pipeline';
 import { ejecutarGrowth } from '@/growth/pipeline';
+import { ejecutarPilares } from '@/pilares/pipeline';
 import { limpiarSesionesVencidas } from '@/lib/auth';
 import { convertirLecturasPendientes } from './convertir-lecturas';
 
@@ -21,6 +22,7 @@ async function tick() {
     // Una sola cola para los dos documentos: mismo worker, mismos estados,
     // misma contabilidad de costo. Lo único que cambia es qué pipeline corre.
     if (siguiente.tipo === 'growth') await ejecutarGrowth(siguiente.id);
+    else if (siguiente.tipo === 'pilares') await ejecutarPilares(siguiente.id);
     else await ejecutarJob(siguiente.id);
   } catch (e) {
     console.error('[worker] fallo no capturado:', e);

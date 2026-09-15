@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
-import { db, researchJobs, researchResults, growthResults } from '@/db';
+import { db, researchJobs, researchResults, growthResults, pilaresResults } from '@/db';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -15,7 +15,7 @@ export const GET: APIRoute = async ({ params }) => {
   if (!job) return json({ ok: false, errores: ['La investigación no existe'] }, 404);
 
   // El resultado vive en una tabla u otra según el tipo del job.
-  const tabla = job.tipo === 'growth' ? growthResults : researchResults;
+  const tabla = job.tipo === 'growth' ? growthResults : job.tipo === 'pilares' ? pilaresResults : researchResults;
   const [resultado] = await db
     .select({ id: tabla.id })
     .from(tabla)
