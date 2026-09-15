@@ -3,7 +3,7 @@
 // pipelines. Aquí sí hay acceso a base de datos; las reglas puras viven en
 // ./reglas.ts (B2) y no se tocan.
 
-import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import {
   db, clients, clienteEtapas, etapaEventos, comentarios, documentoVersiones, users,
   researchResults, growthResults, pilaresResults,
@@ -13,7 +13,7 @@ import {
   tipoDocumentoDe, etapaDeTipo, puedeComentar,
   type Etapa, type Accion, type EtapaCliente, type TipoDocumento, type Rol,
 } from './reglas';
-import { puedeCambiarEstadoComentario, comentariosVisibles, type EstadoComentario } from './comentarios';
+import { puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, type EstadoComentario } from './comentarios';
 import { investigacionUtil } from '@/lib/precheck';
 import { clienteOperable, clienteVisible, esUuid } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
@@ -236,43 +236,36 @@ export async function registrarEntregable(
 }
 
 /**
- * Comentarios abiertos del documento vigente de cada etapa dada, en una sola
- * consulta agrupada (evita el N+1 de preguntar etapa por etapa al pintar la
- * línea de etapas completa — spec §3, ficha). Cuenta por `documentoTipo`+
- * `documentoId`, sin filtrar por `versionNumero`: un comentario se deja sobre
- * una versión concreta, pero sigue pendiente aunque `guardarVersion` guarde
- * una versión más nueva encima — una versión nueva nunca debe hacer
- * desaparecer en silencio un comentario sin atender. Solo cuenta comentarios
- * de primer nivel (`respuestaDe IS NULL`): una respuesta no es un pendiente
+ * Comentarios abiertos de cada etapa dada, en una sola consulta agrupada
+ * (evita el N+1 de preguntar etapa por etapa al pintar la línea de etapas
+ * completa — spec §3, ficha). Cuenta por `etapaId`, SIN filtrar por
+ * documento (fix round 1): una observación pendiente no debe desaparecer ni
+ * dejar de bloquear `solicitar` solo porque el pipeline regeneró el
+ * documento y la etapa apunta ahora a otro `documentoId` — quien la dejó
+ * sigue esperando una respuesta, y el conteo es justo lo que `aplicarAccion`
+ * usa para decidir si `solicitar` está permitido. Solo cuenta comentarios de
+ * primer nivel (`respuestaDe IS NULL`): una respuesta no es un pendiente
  * aparte, es parte del hilo del comentario al que respondió.
  *
  * El resultado trae una entrada en 0 para cada etapa recibida, aunque no
- * tenga comentarios (o no tenga documento todavía), para que el llamador
- * pueda indexar con `.get(etapaId)!` sin comprobar `undefined`.
+ * tenga comentarios, para que el llamador pueda indexar con `.get(etapaId)!`
+ * sin comprobar `undefined`.
  */
 export async function comentariosAbiertosPorEtapa(filas: FilaEtapa[], ejecutor: Ejecutor = db): Promise<Map<string, number>> {
   const resultado = new Map<string, number>(filas.map((f) => [f.id, 0]));
-  const conDocumento = filas.filter((f) => f.documentoId && tipoDocumentoDe(f.etapa));
-  if (conDocumento.length === 0) return resultado;
-
-  // Una condición OR por etapa (a lo más 4): cada una ancla el conteo al
-  // documentoId vigente de esa etapa en concreto, igual que la versión de
-  // una sola etapa que sustituye.
-  const condicion = or(...conDocumento.map((f) =>
-    and(eq(comentarios.etapaId, f.id), eq(comentarios.documentoTipo, tipoDocumentoDe(f.etapa)!), eq(comentarios.documentoId, f.documentoId!)),
-  ))!;
+  if (filas.length === 0) return resultado;
 
   const filasConteo = await ejecutor
     .select({ etapaId: comentarios.etapaId, n: sql<number>`count(*)::int` })
     .from(comentarios)
-    .where(and(condicion, eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe)))
+    .where(and(inArray(comentarios.etapaId, filas.map((f) => f.id)), eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe)))
     .groupBy(comentarios.etapaId);
 
   for (const f of filasConteo) resultado.set(f.etapaId, f.n);
   return resultado;
 }
 
-/** Comentarios abiertos del documento vigente de una sola etapa (0 si todavía no hay documento). */
+/** Comentarios abiertos de una sola etapa, en cualquier documento (0 si no hay ninguno). */
 async function comentariosAbiertosVigentes(ejecutor: Ejecutor, fila: FilaEtapa): Promise<number> {
   return (await comentariosAbiertosPorEtapa([fila], ejecutor)).get(fila.id) ?? 0;
 }
@@ -544,11 +537,14 @@ export async function responderComentario(o: {
 
   const [padre] = await db.select().from(comentarios).where(eq(comentarios.id, o.comentarioId)).limit(1);
   if (!padre) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
-  if (padre.respuestaDe !== null) return { ok: false, status: 409, razon: 'Solo se puede responder a un comentario principal' };
 
   const [etapaFila] = await db.select().from(clienteEtapas).where(eq(clienteEtapas.id, padre.etapaId)).limit(1);
   if (!etapaFila) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
 
+  // Visibilidad ANTES que cualquier otra cosa que distinga por qué falla
+  // (fix round 1, punto 4): si no lo puede ver, siempre 404 «no existe» —
+  // nunca un 409 que confirme que el id sí corresponde a una respuesta real
+  // que esta persona no tiene por qué poder mirar.
   if (usuario.rol === 'cliente') {
     if (usuario.clientId !== etapaFila.clientId || padre.autorRol !== 'cliente' || padre.autorId !== usuario.id) {
       return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
@@ -557,6 +553,8 @@ export async function responderComentario(o: {
     const cliente = await clienteVisible(usuario, etapaFila.clientId);
     if (!cliente) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
   }
+
+  if (padre.respuestaDe !== null) return { ok: false, status: 409, razon: 'Solo se puede responder a un comentario principal' };
 
   const [creado] = await db.insert(comentarios).values({
     etapaId: padre.etapaId, documentoTipo: padre.documentoTipo, documentoId: padre.documentoId, versionNumero: padre.versionNumero,
@@ -570,7 +568,6 @@ export async function responderComentario(o: {
       autorComentarioId: padre.autorId,
       cliente: clienteFila?.nombre ?? 'Cliente',
       etapa: NOMBRE_ETAPA[etapaFila.etapa],
-      autor: usuario.nombre ?? usuario.email,
     }).catch((e) => console.error('[avisos] respuesta_cliente:', e));
   }
 
@@ -591,7 +588,11 @@ export async function cambiarEstadoComentario(o: {
 
   const [fila] = await db.select().from(comentarios).where(eq(comentarios.id, o.comentarioId)).limit(1);
   if (!fila) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
-  if (fila.respuestaDe !== null) return { ok: false, status: 409, razon: 'Solo se puede cambiar el estado de un comentario principal' };
+
+  // Visibilidad ANTES que la forma del comentario (fix round 1, punto 4):
+  // el cliente nunca puede, y sin poder ver al cliente dueño, 404 — ninguno
+  // de los dos debe distinguirse de «no existe» por un 409 que confirme que
+  // el id sí es una respuesta real.
   if (usuario.rol === 'cliente') return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
 
   const [etapaFila] = await db.select().from(clienteEtapas).where(eq(clienteEtapas.id, fila.etapaId)).limit(1);
@@ -599,6 +600,8 @@ export async function cambiarEstadoComentario(o: {
 
   const cliente = await clienteVisible(usuario, etapaFila.clientId);
   if (!cliente) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+
+  if (fila.respuestaDe !== null) return { ok: false, status: 409, razon: 'Solo se puede cambiar el estado de un comentario principal' };
 
   const esOperadorAsignado = cliente.operadorId === usuario.id;
   if (!puedeCambiarEstadoComentario(usuario.rol, esOperadorAsignado, o.estado)) {
@@ -625,19 +628,55 @@ export type ComentarioSalida = {
   autor: string;
   versionNumero: number;
   creadoEn: Date;
+  /** `true` si este comentario quedó en un documento que ya no es el vigente de la etapa (fix round 1): el panel lo marca «De una versión anterior» y deshabilita «Ir». Siempre `false` para el cliente, que no distingue versión. */
+  deOtraVersion: boolean;
 };
 
 function nombreInterno(nombre: string | null, email: string): string {
   return nombre ?? email;
 }
 
+type FilaComentarioConAutor = {
+  id: string; ancla: string; texto: string; estado: EstadoComentario; respuestaDe: string | null;
+  autorId: string | null; autorRol: Rol; versionNumero: number; creadoEn: Date;
+  documentoTipo: TipoDocumento; documentoId: string;
+  autorNombre: string | null; autorEmail: string | null;
+};
+
+const CAMPOS_COMENTARIO = {
+  id: comentarios.id, ancla: comentarios.ancla, texto: comentarios.texto, estado: comentarios.estado,
+  respuestaDe: comentarios.respuestaDe, autorId: comentarios.autorId, autorRol: comentarios.autorRol,
+  versionNumero: comentarios.versionNumero, creadoEn: comentarios.creadoEn,
+  documentoTipo: comentarios.documentoTipo, documentoId: comentarios.documentoId,
+  autorNombre: users.nombre, autorEmail: users.email,
+};
+
+function paraSalidaInterna(f: FilaComentarioConAutor, doc: { tipo: TipoDocumento; id: string } | null): ComentarioSalida {
+  return {
+    id: f.id, ancla: f.ancla, texto: f.texto, estado: f.estado, respuestaDe: f.respuestaDe,
+    autorRol: f.autorRol, autor: nombreInterno(f.autorNombre, f.autorEmail ?? 'Wozial'),
+    versionNumero: f.versionNumero, creadoEn: f.creadoEn,
+    deOtraVersion: esDeOtraVersion({ documentoTipo: f.documentoTipo, documentoId: f.documentoId }, doc),
+  };
+}
+
 /**
- * Lista de comentarios de una etapa (spec §3, `GET /api/comentarios?etapa=`):
- * el personal ve todos los del documento vigente (o de todas las versiones
- * con `todasVersiones`); el cliente solo los suyos (`comentariosVisibles`)
- * sobre la versión aprobada, con los autores internos anonimizados como
- * «Equipo Wozial» (spec §3, «El cliente ve sus comentarios... no los
- * internos»).
+ * Lista de comentarios de una etapa (spec §3, `GET /api/comentarios?etapa=`).
+ *
+ * El personal ve, por omisión, los del documento vigente MÁS todos los
+ * comentarios de primer nivel todavía `abierto` que quedaron en un documento
+ * anterior de la misma etapa (con sus respuestas), marcados
+ * `deOtraVersion: true` — fix round 1: una observación no atendida no debe
+ * volverse invisible solo porque el pipeline regeneró el documento antes de
+ * que alguien la resolviera. Con `?todos=1` no hay filtro de documento en
+ * absoluto (todas las versiones, cualquier estado), pero `deOtraVersion`
+ * sigue calculándose igual contra el documento vigente de hoy.
+ *
+ * El cliente ve sus propios hilos (`comentariosVisibles`) en CUALQUIER
+ * documento de la etapa, no solo el de la versión aprobada actual — fix
+ * round 1: si el admin reabre y vuelve a aprobar sobre un documento nuevo,
+ * el cliente no debe perder de vista lo que ya comentó. Los autores internos
+ * se anonimizan como «Equipo Wozial» (spec §3).
  */
 export async function listarComentarios(o: {
   etapaId: string; usuario: UsuarioSesion; todasVersiones: boolean;
@@ -648,25 +687,16 @@ export async function listarComentarios(o: {
   const [fila] = await db.select().from(clienteEtapas).where(eq(clienteEtapas.id, o.etapaId)).limit(1);
   if (!fila) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
 
-  const campos = {
-    id: comentarios.id, ancla: comentarios.ancla, texto: comentarios.texto, estado: comentarios.estado,
-    respuestaDe: comentarios.respuestaDe, autorId: comentarios.autorId, autorRol: comentarios.autorRol,
-    versionNumero: comentarios.versionNumero, creadoEn: comentarios.creadoEn,
-    autorNombre: users.nombre, autorEmail: users.email,
-  };
-
   if (usuario.rol === 'cliente') {
     if (usuario.clientId !== fila.clientId || !fila.contratada || fila.interna) {
       return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
     }
-    if (!fila.versionAprobadaId) return { ok: true, comentarios: [] };
 
-    const [version] = await db.select().from(documentoVersiones).where(eq(documentoVersiones.id, fila.versionAprobadaId)).limit(1);
-    if (!version) return { ok: true, comentarios: [] };
-
-    const todos = await db.select(campos).from(comentarios)
+    // Sin filtro de documento: el cliente ve sus hilos aunque hayan quedado
+    // en una versión que ya no es la aprobada actual.
+    const todos = await db.select(CAMPOS_COMENTARIO).from(comentarios)
       .leftJoin(users, eq(users.id, comentarios.autorId))
-      .where(and(eq(comentarios.etapaId, fila.id), eq(comentarios.documentoTipo, version.documentoTipo), eq(comentarios.documentoId, version.documentoId)))
+      .where(eq(comentarios.etapaId, fila.id))
       .orderBy(desc(comentarios.creadoEn));
 
     const visibles = comentariosVisibles('cliente', usuario.id, todos);
@@ -675,7 +705,7 @@ export async function listarComentarios(o: {
       comentarios: visibles.map((f) => ({
         id: f.id, ancla: f.ancla, texto: f.texto, estado: f.estado, respuestaDe: f.respuestaDe,
         autorRol: f.autorRol, autor: f.autorRol === 'cliente' ? nombreInterno(f.autorNombre, f.autorEmail ?? 'Tú') : 'Equipo Wozial',
-        versionNumero: f.versionNumero, creadoEn: f.creadoEn,
+        versionNumero: f.versionNumero, creadoEn: f.creadoEn, deOtraVersion: false,
       })),
     };
   }
@@ -683,22 +713,45 @@ export async function listarComentarios(o: {
   const cliente = await clienteVisible(usuario, fila.clientId);
   if (!cliente) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
 
-  const condiciones = [eq(comentarios.etapaId, fila.id)];
-  if (!o.todasVersiones && fila.documentoTipo && fila.documentoId) {
-    condiciones.push(eq(comentarios.documentoTipo, fila.documentoTipo), eq(comentarios.documentoId, fila.documentoId));
+  const doc = fila.documentoTipo && fila.documentoId ? { tipo: fila.documentoTipo, id: fila.documentoId } : null;
+
+  if (o.todasVersiones) {
+    const todos = await db.select(CAMPOS_COMENTARIO).from(comentarios)
+      .leftJoin(users, eq(users.id, comentarios.autorId))
+      .where(eq(comentarios.etapaId, fila.id))
+      .orderBy(desc(comentarios.creadoEn));
+    return { ok: true, comentarios: todos.map((f) => paraSalidaInterna(f, doc)) };
   }
 
-  const todos = await db.select(campos).from(comentarios)
+  // Del documento vigente, cualquier estado (igual que antes de este fix).
+  const delVigente = doc
+    ? await db.select(CAMPOS_COMENTARIO).from(comentarios)
+        .leftJoin(users, eq(users.id, comentarios.autorId))
+        .where(and(eq(comentarios.etapaId, fila.id), eq(comentarios.documentoTipo, doc.tipo), eq(comentarios.documentoId, doc.id)))
+        .orderBy(desc(comentarios.creadoEn))
+    : [];
+
+  // De primer nivel, `abierto`, en cualquier OTRO documento de la etapa —
+  // los que `comentariosAbiertosPorEtapa` sigue contando aunque ya no estén
+  // en el documento vigente.
+  const otrosCondicion = doc
+    ? or(ne(comentarios.documentoTipo, doc.tipo), ne(comentarios.documentoId, doc.id))!
+    : sql`true`;
+  const otrosPrincipales = await db.select(CAMPOS_COMENTARIO).from(comentarios)
     .leftJoin(users, eq(users.id, comentarios.autorId))
-    .where(and(...condiciones))
+    .where(and(eq(comentarios.etapaId, fila.id), eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe), otrosCondicion))
     .orderBy(desc(comentarios.creadoEn));
 
-  return {
-    ok: true,
-    comentarios: todos.map((f) => ({
-      id: f.id, ancla: f.ancla, texto: f.texto, estado: f.estado, respuestaDe: f.respuestaDe,
-      autorRol: f.autorRol, autor: nombreInterno(f.autorNombre, f.autorEmail ?? 'Wozial'),
-      versionNumero: f.versionNumero, creadoEn: f.creadoEn,
-    })),
-  };
+  // Sus respuestas (de cualquier documento — heredan el del padre), para que
+  // el panel pueda pintar el hilo completo aunque quedó en una versión vieja.
+  const otrosIds = otrosPrincipales.map((f) => f.id);
+  const otrasRespuestas = otrosIds.length
+    ? await db.select(CAMPOS_COMENTARIO).from(comentarios)
+        .leftJoin(users, eq(users.id, comentarios.autorId))
+        .where(inArray(comentarios.respuestaDe, otrosIds))
+        .orderBy(desc(comentarios.creadoEn))
+    : [];
+
+  const todos = [...delVigente, ...otrosPrincipales, ...otrasRespuestas];
+  return { ok: true, comentarios: todos.map((f) => paraSalidaInterna(f, doc)) };
 }

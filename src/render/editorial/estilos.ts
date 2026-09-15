@@ -224,7 +224,14 @@ dialog.dialogo-versiones::backdrop{background:color-mix(in srgb,var(--tinta) 45%
 html.modo-comentar{cursor:crosshair;}
 html.modo-comentar [data-ancla]{position:relative;}
 html.modo-comentar [data-ancla]:hover{outline:2px dashed var(--azul);outline-offset:3px;border-radius:4px;cursor:pointer;}
-[data-ancla]{position:relative;}
+/* Los marcadores se pintan al cargar la página, fuera del modo Comentar
+   (spec §3: «los elementos con comentarios abiertos llevan un marcador», sin
+   condicionarlo al modo) — así que su contenedor necesita 'position:relative'
+   siempre que traiga uno, no solo en 'html.modo-comentar'. Fix round 1, punto
+   7: en vez de dárselo a TODO '[data-ancla]' sin condición (cientos de
+   elementos en un documento largo, casi ninguno con marcador), 'SCRIPT_FLUJO'
+   marca con esta clase solo a los que de verdad tienen uno. */
+.tiene-marcador-comentario{position:relative;}
 
 .marcador-comentario{position:absolute;top:-8px;right:-8px;min-width:22px;height:22px;padding:0 6px;border-radius:var(--r-pill);
   background:var(--rosa);color:var(--sobre-acento);font:var(--t-small);font-weight:700;display:flex;align-items:center;justify-content:center;
@@ -237,7 +244,7 @@ dialog.dialogo-comentarios{width:min(420px,calc(100vw - 32px));max-height:min(64
   position:fixed;inset-block-start:16px;inset-inline-end:16px;margin:0;}
 dialog.dialogo-comentarios::backdrop{background:transparent;}
 .comentarios-filtros{display:flex;gap:8px;flex-wrap:wrap;}
-.filtro-comentarios{min-height:36px;padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--linea);background:transparent;color:var(--texto);font:var(--t-small);cursor:pointer;}
+.filtro-comentarios{min-height:44px;padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--linea);background:transparent;color:var(--texto);font:var(--t-small);cursor:pointer;}
 .filtro-comentarios[aria-pressed="true"]{background:var(--tinta);border-color:var(--tinta);color:var(--fondo);font-weight:700;}
 .comentarios-lista{display:grid;gap:12px;overflow-y:auto;max-height:60vh;}
 .comentario-fila{display:grid;gap:6px;padding:12px;border:1px solid var(--linea);border-radius:var(--r-sm);}

@@ -25,9 +25,9 @@ export const GET: APIRoute = async ({ url, locals }) => {
 };
 
 const cuerpoSchema = z.object({
-  etapaId: z.string().min(1),
-  ancla: z.string().min(1).max(200),
-  texto: z.string().min(1).max(2000),
+  etapaId: z.string().trim().min(1, 'Falta la etapa'),
+  ancla: z.string().trim().min(1, 'El ancla no es válida').max(200, 'El ancla no es válida'),
+  texto: z.string().trim().min(1, 'Escribe el comentario').max(2000, 'El comentario no puede pasar de 2000 caracteres'),
 });
 
 /**

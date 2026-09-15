@@ -89,7 +89,7 @@ export function panelComentarios(): string {
     <div class="dialogo-cabecera"><h3>Comentarios</h3><button type="button" class="panel-boton" id="dialog-comentarios-cerrar">Cerrar</button></div>
     <div class="comentarios-filtros" role="radiogroup" aria-label="Filtrar comentarios">
       <button type="button" class="filtro-comentarios" data-filtro-comentarios="abierto" aria-pressed="true">Abiertos</button>
-      <button type="button" class="filtro-comentarios" data-filtro-comentarios="atendido" aria-pressed="false">Atendidos</button>
+      <button type="button" class="filtro-comentarios" data-filtro-comentarios="resueltos" aria-pressed="false">Resueltos</button>
       <button type="button" class="filtro-comentarios" data-filtro-comentarios="todos" aria-pressed="false">Todos</button>
     </div>
     <div class="comentarios-lista" id="comentarios-lista" aria-live="polite"></div>
@@ -434,26 +434,38 @@ export const SCRIPT_FLUJO = `(function () {
   function limpiarMarcadores() {
     var marcadores = document.querySelectorAll('.marcador-comentario');
     for (var i = 0; i < marcadores.length; i++) {
-      if (marcadores[i].parentNode) marcadores[i].parentNode.removeChild(marcadores[i]);
+      // Deshace exactamente lo que puso pintarMarcadores: el marcador Y la
+      // clase que le dio 'position:relative' a su contenedor (fix round 1,
+      // punto 7 — ese 'position:relative' ya no es incondicional sobre TODO
+      // [data-ancla], solo sobre el que de verdad trae un marcador).
+      if (marcadores[i].parentNode) {
+        marcadores[i].parentNode.classList.remove('tiene-marcador-comentario');
+        marcadores[i].parentNode.removeChild(marcadores[i]);
+      }
     }
   }
 
   // Un marcador con número por cada ancla con comentarios abiertos (de
   // primer nivel: una respuesta no cuenta aparte). Se recalcula desde cero
   // en cada carga, así que siempre refleja el estado real sin arrastrar
-  // marcadores viejos.
+  // marcadores viejos. Los 'deOtraVersion' (fix round 1, punto 1: siguen
+  // contando para bloquear «solicitar», pero quedaron en un documento que ya
+  // no es el que se está mirando) no se marcan sobre la página — su ancla
+  // podría ni existir aquí, o coincidir por casualidad con otra cosa; esos
+  // se ven en el panel lateral, con su propia etiqueta.
   function pintarMarcadores() {
     limpiarMarcadores();
     var conteos = {};
     for (var i = 0; i < comentariosCache.length; i++) {
       var c = comentariosCache[i];
-      if (c.respuestaDe || c.estado !== 'abierto') continue;
+      if (c.respuestaDe || c.estado !== 'abierto' || c.deOtraVersion) continue;
       conteos[c.ancla] = (conteos[c.ancla] || 0) + 1;
     }
     for (var ancla in conteos) {
       if (!Object.prototype.hasOwnProperty.call(conteos, ancla)) continue;
       var elementos = elementosDeAncla(ancla);
       for (var j = 0; j < elementos.length; j++) {
+        elementos[j].classList.add('tiene-marcador-comentario');
         var marcador = document.createElement('span');
         marcador.className = 'marcador-comentario';
         marcador.setAttribute('aria-hidden', 'true');
@@ -676,22 +688,50 @@ export const SCRIPT_FLUJO = `(function () {
     if (dialogoComentarios.close) dialogoComentarios.close(); else dialogoComentarios.removeAttribute('open');
   }
 
+  // 'true' si 'el' queda total o parcialmente fuera del alto visible —
+  // entonces vale la pena desplazar antes de calcular dónde poner el
+  // recuadro (fix round 1, punto 8).
+  function fueraDeVista(el) {
+    if (!el.getBoundingClientRect) return false;
+    var r = el.getBoundingClientRect();
+    var altoVentana = (window && window.innerHeight) || 800;
+    return r.top < 0 || r.bottom > altoVentana;
+  }
+
   function posicionarRecuadro(el) {
     // Sin getBoundingClientRect (o sin .style, en las pruebas con fake-dom)
     // el recuadro se abre igual, solo que sin reposicionarse junto al
     // elemento — nunca hace falta para construir o mandar el comentario.
     if (!recuadro || !recuadro.style || !el.getBoundingClientRect) return;
+    if (fueraDeVista(el) && el.scrollIntoView) {
+      // Sin animación: si fuera 'smooth', el getBoundingClientRect de abajo
+      // seguiría leyendo la posición de ANTES de desplazar.
+      el.scrollIntoView({ behavior: 'auto', block: 'center' });
+    }
     var r = el.getBoundingClientRect();
     var altoVentana = (window && window.innerHeight) || 800;
     var anchoVentana = (window && window.innerWidth) || 1200;
-    var top = Math.min(altoVentana - 20, Math.max(20, r.bottom + 10));
+    // El recuadro nunca debe quedar recortado por el borde de la ventana:
+    // el tope mínimo es 12px desde arriba, el máximo deja sitio para su
+    // propia altura más otros 12px abajo (fix round 1, punto 8).
+    var altoRecuadro = recuadro.offsetHeight || 220;
+    var topMinimo = 12;
+    var topMaximo = Math.max(topMinimo, altoVentana - altoRecuadro - 12);
+    var top = Math.min(topMaximo, Math.max(topMinimo, r.bottom + 10));
     var left = Math.min(anchoVentana - 20, Math.max(20, r.left));
     recuadro.style.top = top + 'px';
     recuadro.style.left = left + 'px';
   }
 
+  // El elemento con foco justo antes de abrir el recuadro (normalmente el
+  // propio '[data-ancla]' en el que se hizo clic, si es enfocable) — cerrar
+  // sin devolverle el foco lo dejaría perdido en '<body>' (fix round 1,
+  // punto 8).
+  var elementoConFocoPrevio = null;
+
   function abrirRecuadro(el) {
     if (!recuadro || !recuadroTexto) return;
+    elementoConFocoPrevio = document.activeElement || null;
     anclaActual = el.getAttribute('data-ancla');
     recuadroAbierto = true;
     recuadro.hidden = false;
@@ -706,6 +746,8 @@ export const SCRIPT_FLUJO = `(function () {
     recuadroAbierto = false;
     if (recuadro) recuadro.hidden = true;
     anclaActual = null;
+    if (elementoConFocoPrevio && elementoConFocoPrevio.focus) elementoConFocoPrevio.focus();
+    elementoConFocoPrevio = null;
   }
 
   function enviarNuevoComentario() {
@@ -750,11 +792,24 @@ export const SCRIPT_FLUJO = `(function () {
 
   // Delegado en document: los elementos [data-ancla] no cambian, pero así
   // también funciona sobre cualquier hijo que se pinte después (marcadores).
+  // En fase de CAPTURA (se engancha así más abajo) para llegar antes que
+  // cualquier manejador propio del elemento bajo el clic — sin esto, un
+  // clic en modo Comentar sobre un botón de estado del banco de pilares, la
+  // nota, una pestaña o el filtro/CSV disparaba SU comportamiento normal
+  // además de (o en vez de) abrir el recuadro (fix round 1, punto 3).
   function alClicDocumento(e) {
     if (!enComentar) return;
-    var el = e.target && e.target.closest ? e.target.closest('[data-ancla]') : null;
+    var objetivo = e.target;
+    if (!objetivo || !objetivo.closest) return;
+    // Nunca intercepta un clic dentro del propio recuadro o del panel de
+    // comentarios (sus botones, el textarea...): ninguno de los dos vive
+    // dentro de un [data-ancla], pero por si acaso cambiara el marcado más
+    // adelante, se revisa aparte.
+    if (objetivo.closest('.dialogo-comentarios, .recuadro-comentario')) return;
+    var el = objetivo.closest('[data-ancla]');
     if (!el) return;
     e.preventDefault();
+    if (e.stopPropagation) e.stopPropagation();
     abrirRecuadro(el);
   }
 
@@ -796,7 +851,7 @@ export const SCRIPT_FLUJO = `(function () {
   }
   if (recuadroEnviar) recuadroEnviar.addEventListener('click', enviarNuevoComentario);
   if (recuadroCancelar) recuadroCancelar.addEventListener('click', cerrarRecuadro);
-  document.addEventListener('click', alClicDocumento);
+  document.addEventListener('click', alClicDocumento, true);
 
   if (dialogoComentarios && btnComentarios) {
     btnComentarios.addEventListener('click', abrirComentarios);

@@ -48,6 +48,24 @@ export function puedeCambiarEstadoComentario(rol: Rol, esOperadorAsignado: boole
   return esOperadorAsignado && nuevo === 'atendido';
 }
 
+/**
+ * `true` si un comentario quedó en un documento que ya no es el vigente de
+ * su etapa (fix round 1, punto 1: el pipeline regeneró el documento después
+ * de que alguien comentó). Pura: solo compara `documentoTipo`+`documentoId`
+ * contra el par vigente — no decide nada sobre si el comentario sigue
+ * abierto ni sobre a quién se le muestra, eso lo hacen `comentariosVisibles`
+ * y el servicio. Sin documento vigente (la etapa lo perdió, o nunca lo
+ * tuvo), cualquier comentario cuenta como «de otra versión»: no hay ningún
+ * documento «actual» con el que pudiera coincidir.
+ */
+export function esDeOtraVersion(
+  comentario: { documentoTipo: string; documentoId: string },
+  documentoVigente: { tipo: string; id: string } | null,
+): boolean {
+  if (!documentoVigente) return true;
+  return !(comentario.documentoTipo === documentoVigente.tipo && comentario.documentoId === documentoVigente.id);
+}
+
 export type ComentarioVisibilidad = { id: string; autorId: string | null; respuestaDe: string | null };
 
 /**

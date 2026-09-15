@@ -139,11 +139,27 @@ describe('textoAviso', () => {
   });
 
   it('cada evento produce título y texto no vacíos', () => {
-    const eventos = ['solicitud', 'cambios_pedidos', 'reabierta', 'aprobada', 'comentario_cliente', 'cliente_reasignado', 'entregable_generado', 'job_fallido'] as const;
+    const eventos = ['solicitud', 'cambios_pedidos', 'reabierta', 'aprobada', 'comentario_cliente', 'respuesta_cliente', 'cliente_reasignado', 'entregable_generado', 'job_fallido'] as const;
     for (const evento of eventos) {
       const { titulo, texto } = textoAviso(evento, datos);
       expect(titulo.length).toBeGreaterThan(0);
       expect(texto.length).toBeGreaterThan(0);
     }
+  });
+
+  // Fix round 1, punto 2: la respuesta del equipo a un comentario del
+  // cliente nunca debe filtrarle qué operador o admin en particular
+  // respondió — «Equipo Wozial», nunca un nombre.
+  it('respuesta_cliente: nunca menciona el nombre de quien respondió, aunque `autor` venga en los datos', () => {
+    const { titulo, texto } = textoAviso('respuesta_cliente', datos);
+    expect(texto).not.toContain('María');
+    expect(titulo).not.toContain('María');
+    expect(texto.toLowerCase()).toContain('equipo');
+  });
+
+  it('respuesta_cliente: el texto es el mismo con o sin `autor` (se ignora a propósito)', () => {
+    const conAutor = textoAviso('respuesta_cliente', datos);
+    const sinAutor = textoAviso('respuesta_cliente', { cliente: 'Ana Villa', etapa: 'Mapa de pilares' });
+    expect(conAutor).toEqual(sinAutor);
   });
 });

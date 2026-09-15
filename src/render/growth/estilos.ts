@@ -348,8 +348,13 @@ dialog.dialogo-versiones::backdrop{background:rgba(0,0,0,.55);}
 #btn-flujo-editar:disabled,#btn-flujo-comentar:disabled{opacity:.45;cursor:not-allowed;}
 
 html.modo-comentar{cursor:crosshair;}
-[data-ancla]{position:relative;}
+html.modo-comentar [data-ancla]{position:relative;}
 html.modo-comentar [data-ancla]:hover{outline:2px dashed var(--blue);outline-offset:3px;border-radius:4px;cursor:pointer;}
+/* Ver el comentario equivalente en editorial/estilos.ts: los marcadores se
+   pintan fuera del modo Comentar también, así que solo el '[data-ancla]' que
+   de verdad tiene uno (marcado por SCRIPT_FLUJO con esta clase) necesita
+   'position:relative' — nunca todos, sin condición (fix round 1, punto 7). */
+.tiene-marcador-comentario{position:relative;}
 
 .marcador-comentario{position:absolute;top:-8px;right:-8px;min-width:22px;height:22px;padding:0 6px;border-radius:999px;
   background:var(--pink);color:#fff;font-size:.75rem;font-weight:700;display:flex;align-items:center;justify-content:center;
@@ -362,7 +367,7 @@ dialog.dialogo-comentarios{width:min(420px,calc(100vw - 32px));max-height:min(64
   position:fixed;inset-block-start:16px;inset-inline-end:16px;margin:0;}
 dialog.dialogo-comentarios::backdrop{background:transparent;}
 .comentarios-filtros{display:flex;gap:8px;flex-wrap:wrap;}
-.filtro-comentarios{min-height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line-2);background:transparent;color:var(--mid);font-size:.78rem;cursor:pointer;}
+.filtro-comentarios{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line-2);background:transparent;color:var(--mid);font-size:.78rem;cursor:pointer;}
 .filtro-comentarios[aria-pressed="true"]{background:var(--pink);border-color:var(--pink);color:#fff;font-weight:700;}
 .comentarios-lista{display:grid;gap:12px;overflow-y:auto;max-height:60vh;}
 .comentario-fila{display:grid;gap:6px;padding:12px;border:1px solid var(--line-2);border-radius:var(--r-xs);}
@@ -378,7 +383,7 @@ dialog.dialogo-comentarios::backdrop{background:transparent;}
 .recuadro-comentario-ancla{font-size:.75rem;font-family:var(--mono);color:var(--dim);word-break:break-all;}
 .recuadro-comentario textarea{width:100%;min-height:90px;padding:10px;border-radius:var(--r-xs);border:1px solid var(--line-2);background:#0c0c11;color:var(--hi);font:inherit;resize:vertical;}
 
-.dialogo-comentarios .panel-boton,.recuadro-comentario .panel-boton,.respuesta-area .panel-boton{min-height:40px;padding:0 14px;border-radius:var(--r-xs);
+.dialogo-comentarios .panel-boton,.recuadro-comentario .panel-boton,.respuesta-area .panel-boton{min-height:44px;padding:0 14px;border-radius:var(--r-xs);
   border:1px solid var(--line-2);background:transparent;color:var(--mid);font:inherit;font-weight:600;cursor:pointer;}
 .dialogo-comentarios .panel-boton:hover,.recuadro-comentario .panel-boton:hover,.respuesta-area .panel-boton:hover{border-color:var(--pink);color:#fff;}
 .dialogo-comentarios .panel-primario,.recuadro-comentario .panel-primario{background:var(--pink);border-color:var(--pink);color:#fff;}

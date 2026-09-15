@@ -6,7 +6,9 @@ import { responderComentario } from '@/flujo/servicio';
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } });
 
-const cuerpoSchema = z.object({ texto: z.string().min(1).max(2000) });
+const cuerpoSchema = z.object({
+  texto: z.string().trim().min(1, 'Escribe el comentario').max(2000, 'El comentario no puede pasar de 2000 caracteres'),
+});
 
 /**
  * `POST /api/comentarios/[id]/respuestas` `{ texto }`: responde a un

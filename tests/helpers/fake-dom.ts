@@ -5,14 +5,27 @@
  * usan: querySelectorAll/querySelector con selectores simples (etiqueta,
  * `.clase`, `[attr]`, `[attr="valor"]`) con combinador de descendiente
  * (`.a b`), closest, getAttribute/setAttribute, classList, `hidden`,
- * `value`/`textContent`, addEventListener con click/keydown que burbujean
- * hasta `document`, y un `window` mínimo (sin `IntersectionObserver`, para
- * que los scripts tomen la rama de respaldo sin necesidad de implementarlo).
+ * `value`/`textContent`, addEventListener con click/keydown en fase de
+ * burbuja (por omisión) o de captura (`{capture:true}` o el tercer
+ * parámetro `true`, como en el DOM real) que se propagan hasta `document`
+ * salvo que alguien llame a `stopPropagation()`, y un `window` mínimo (sin
+ * `IntersectionObserver`, para que los scripts tomen la rama de respaldo sin
+ * necesidad de implementarlo).
  *
  * No es un DOM completo: alcanza para probar el comportamiento real de un
  * script (por ejemplo, que un clic en una pestaña no mueva el foco fuera de
- * su propio `[role="tablist"]`), no para renderizar layout ni CSS.
+ * su propio `[role="tablist"]`, o que un listener de `document` en fase de
+ * captura pueda interceptar un clic antes de que le llegue a su objetivo),
+ * no para renderizar layout ni CSS.
  */
+
+type Listener = (e: any) => void;
+type Opciones = boolean | { capture?: boolean };
+type ListenerRegistrado = { fn: Listener; capture: boolean };
+
+function esCaptura(opciones?: Opciones): boolean {
+  return typeof opciones === 'boolean' ? opciones : Boolean(opciones && opciones.capture);
+}
 
 type Attrs = Record<string, string>;
 
@@ -53,7 +66,7 @@ export class FakeElement {
   attrs: Attrs = {};
   children: FakeElement[] = [];
   parent: FakeElement | null = null;
-  listeners: Record<string, Array<(e: any) => void>> = {};
+  listeners: Record<string, ListenerRegistrado[]> = {};
   doc: FakeDocument;
   private _hidden = false;
   private _value = '';
@@ -109,22 +122,56 @@ export class FakeElement {
   /** No-op: alcanza para los scripts que llaman a `elemento.click()` a mano (por ejemplo, el <a> de descarga del CSV). */
   click(): void {}
 
-  addEventListener(type: string, fn: (e: any) => void): void {
-    (this.listeners[type] ??= []).push(fn);
+  addEventListener(type: string, fn: Listener, opciones?: Opciones): void {
+    (this.listeners[type] ??= []).push({ fn, capture: esCaptura(opciones) });
   }
-  removeEventListener(type: string, fn: (e: any) => void): void {
-    this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== fn);
+  removeEventListener(type: string, fn: Listener): void {
+    this.listeners[type] = (this.listeners[type] ?? []).filter((l) => l.fn !== fn);
   }
 
-  /** Dispara el evento en el elemento y lo burbujea hasta `document`. */
+  /**
+   * Dispara el evento: primero la fase de captura (de `document` hacia el
+   * objetivo, objetivo incluido), luego la de burbuja (del objetivo hasta
+   * `document`), en el mismo orden que ya tenía esta función cuando no hay
+   * ningún listener de captura. `stopPropagation()` corta el resto de la
+   * propagación, en cualquiera de las dos fases — así un listener de
+   * captura en `document` puede interceptar un clic antes de que le llegue
+   * a su objetivo (el caso real: el modo Comentar sobre un botón que, sin
+   * eso, dispararía su propio manejador).
+   */
   dispatch(type: string, init: Record<string, unknown> = {}): void {
-    const evt = { type, target: this, defaultPrevented: false, preventDefault() { evt.defaultPrevented = true; }, ...init };
-    let nodo: FakeElement | null = this;
-    while (nodo) {
-      for (const fn of (nodo.listeners[type] ?? []).slice()) fn.call(nodo, evt);
-      nodo = nodo.parent;
+    let detenido = false;
+    const evt = {
+      type, target: this, defaultPrevented: false,
+      preventDefault() { evt.defaultPrevented = true; },
+      stopPropagation() { detenido = true; },
+      ...init,
+    };
+
+    const cadena: FakeElement[] = [];
+    for (let n: FakeElement | null = this; n; n = n.parent) cadena.push(n);
+
+    for (const fn of (this.doc.listeners[type] ?? []).filter((l) => l.capture).map((l) => l.fn).slice()) {
+      fn.call(this.doc, evt);
+      if (detenido) return;
     }
-    for (const fn of (this.doc.listeners[type] ?? []).slice()) fn.call(this.doc, evt);
+    for (const nodo of cadena.slice().reverse()) {
+      for (const fn of (nodo.listeners[type] ?? []).filter((l) => l.capture).map((l) => l.fn).slice()) {
+        fn.call(nodo, evt);
+        if (detenido) return;
+      }
+    }
+
+    for (const nodo of cadena) {
+      for (const fn of (nodo.listeners[type] ?? []).filter((l) => !l.capture).map((l) => l.fn).slice()) {
+        fn.call(nodo, evt);
+        if (detenido) return;
+      }
+    }
+    for (const fn of (this.doc.listeners[type] ?? []).filter((l) => !l.capture).map((l) => l.fn).slice()) {
+      fn.call(this.doc, evt);
+      if (detenido) return;
+    }
   }
 
   matches(selector: string): boolean { return matchesSelector(this, selector); }
@@ -153,7 +200,7 @@ export class FakeDocument {
   documentElement: FakeElement;
   body: FakeElement;
   activeElement: FakeElement | null = null;
-  listeners: Record<string, Array<(e: any) => void>> = {};
+  listeners: Record<string, ListenerRegistrado[]> = {};
 
   constructor() {
     this.documentElement = new FakeElement('html', this);
@@ -169,9 +216,11 @@ export class FakeDocument {
   querySelectorAll(selector: string): FakeElement[] { return this.documentElement.querySelectorAll(selector); }
   querySelector(selector: string): FakeElement | null { return this.documentElement.querySelector(selector); }
 
-  addEventListener(type: string, fn: (e: any) => void): void { (this.listeners[type] ??= []).push(fn); }
-  removeEventListener(type: string, fn: (e: any) => void): void {
-    this.listeners[type] = (this.listeners[type] ?? []).filter((f) => f !== fn);
+  addEventListener(type: string, fn: Listener, opciones?: Opciones): void {
+    (this.listeners[type] ??= []).push({ fn, capture: esCaptura(opciones) });
+  }
+  removeEventListener(type: string, fn: Listener): void {
+    this.listeners[type] = (this.listeners[type] ?? []).filter((l) => l.fn !== fn);
   }
 }
 

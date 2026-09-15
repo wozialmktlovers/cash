@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validarComentario, puedeCambiarEstadoComentario, comentariosVisibles } from '@/flujo/comentarios';
+import { validarComentario, puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion } from '@/flujo/comentarios';
 
 describe('validarComentario', () => {
   it('acepta un texto y un ancla válidos', () => {
@@ -119,5 +119,32 @@ describe('comentariosVisibles', () => {
   it('una lista vacía da una lista vacía para cualquier rol', () => {
     expect(comentariosVisibles('cliente', 'cliente-1', [])).toEqual([]);
     expect(comentariosVisibles('admin', 'admin-1', [])).toEqual([]);
+  });
+});
+
+// Fix round 1, punto 1: el conteo de comentarios abiertos (comentariosAbiertosPorEtapa)
+// ya no filtra por documento, así que una observación sigue bloqueando
+// «solicitar» aunque el pipeline haya regenerado el documento por debajo.
+// `esDeOtraVersion` es la pieza pura de esa misma corrección: decide si un
+// comentario, en el GET del personal, se marca «de una versión anterior».
+describe('esDeOtraVersion', () => {
+  const G1 = { documentoTipo: 'growth', documentoId: 'g1' };
+  const G2doc = { tipo: 'growth', id: 'g2' };
+  const G1doc = { tipo: 'growth', id: 'g1' };
+
+  it('false cuando el comentario está en el documento vigente', () => {
+    expect(esDeOtraVersion(G1, G1doc)).toBe(false);
+  });
+
+  it('true cuando el documento vigente cambió (el pipeline regeneró) — el escenario del fix', () => {
+    expect(esDeOtraVersion(G1, G2doc)).toBe(true);
+  });
+
+  it('true cuando la etapa no tiene ningún documento vigente', () => {
+    expect(esDeOtraVersion(G1, null)).toBe(true);
+  });
+
+  it('distingue por tipo de documento, no solo por id', () => {
+    expect(esDeOtraVersion({ documentoTipo: 'growth', documentoId: 'x' }, { tipo: 'research', id: 'x' })).toBe(true);
   });
 });

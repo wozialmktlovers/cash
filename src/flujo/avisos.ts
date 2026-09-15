@@ -114,9 +114,13 @@ export function textoAviso(evento: EventoAviso, datos: DatosAviso): { titulo: st
         texto: `${cliente} dejó un comentario en ${etapa}. Revísalo cuando puedas.`,
       };
     case 'respuesta_cliente':
+      // Nunca el nombre de quien respondió (fix round 1): al cliente le
+      // habla «Equipo Wozial», nunca la identidad de un operador o admin
+      // en particular — mismo criterio que `nombreInterno` en el GET de
+      // comentarios. `autor` se ignora a propósito en este caso.
       return {
         titulo: `Nueva respuesta en ${etapa}`,
-        texto: `${autor ?? 'El equipo'} respondió tu observación en ${etapa}.`,
+        texto: `El equipo de Wozial respondió tu observación en ${etapa}.`,
       };
     case 'cliente_reasignado':
       return {
@@ -275,10 +279,13 @@ export async function avisarComentarioCliente(o: {
  * (B7, spec §3 «Responder»; spec §4 «Actividad reciente»): solo a quien
  * escribió el comentario original, y solo si sigue activo. El enlace es
  * siempre `/portal` (lo fija `notificar` para cualquier destinatario con rol
- * `cliente`), así que aquí no hace falta pasarlo.
+ * `cliente`), así que aquí no hace falta pasarlo. A propósito NO recibe
+ * quién respondió (fix round 1, punto 2): `textoAviso('respuesta_cliente')`
+ * nunca menciona un nombre, para no filtrarle al cliente la identidad de un
+ * operador o admin en particular.
  */
 export async function avisarRespuestaCliente(o: {
-  actorId: string; autorComentarioId: string; cliente: string; etapa: string; autor: string;
+  actorId: string; autorComentarioId: string; cliente: string; etapa: string;
 }): Promise<void> {
   const autorComentario = await usuarioPorId(o.autorComentarioId);
   if (!autorComentario || autorComentario.rol !== 'cliente') return;
@@ -286,7 +293,7 @@ export async function avisarRespuestaCliente(o: {
     'respuesta_cliente',
     {
       admins: [], operador: null, autor: null, usuariosCliente: [autorComentario], etapaVisibleCliente: false,
-      actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa, autor: o.autor },
+      actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa },
     },
     '/portal',
   );
