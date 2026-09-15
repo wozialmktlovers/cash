@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { z } from 'zod';
-import { ETAPAS } from '@/flujo/reglas';
-import { aplicarPlanContratacion, etapasDelCliente } from '@/flujo/servicio';
+import { ETAPAS, cambiosContratacionRiesgosos } from '@/flujo/reglas';
+import { aplicarPlanContratacion, etapasDelCliente, planContratacion, registrarEventosContratacion } from '@/flujo/servicio';
 import { clienteOperable } from '@/lib/visibilidad';
 
 const json = (cuerpo: unknown, status = 200) =>
@@ -32,6 +32,25 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
   const r = cuerpoSchema.safeParse(crudo);
   if (!r.success) return json({ ok: false, errores: r.error.issues.map((i) => i.message) }, 400);
 
+  // Un operador no puede descontratar una etapa que ya arrancó, ni volver
+  // interna una investigación que el cliente ya vio aprobada (regla del
+  // dueño, fix I1 punto 3): `cambiosContratacionRiesgosos` es pura y solo
+  // señala QUÉ cambios son riesgosos, sin conocer el rol — el 403/409 lo
+  // decide esta ruta. El admin sí puede aplicarlos, pero cada uno queda
+  // registrado como evento (`registrarEventosContratacion`).
+  const actuales = await etapasDelCliente(id);
+  const plan = planContratacion(r.data.etapas);
+  const riesgos = cambiosContratacionRiesgosos(actuales, plan);
+
+  if (riesgos.length > 0 && locals.usuario.rol !== 'admin') {
+    return json({ ok: false, errores: riesgos.map((rg) => rg.razon) }, 409);
+  }
+
   await aplicarPlanContratacion(id, r.data.etapas);
+
+  if (riesgos.length > 0) {
+    await registrarEventosContratacion(id, riesgos, locals.usuario.id);
+  }
+
   return json({ ok: true, etapas: await etapasDelCliente(id) });
 };

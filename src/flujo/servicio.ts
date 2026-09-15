@@ -93,6 +93,34 @@ export async function aplicarPlanContratacion(clientId: string, seleccion: Etapa
 }
 
 /**
+ * Registra un evento por cada cambio de contratación que un operador no
+ * podría hacer (`cambiosContratacionRiesgosos`, fix I1 punto 3) pero que un
+ * admin sí aplicó — regla del dueño: «el admin sí puede, pero el cambio
+ * queda registrado». La contratación no toca `estado`, así que `de` y `a`
+ * quedan iguales (la columna es NOT NULL); lo que cambió va en el
+ * `comentario`, con la misma razón que hubiera bloqueado a un operador.
+ * Se llama DESPUÉS de `aplicarPlanContratacion`, así que lee las etapas ya
+ * actualizadas solo para resolver el `etapaId` de cada una.
+ */
+export async function registrarEventosContratacion(
+  clientId: string,
+  riesgos: { etapa: Etapa; razon: string }[],
+  usuarioId: string,
+): Promise<void> {
+  if (riesgos.length === 0) return;
+  const actuales = await db.select().from(clienteEtapas).where(eq(clienteEtapas.clientId, clientId));
+  const porEtapa = new Map(actuales.map((f) => [f.etapa, f]));
+
+  for (const riesgo of riesgos) {
+    const fila = porEtapa.get(riesgo.etapa);
+    if (!fila) continue;
+    await db.insert(etapaEventos).values({
+      etapaId: fila.id, accion: 'contratacion', de: fila.estado, a: fila.estado, usuarioId, comentario: riesgo.razon,
+    });
+  }
+}
+
+/**
  * Las 4 etapas del cliente, en el orden de `ETAPAS`. Crea las filas que
  * falten con el plan por omisión (investigación, pilares y manual
  * contratadas; desarrollo mensual no) — cubre clientes dados de alta antes

@@ -159,6 +159,53 @@ export function puedeGenerar(
   return dependenciasCumplidas(etapa, etapas, hayInvestigacionConDatos);
 }
 
+/** Plan de contratación de una sola etapa, tal como lo devuelve `planContratacion` (src/flujo/servicio.ts). */
+export type PlanEtapa = { etapa: Etapa; contratada: boolean; interna: boolean };
+
+/** `EtapaCliente` más `versionAprobadaId`: lo que hace falta para saber si una investigación ya es visible-y-aprobada para el cliente. */
+export type EtapaClienteVersion = EtapaCliente & { versionAprobadaId: string | null };
+
+export type CambioRiesgoso = { etapa: Etapa; razon: string };
+
+/**
+ * Cambios de contratación que un operador NO puede hacer (regla del dueño,
+ * fix I1 punto 3): descontratar una etapa que ya arrancó (cualquier estado
+ * distinto de `no_iniciada` implica trabajo hecho, o un documento que el
+ * cliente ya pudo haber visto) y volver interna una investigación que ya
+ * tiene una versión aprobada visible para el cliente (ocultársela de golpe
+ * le quita algo que ya vio). El admin sí puede las dos cosas — quien llama
+ * (`api/clientes/[id]/etapas.ts`) usa esta misma lista para registrar el
+ * cambio como evento cuando quien lo aplicó es admin.
+ *
+ * Pura y sin conocer el rol: decide únicamente QUÉ cambios son riesgosos:
+ * quien llama decide qué hacer con la lista según quién la pidió.
+ */
+export function cambiosContratacionRiesgosos(actuales: EtapaClienteVersion[], plan: PlanEtapa[]): CambioRiesgoso[] {
+  const riesgos: CambioRiesgoso[] = [];
+
+  for (const p of plan) {
+    const actual = actuales.find((e) => e.etapa === p.etapa);
+    if (!actual) continue;
+
+    if (actual.contratada && !p.contratada && actual.estado !== 'no_iniciada') {
+      riesgos.push({
+        etapa: p.etapa,
+        razon: `No puedes descontratar ${NOMBRE_ETAPA[p.etapa]}: su estado es «${ETIQUETA_ESTADO_ETAPA[actual.estado]}», no «${ETIQUETA_ESTADO_ETAPA.no_iniciada}».`,
+      });
+      continue;
+    }
+
+    if (p.etapa === 'investigacion' && actual.contratada && !actual.interna && p.interna && actual.versionAprobadaId) {
+      riesgos.push({
+        etapa: p.etapa,
+        razon: 'No puedes volver interna la investigación: ya tiene una versión aprobada visible para el cliente.',
+      });
+    }
+  }
+
+  return riesgos;
+}
+
 function razonEstadoInvalido(accion: Accion, actual: Estado): string {
   return `No se puede ${accion.replace(/_/g, ' ')} desde ${ETIQUETA_ESTADO_ETAPA[actual]}`;
 }

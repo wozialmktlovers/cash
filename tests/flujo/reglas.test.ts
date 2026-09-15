@@ -16,6 +16,7 @@ import {
   estadoTrasComentarioCliente,
   puedeComentar,
   puedeGenerar,
+  cambiosContratacionRiesgosos,
   type EtapaCliente,
   type Estado,
 } from '@/flujo/reglas';
@@ -226,6 +227,74 @@ describe('puedeGenerar (I1 punto 1: 409 de POST /api/jobs)', () => {
   it('la etapa no existe en la lista: no-ok, no revienta', () => {
     const r = puedeGenerar('pilares', [], true);
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('cambiosContratacionRiesgosos (I1 punto 3: qué no puede hacer un operador)', () => {
+  const plan = (over: Partial<{ etapa: EtapaCliente['etapa']; contratada: boolean; interna: boolean }>[]) =>
+    over.map((o) => ({ etapa: o.etapa!, contratada: o.contratada ?? false, interna: o.interna ?? false }));
+
+  it('sin cambios de contratación ni de interna: sin riesgos', () => {
+    const actuales = [et('pilares', { contratada: true, interna: false, estado: 'en_proceso' })];
+    const p = plan([{ etapa: 'pilares', contratada: true, interna: false }]);
+    expect(cambiosContratacionRiesgosos(actuales, p)).toEqual([]);
+  });
+
+  it('descontratar una etapa no_iniciada: sin riesgo', () => {
+    const actuales = [et('pilares', { contratada: true, interna: false, estado: 'no_iniciada' })];
+    const p = plan([{ etapa: 'pilares', contratada: false, interna: false }]);
+    expect(cambiosContratacionRiesgosos(actuales, p)).toEqual([]);
+  });
+
+  it('descontratar una etapa en_proceso: riesgo', () => {
+    const actuales = [et('pilares', { contratada: true, interna: false, estado: 'en_proceso' })];
+    const p = plan([{ etapa: 'pilares', contratada: false, interna: false }]);
+    const r = cambiosContratacionRiesgosos(actuales, p);
+    expect(r).toHaveLength(1);
+    expect(r[0].etapa).toBe('pilares');
+  });
+
+  it('descontratar una etapa aprobada: riesgo', () => {
+    const actuales = [et('manual_campana', { contratada: true, interna: false, estado: 'aprobada' })];
+    const p = plan([{ etapa: 'manual_campana', contratada: false, interna: false }]);
+    expect(cambiosContratacionRiesgosos(actuales, p)).toHaveLength(1);
+  });
+
+  it('volver interna una investigación aprobada y visible: riesgo (con versionAprobadaId)', () => {
+    const actuales = [{ ...et('investigacion', { contratada: true, interna: false, estado: 'aprobada' }), versionAprobadaId: 'v1' }];
+    const p = plan([{ etapa: 'investigacion', contratada: false, interna: true }]);
+    const r = cambiosContratacionRiesgosos(actuales, p);
+    expect(r).toHaveLength(1);
+    expect(r[0].razon.toLowerCase()).toContain('aprobada');
+  });
+
+  it('volver interna una investigación sin versión aprobada: sin riesgo si además está no_iniciada', () => {
+    const actuales = [{ ...et('investigacion', { contratada: true, interna: false, estado: 'no_iniciada' }), versionAprobadaId: null }];
+    const p = plan([{ etapa: 'investigacion', contratada: false, interna: true }]);
+    expect(cambiosContratacionRiesgosos(actuales, p)).toEqual([]);
+  });
+
+  it('una etapa que ya era interna y sigue interna: sin riesgo', () => {
+    const actuales = [{ ...et('investigacion', { contratada: false, interna: true, estado: 'en_proceso' }), versionAprobadaId: null }];
+    const p = plan([{ etapa: 'investigacion', contratada: false, interna: true }]);
+    expect(cambiosContratacionRiesgosos(actuales, p)).toEqual([]);
+  });
+
+  it('una etapa que no aparece en las actuales no revienta', () => {
+    const p = plan([{ etapa: 'pilares', contratada: false, interna: false }]);
+    expect(cambiosContratacionRiesgosos([], p)).toEqual([]);
+  });
+
+  it('varias etapas riesgosas devuelven una entrada por cada una', () => {
+    const actuales = [
+      et('pilares', { contratada: true, interna: false, estado: 'con_cambios' }),
+      et('manual_campana', { contratada: true, interna: false, estado: 'en_revision' }),
+    ];
+    const p = plan([
+      { etapa: 'pilares', contratada: false, interna: false },
+      { etapa: 'manual_campana', contratada: false, interna: false },
+    ]);
+    expect(cambiosContratacionRiesgosos(actuales, p).map((r) => r.etapa).sort()).toEqual(['manual_campana', 'pilares']);
   });
 });
 

@@ -51,10 +51,15 @@ if (usuario.rol === 'admin') {
     .from(clienteEtapas)
     .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
     .leftJoin(users, eq(users.id, clients.operadorId))
-    .where(eq(clienteEtapas.estado, 'en_revision'))
+    .where(and(eq(clienteEtapas.estado, 'en_revision'), eq(clienteEtapas.contratada, true)))
     .orderBy(asc(clienteEtapas.actualizadoEn));
 } else {
   const cond = condicionClientes(usuario);
+  // Una etapa descontratada no cuenta como pendiente de nadie (fix I1, punto
+  // 3): descontratar no toca `estado`, así que sin este filtro una etapa
+  // `con_cambios`/`en_proceso` de cuando sí estaba contratada seguiría
+  // apareciendo aquí.
+  const contratada = eq(clienteEtapas.contratada, true);
 
   conCambios = await db
     .select({
@@ -64,7 +69,7 @@ if (usuario.rol === 'admin') {
     })
     .from(clienteEtapas)
     .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
-    .where(and(eq(clienteEtapas.estado, 'con_cambios'), cond))
+    .where(and(eq(clienteEtapas.estado, 'con_cambios'), contratada, cond))
     .orderBy(asc(clienteEtapas.actualizadoEn));
 
   enProceso = await db
@@ -75,7 +80,7 @@ if (usuario.rol === 'admin') {
     })
     .from(clienteEtapas)
     .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
-    .where(and(eq(clienteEtapas.estado, 'en_proceso'), cond))
+    .where(and(eq(clienteEtapas.estado, 'en_proceso'), contratada, cond))
     .orderBy(asc(clienteEtapas.actualizadoEn));
 
   comentariosPendientes = await db
@@ -86,7 +91,7 @@ if (usuario.rol === 'admin') {
     .from(comentarios)
     .innerJoin(clienteEtapas, eq(clienteEtapas.id, comentarios.etapaId))
     .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
-    .where(and(eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe), cond))
+    .where(and(eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe), contratada, cond))
     .orderBy(desc(comentarios.creadoEn))
     .limit(10);
 

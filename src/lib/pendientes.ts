@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db, clienteEtapas, clients, comentarios } from '@/db';
 import { condicionClientes } from './visibilidad';
 import type { UsuarioSesion } from './permisos';
@@ -17,10 +17,16 @@ import type { UsuarioSesion } from './permisos';
  * mostraba (fix wave, punto 6). Las dos partes van en una sola consulta, con
  * dos subconsultas de `count` sumadas, para no disparar varias por página.
  * El cliente nunca ve esta página, así que da 0.
+ *
+ * Las tres partes filtran `contratada = true` (fix I1, punto 3): una etapa
+ * descontratada no debe aparecer como pendiente de nadie, aunque su `estado`
+ * haya quedado en `en_revision`/`con_cambios`/`en_proceso` de cuando sí lo
+ * estaba — descontratar no toca `estado`, solo `contratada`.
  */
 export async function contarPendientes(usuario: UsuarioSesion): Promise<number> {
   if (usuario.rol === 'admin') {
-    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(clienteEtapas).where(eq(clienteEtapas.estado, 'en_revision'));
+    const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(clienteEtapas)
+      .where(and(eq(clienteEtapas.estado, 'en_revision'), eq(clienteEtapas.contratada, true)));
     return n;
   }
 
@@ -36,12 +42,12 @@ export async function contarPendientes(usuario: UsuarioSesion): Promise<number> 
       SELECT
         (SELECT count(*)::int FROM ${clienteEtapas}
            INNER JOIN ${clients} ON ${clients.id} = ${clienteEtapas.clientId}
-          WHERE ${clienteEtapas.estado} IN ('con_cambios', 'en_proceso') AND (${cond}))
+          WHERE ${clienteEtapas.estado} IN ('con_cambios', 'en_proceso') AND ${clienteEtapas.contratada} = true AND (${cond}))
         +
         (SELECT count(*)::int FROM ${comentarios}
            INNER JOIN ${clienteEtapas} ON ${clienteEtapas.id} = ${comentarios.etapaId}
            INNER JOIN ${clients} ON ${clients.id} = ${clienteEtapas.clientId}
-          WHERE ${comentarios.estado} = 'abierto' AND ${comentarios.respuestaDe} IS NULL AND (${cond}))
+          WHERE ${comentarios.estado} = 'abierto' AND ${comentarios.respuestaDe} IS NULL AND ${clienteEtapas.contratada} = true AND (${cond}))
         AS n
     `);
     return n;

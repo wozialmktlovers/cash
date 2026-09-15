@@ -195,7 +195,8 @@ export const clienteEtapas = pgTable('cliente_etapas', {
 export const etapaEventos = pgTable('etapa_eventos', {
   id: uuid('id').primaryKey().defaultRandom(),
   etapaId: uuid('etapa_id').notNull().references(() => clienteEtapas.id, { onDelete: 'cascade' }),
-  // Una de las acciones de accionEtapa, o 'generado' / 'comentario_cliente'.
+  // Una de las acciones de accionEtapa, o 'generado' / 'comentario_cliente' /
+  // 'contratacion' (cambio de contratación de admin que un operador no podría hacer).
   accion: text('accion').notNull(),
   de: estadoEtapa('de'),
   a: estadoEtapa('a').notNull(),
