@@ -4,15 +4,21 @@ import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import { db, users, clients, invitaciones } from '@/db';
 import { fechaCorta } from '@/lib/ui/fecha';
+import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
 
 const usuario = Astro.locals.usuario;
 
 // Equipo: admin y operador.
-const equipo = await db
-  .select({ id: users.id, nombre: users.nombre, email: users.email, rol: users.rol, activo: users.activo })
-  .from(users)
-  .where(ne(users.rol, 'cliente'))
-  .orderBy(asc(users.nombre));
+// El orden lo pone `ordenUsuarios` en memoria y no un `ORDER BY`: la regla es
+// apellido, luego nombre, con `localeCompare` en español y quien todavía no
+// tenga ninguno de los dos al final por correo. Postgres no la reproduce sin
+// una colación aparte, y la consulta ya trae la lista entera.
+const equipo = (
+  await db
+    .select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email, rol: users.rol, activo: users.activo })
+    .from(users)
+    .where(ne(users.rol, 'cliente'))
+).sort(ordenUsuarios);
 
 const equipoIds = equipo.map((u) => u.id);
 const clientesAsignados = equipoIds.length
@@ -27,11 +33,12 @@ for (const c of clientesAsignados) {
 }
 
 // Usuarios de clientes.
-const usuariosCliente = await db
-  .select({ id: users.id, nombre: users.nombre, email: users.email, activo: users.activo, clientId: users.clientId })
-  .from(users)
-  .where(eq(users.rol, 'cliente'))
-  .orderBy(asc(users.nombre));
+const usuariosCliente = (
+  await db
+    .select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email, activo: users.activo, clientId: users.clientId })
+    .from(users)
+    .where(eq(users.rol, 'cliente'))
+).sort(ordenUsuarios);
 
 const clienteIds = [...new Set(usuariosCliente.map((u) => u.clientId).filter((x): x is string => !!x))];
 const nombresCliente = clienteIds.length ? await db.select({ id: clients.id, nombre: clients.nombre }).from(clients).where(inArray(clients.id, clienteIds)) : [];
@@ -75,10 +82,12 @@ const invitacionesEquipo = await db
           const clientesDe = clientesPorOperador.get(u.id) ?? [];
           const esUnoMismo = u.id === usuario.id;
           return (
-            <li class="renglon renglon-usuario" data-usuario-id={u.id}>
+            <li class="renglon renglon-usuario" data-usuario-id={u.id} data-nombre={u.nombre ?? ''} data-apellido={u.apellido ?? ''} data-email={u.email}>
               <div class="cuerpo">
-                <strong>{u.nombre ?? u.email}</strong>
-                <p class="secundario">{u.email}</p>
+                <strong>{nombreVisible(u)}</strong>
+                {/* El correo va en su propio <span> para que el script lo
+                    reemplace sin pisar el resto de la línea. */}
+                <p class="secundario"><span data-correo>{u.email}</span></p>
                 <p class="secundario">
                   {clientesDe.length === 0 ? 'Sin clientes asignados' : `${clientesDe.length} ${clientesDe.length === 1 ? 'cliente asignado' : 'clientes asignados'}`}
                 </p>
@@ -86,13 +95,14 @@ const invitacionesEquipo = await db
                   <p class="secundario aviso-inline"><Icono nombre="alerta" />Inactivo con clientes asignados: reasígnalos desde su ficha.</p>
                 )}
               </div>
-              <select class="rol-select" data-id={u.id} disabled={esUnoMismo} aria-label={`Rol de ${u.nombre ?? u.email}`}>
+              <select class="rol-select" data-id={u.id} disabled={esUnoMismo} aria-label={`Rol de ${nombreVisible(u)}`}>
                 {(Object.keys(ETIQUETA_ROL) as Array<'admin' | 'operador'>).map((r) => (
                   <option value={r} selected={u.rol === r}>{ETIQUETA_ROL[r]}</option>
                 ))}
               </select>
+              <button type="button" class="btn fantasma chico" data-editar={u.id} aria-label={`Editar a ${nombreVisible(u)}`}>Editar</button>
               <label class="switch" title={esUnoMismo ? 'No puedes desactivarte a ti mismo' : u.activo ? 'Activo' : 'Inactivo'}>
-                <input type="checkbox" class="activo-switch" data-id={u.id} checked={u.activo} disabled={esUnoMismo} aria-label={`Activo: ${u.nombre ?? u.email}`} />
+                <input type="checkbox" class="activo-switch" data-id={u.id} checked={u.activo} disabled={esUnoMismo} aria-label={`Activo: ${nombreVisible(u)}`} />
                 <span class="riel"><span class="perilla"></span></span>
               </label>
             </li>
@@ -132,15 +142,18 @@ const invitacionesEquipo = await db
     ) : (
       <ul class="lista">
         {usuariosCliente.map((u) => (
-          <li class="renglon" data-usuario-id={u.id}>
+          <li class="renglon" data-usuario-id={u.id} data-nombre={u.nombre ?? ''} data-apellido={u.apellido ?? ''} data-email={u.email}>
             <div class="cuerpo">
-              <strong>{u.nombre ?? u.email}</strong>
-              <p class="secundario">{u.email} · {u.clientId ? (nombrePorCliente.get(u.clientId) ?? 'Cliente') : 'Sin cliente'}</p>
+              <strong>{nombreVisible(u)}</strong>
+              {/* Aquí la línea secundaria lleva además el nombre del cliente, así
+                  que el correo va en su propio <span>: el script cambia solo eso. */}
+              <p class="secundario"><span data-correo>{u.email}</span> · {u.clientId ? (nombrePorCliente.get(u.clientId) ?? 'Cliente') : 'Sin cliente'}</p>
             </div>
+            <button type="button" class="btn fantasma chico" data-editar={u.id} aria-label={`Editar a ${nombreVisible(u)}`}>Editar</button>
             {/* Mismo control que el equipo (la API ya permite desactivar/reactivar
                 un usuario de cliente): antes era una etiqueta de solo lectura. */}
             <label class="switch" title={u.activo ? 'Activo' : 'Inactivo'}>
-              <input type="checkbox" class="activo-switch" data-id={u.id} checked={u.activo} aria-label={`Activo: ${u.nombre ?? u.email}`} />
+              <input type="checkbox" class="activo-switch" data-id={u.id} checked={u.activo} aria-label={`Activo: ${nombreVisible(u)}`} />
               <span class="riel"><span class="perilla"></span></span>
             </label>
           </li>
@@ -188,6 +201,34 @@ const invitacionesEquipo = await db
       <div class="acciones">
         <button type="submit" class="btn" id="inv-enviar">Invitar</button>
         <button type="button" class="btn fantasma" id="inv-cerrar">Cerrar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dialogo-editar" aria-labelledby="editar-titulo">
+    <h2 id="editar-titulo">Editar usuario</h2>
+    <form id="forma-editar">
+      <div class="campos" style="margin-top:16px">
+        <div class="campo">
+          <label for="ed-nombre">Nombre</label>
+          <input id="ed-nombre" name="nombre" type="text" maxlength="60" autocomplete="off" />
+        </div>
+        <div class="campo">
+          <label for="ed-apellido">Apellido</label>
+          <input id="ed-apellido" name="apellido" type="text" maxlength="60" autocomplete="off" />
+        </div>
+        <div class="campo ancho">
+          <label for="ed-email">Correo</label>
+          <input id="ed-email" name="email" type="email" maxlength="200" autocomplete="off" required />
+          <p class="ayuda">Con este correo inicia sesión. Si lo cambias, avísale.</p>
+        </div>
+      </div>
+
+      <p class="aviso rosa" id="ed-error" hidden role="alert"></p>
+
+      <div class="acciones">
+        <button type="submit" class="btn" id="ed-guardar">Guardar</button>
+        <button type="button" class="btn fantasma" id="ed-cerrar">Cancelar</button>
       </div>
     </form>
   </dialog>
@@ -334,6 +375,12 @@ const invitacionesEquipo = await db
     'cliente-sin-cliente': 'No se puede reactivar: esta cuenta ya no pertenece a ningún cliente. Para darle acceso a esa persona, invítala con otro correo desde la ficha del cliente.',
     'no-existe': 'Ese usuario ya no existe.',
     'sin-conexion': 'No se pudo contactar al servidor.',
+    // Los del diálogo de edición. `correo-ocupado` llega con un 409 desde la
+    // restricción única de la base.
+    'correo-ocupado': 'Ese correo ya es de otra cuenta.',
+    'correo-invalido': 'Ese correo no parece válido.',
+    'nombre-largo': 'El nombre es demasiado largo (máximo 60 caracteres).',
+    'apellido-largo': 'El apellido es demasiado largo (máximo 60 caracteres).',
   };
 
   document.querySelectorAll<HTMLSelectElement>('.rol-select').forEach((select) => {
@@ -369,6 +416,77 @@ const invitacionesEquipo = await db
       }
       input.disabled = false;
     });
+  });
+
+  // ── Diálogo «Editar»: nombre, apellido y correo ────
+  const dialogoEditar = document.getElementById('dialogo-editar') as HTMLDialogElement;
+  const formaEditar = document.getElementById('forma-editar') as HTMLFormElement;
+  const edNombre = document.getElementById('ed-nombre') as HTMLInputElement;
+  const edApellido = document.getElementById('ed-apellido') as HTMLInputElement;
+  const edEmail = document.getElementById('ed-email') as HTMLInputElement;
+  const edError = document.getElementById('ed-error') as HTMLElement;
+  const edGuardar = document.getElementById('ed-guardar') as HTMLButtonElement;
+
+  /** El renglón que se está editando; de él salen los valores y a él vuelven. */
+  let renglon: HTMLElement | null = null;
+
+  /**
+   * La misma regla que `nombreVisible` en el servidor, aquí en corto: se
+   * necesita para repintar el renglón sin recargar, y `patchUsuario` solo
+   * devuelve si salió bien.
+   */
+  const visible = (nombre: string, apellido: string, email: string) =>
+    [nombre, apellido].filter(Boolean).join(' ') || email;
+
+  // El selector se ancla a los renglones de usuario a propósito: «Guardar» y
+  // «Cancelar» viven dentro del diálogo y no deben entrar aquí.
+  for (const boton of document.querySelectorAll<HTMLButtonElement>('li[data-usuario-id] [data-editar]')) {
+    boton.addEventListener('click', () => {
+      renglon = boton.closest('li');
+      if (!renglon) return;
+      edNombre.value = renglon.dataset.nombre ?? '';
+      edApellido.value = renglon.dataset.apellido ?? '';
+      edEmail.value = renglon.dataset.email ?? '';
+      edError.hidden = true;
+      dialogoEditar.showModal();
+    });
+  }
+
+  document.getElementById('ed-cerrar')!.addEventListener('click', () => dialogoEditar.close());
+  dialogoEditar.addEventListener('close', () => { renglon = null; });
+
+  formaEditar.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const li = renglon;
+    if (!li) return;
+    const id = li.dataset.usuarioId!;
+    const nombre = edNombre.value.trim();
+    const apellido = edApellido.value.trim();
+    const email = edEmail.value.trim();
+
+    edGuardar.disabled = true;
+    edError.hidden = true;
+    // Vacío significa borrar el dato, y por eso va como `null` y no como ''.
+    const { ok, error } = await patchUsuario(id, { nombre: nombre || null, apellido: apellido || null, email });
+    if (ok) {
+      const titulo = visible(nombre, apellido, email);
+      li.querySelector('strong')!.textContent = titulo;
+      li.querySelector('[data-correo]')!.textContent = email;
+      li.dataset.nombre = nombre;
+      li.dataset.apellido = apellido;
+      li.dataset.email = email;
+      // Los controles del renglón se nombran por la persona: si cambió, sus
+      // etiquetas también.
+      li.querySelector('[data-editar]')?.setAttribute('aria-label', `Editar a ${titulo}`);
+      li.querySelector('.rol-select')?.setAttribute('aria-label', `Rol de ${titulo}`);
+      li.querySelector('.activo-switch')?.setAttribute('aria-label', `Activo: ${titulo}`);
+      dialogoEditar.close();
+      toast('Datos actualizados');
+    } else {
+      edError.textContent = MENSAJES_CAMBIO[error ?? ''] ?? 'No se pudieron guardar los datos.';
+      edError.hidden = false;
+    }
+    edGuardar.disabled = false;
   });
 </script>
 
