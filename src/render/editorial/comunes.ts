@@ -4,7 +4,7 @@ import { LOGO_WOZIAL_SRC } from '@/render/marca';
 import type { OpcionesBarra } from '@/render/barra-operador';
 import { cabeceraDocumento, SCRIPT_CABECERA } from './cabecera';
 import { SCRIPT_EDITORIAL } from './interaccion';
-import { atributoFlujo, SCRIPT_FLUJO, type FlujoDatos } from './flujo-cliente';
+import { atributoFlujo, panelComentarios, SCRIPT_FLUJO, type FlujoDatos } from './flujo-cliente';
 
 export { escapar };
 
@@ -57,7 +57,7 @@ export function envolverDocumento(o: {
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>${o.estilos}</style>
 </head><body${o.flujo ? atributoFlujo(o.flujo) : ''}>
-${cabeceraDocumento({ etiqueta: o.etiqueta, cliente: o.cliente, operador: o.operador, puedeEditar: o.flujo?.puedeEditar })}
+${cabeceraDocumento({ etiqueta: o.etiqueta, cliente: o.cliente, operador: o.operador, puedeEditar: o.flujo?.puedeEditar, puedeComentar: o.flujo?.puedeComentar })}
 <div class="pagina"><div class="marco">
   <nav class="indice-lateral" aria-label="Secciones">
     <ol>${o.indice.map(([num, id, nombre]) => `<li><a href="#${id}"><span>${num}</span>${nombre}</a></li>`).join('')}</ol>

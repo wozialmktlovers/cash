@@ -16,7 +16,7 @@ const operador = {
   version: 2, tipo: 'research' as const, tokenActivo: null, base: 'https://x',
 };
 
-const flujo: FlujoDatos = { tipo: 'research', id: 'd1', etapaId: 'e1', puedeEditar: true, puedeComentar: true };
+const flujo: FlujoDatos = { tipo: 'research', id: 'd1', etapaId: 'e1', puedeEditar: true, puedeComentar: true, rol: 'admin', esOperadorAsignado: false };
 
 describe('data-editable en los renders', () => {
   it('seccionPortada de la lectura marca titular y resumen cuando editable', () => {
@@ -107,6 +107,7 @@ function armarPagina(puedeEditarDoc = true) {
 
   doc.body.setAttribute('data-flujo', JSON.stringify({
     tipo: 'research', id: 'doc1', etapaId: 'etapa1', puedeEditar: puedeEditarDoc, puedeComentar: true,
+    rol: 'admin', esOperadorAsignado: false,
   }));
 
   const titular = doc.createElement('h1');

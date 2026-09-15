@@ -20,9 +20,14 @@ export function cabeceraSeccion(opts: {
   </div>`;
 }
 
-/** Envoltura de sección: el ancla del nav vive aquí. */
-export function seccion(id: string, cuerpo: string): string {
-  return `<section class="sec" id="${escapar(id)}"><div class="wrap">${cuerpo}</div></section>`;
+/**
+ * Envoltura de sección: el ancla del nav vive aquí, y también `data-ancla`
+ * (B7, spec §3, «secciones: `seccion:<id>`») cuando `anclas` es verdadero
+ * — solo en la vista interna, nunca en `/p/...` (ruling del controlador B7).
+ */
+export function seccion(id: string, cuerpo: string, anclas = false): string {
+  const dataAncla = anclas ? ` data-ancla="seccion:${escapar(id)}"` : '';
+  return `<section class="sec" id="${escapar(id)}"${dataAncla}><div class="wrap">${cuerpo}</div></section>`;
 }
 
 /**

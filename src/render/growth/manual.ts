@@ -3,7 +3,7 @@ import { construirUrls, type UrlEtiquetada } from '@/growth/utm';
 import { ESTILOS_GROWTH } from './estilos';
 import { NAVEGACION_GROWTH } from './navegacion';
 import { LOGO_WOZIAL_SRC } from '@/render/marca';
-import { atributoFlujo, panelVersiones, barraEdicion, SCRIPT_FLUJO, type FlujoDatos } from '@/render/editorial/flujo-cliente';
+import { atributoFlujo, panelVersiones, barraEdicion, panelComentarios, SCRIPT_FLUJO, type FlujoDatos } from '@/render/editorial/flujo-cliente';
 import { escapar, seccion } from './secciones/comunes';
 import { seccionPortada, type MetaManual } from './secciones/portada';
 import { seccionMeta } from './secciones/meta';
@@ -60,16 +60,19 @@ export function renderizarManual(
     });
   }
 
+  // `anclas`: solo en la vista interna (cuando llega `flujo`), nunca en la
+  // vista pública ni en el link `/p/...` — mismo criterio que `editable`.
+  const anclas = Boolean(flujo);
   const secciones = [
-    seccion('setup', seccionPortada(datos, meta, urls.length, huecos, editable)),
-    seccion('meta', seccionMeta(datos, huecos, editable)),
-    seccion('creativos', seccionCreativos(datos, huecos, urls, editable)),
-    seccion('prompts', seccionPrompts(datos, huecos, editable)),
-    seccion('google', seccionGoogle(datos, huecos, urls)),
-    seccion('rsa', seccionRsa(datos, huecos)),
-    seccion('traza', seccionTraza(urls)),
-    seccion('tecnico', seccionTecnico(meta, datos)),
-    seccion('seguimiento', seccionSeguimiento(datos)),
+    seccion('setup', seccionPortada(datos, meta, urls.length, huecos, editable), anclas),
+    seccion('meta', seccionMeta(datos, huecos, editable), anclas),
+    seccion('creativos', seccionCreativos(datos, huecos, urls, editable, anclas), anclas),
+    seccion('prompts', seccionPrompts(datos, huecos, editable), anclas),
+    seccion('google', seccionGoogle(datos, huecos, urls), anclas),
+    seccion('rsa', seccionRsa(datos, huecos), anclas),
+    seccion('traza', seccionTraza(urls), anclas),
+    seccion('tecnico', seccionTecnico(meta, datos), anclas),
+    seccion('seguimiento', seccionSeguimiento(datos), anclas),
   ].join('\n');
 
   const enlaces = ANCLAS
@@ -101,6 +104,7 @@ ${barraOperador}
 <div class="prog"><div class="prog-fill" id="pf"></div></div>
 <main>${secciones}</main>
 ${flujo?.puedeEditar ? panelVersiones() + barraEdicion() : ''}
+${flujo?.puedeComentar ? panelComentarios() : ''}
 <script>${NAVEGACION_GROWTH}</script>
 ${flujo ? `<script>${SCRIPT_FLUJO}</script>` : ''}
 </body></html>`;

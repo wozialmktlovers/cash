@@ -5,17 +5,19 @@
 
 import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import {
-  db, clients, clienteEtapas, etapaEventos, comentarios, documentoVersiones,
+  db, clients, clienteEtapas, etapaEventos, comentarios, documentoVersiones, users,
   researchResults, growthResults, pilaresResults,
 } from '@/db';
 import {
-  ETAPAS, NOMBRE_ETAPA, aplicarAccion, dependenciasCumplidas, estadoTrasGenerar, tipoDocumentoDe, etapaDeTipo,
-  type Etapa, type Accion, type EtapaCliente, type TipoDocumento,
+  ETAPAS, NOMBRE_ETAPA, aplicarAccion, dependenciasCumplidas, estadoTrasGenerar, estadoTrasComentarioCliente,
+  tipoDocumentoDe, etapaDeTipo, puedeComentar,
+  type Etapa, type Accion, type EtapaCliente, type TipoDocumento, type Rol,
 } from './reglas';
+import { puedeCambiarEstadoComentario, comentariosVisibles, type EstadoComentario } from './comentarios';
 import { investigacionUtil } from '@/lib/precheck';
-import { clienteOperable } from '@/lib/visibilidad';
+import { clienteOperable, clienteVisible, esUuid } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
-import { avisarJob, avisarTransicion, type EventoAviso } from './avisos';
+import { avisarJob, avisarTransicion, avisarComentarioCliente, avisarRespuestaCliente, type EventoAviso } from './avisos';
 
 /** Ruta interna para ver el documento vigente de una etapa (spec §3, Avisos: «enlace»). Exportada: la ficha (B5) la usa para el botón «Ver documento». */
 export function enlaceDocumento(tipo: TipoDocumento, documentoId: string): string {
@@ -399,4 +401,304 @@ export async function ejecutarTransicion(o: {
     if (e instanceof CambioConcurrenteError) return { ok: false, status: 409, razon: 'La etapa cambió mientras tanto, recarga' };
     throw e;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Comentarios anclados (B7, spec §3 «Comentarios anclados» y §4 «observaciones
+// del cliente»). Las reglas puras viven en ./comentarios; aquí solo hay
+// acceso a base de datos: cargar la etapa y el cliente, decidir visibilidad
+// y permiso, y aplicar el cambio. `texto` y `ancla` ya llegan validados
+// (`validarComentario`, en las rutas) — estas funciones no repiten esa
+// validación de forma, solo la de permiso y estado.
+// ─────────────────────────────────────────────────────────────────────────
+
+type FilaComentario = typeof comentarios.$inferSelect;
+
+export type ResultadoComentario =
+  | { ok: true; comentario: FilaComentario }
+  | { ok: false; status: 404 | 409; razon: string };
+
+const RAZON_ETAPA_INEXISTENTE = 'La etapa no existe';
+const RAZON_COMENTARIO_INEXISTENTE = 'El comentario no existe';
+
+/**
+ * Comentario de un usuario interno (admin u operador asignado): sobre el
+ * documento VIGENTE de la etapa (spec §3, «el documento y la versión vienen
+ * de la etapa: vigente para usuarios internos»). Sin permiso de ver el
+ * cliente, 404; sin documento todavía, 409 «Esta etapa aún no tiene
+ * documento» (misma razón que usa `aplicarAccion` para `solicitar`).
+ */
+export async function crearComentarioInterno(o: {
+  etapaId: string; usuario: UsuarioSesion; ancla: string; texto: string;
+}): Promise<ResultadoComentario> {
+  if (!esUuid(o.etapaId)) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+  const [fila] = await db.select().from(clienteEtapas).where(eq(clienteEtapas.id, o.etapaId)).limit(1);
+  if (!fila) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+
+  const cliente = await clienteVisible(o.usuario, fila.clientId);
+  if (!cliente) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+
+  const esOperadorAsignado = cliente.operadorId === o.usuario.id;
+  if (!puedeComentar(o.usuario.rol, esOperadorAsignado, fila.etapa)) {
+    return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+  }
+  if (!fila.documentoTipo || !fila.documentoId) {
+    return { ok: false, status: 409, razon: 'Esta etapa aún no tiene documento' };
+  }
+
+  const numero = (await ultimaVersion(db, fila.documentoTipo, fila.documentoId)) ?? 1;
+  const [creado] = await db.insert(comentarios).values({
+    etapaId: fila.id, documentoTipo: fila.documentoTipo, documentoId: fila.documentoId, versionNumero: numero,
+    ancla: o.ancla, texto: o.texto, autorId: o.usuario.id, autorRol: o.usuario.rol,
+  }).returning();
+
+  return { ok: true, comentario: creado };
+}
+
+/**
+ * Comentario (observación) del cliente: solo `manual_campana` y
+ * `desarrollo_mensual`, contratada y no interna, y solo sobre la versión
+ * APROBADA (spec §4, «rinde la versión aprobada»). En una sola transacción:
+ * inserta el comentario, aplica `estadoTrasComentarioCliente` con un UPDATE
+ * condicionado al estado leído (si cambió mientras tanto, 409 «cambió
+ * mientras tanto, recarga» — mismo criterio que `ejecutarTransicion`) e
+ * inserta el evento `comentario_cliente`. El aviso va después de que la
+ * transacción cerró, sin esperarlo.
+ */
+export async function crearComentarioCliente(o: {
+  etapaId: string; usuario: UsuarioSesion; ancla: string; texto: string;
+}): Promise<ResultadoComentario> {
+  const { usuario } = o;
+  if (usuario.rol !== 'cliente' || !usuario.clientId) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+  if (!esUuid(o.etapaId)) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+
+  const [fila] = await db.select().from(clienteEtapas).where(eq(clienteEtapas.id, o.etapaId)).limit(1);
+  if (!fila) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+  if (fila.clientId !== usuario.clientId) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+  if (!fila.contratada || fila.interna) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+  if (!puedeComentar('cliente', false, fila.etapa)) {
+    return { ok: false, status: 409, razon: 'Aquí no se pueden dejar observaciones' };
+  }
+  if (!fila.versionAprobadaId) {
+    return { ok: false, status: 409, razon: 'Todavía no hay una versión aprobada para comentar' };
+  }
+
+  const [version] = await db.select().from(documentoVersiones).where(eq(documentoVersiones.id, fila.versionAprobadaId)).limit(1);
+  if (!version) return { ok: false, status: 409, razon: 'Todavía no hay una versión aprobada para comentar' };
+
+  const [clienteFila] = await db.select({ nombre: clients.nombre, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, fila.clientId)).limit(1);
+  if (!clienteFila) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+
+  try {
+    let creado!: FilaComentario;
+    let nuevoEstado = fila.estado;
+
+    await db.transaction(async (tx) => {
+      [creado] = await tx.insert(comentarios).values({
+        etapaId: fila.id, documentoTipo: version.documentoTipo, documentoId: version.documentoId, versionNumero: version.numero,
+        ancla: o.ancla, texto: o.texto, autorId: usuario.id, autorRol: 'cliente',
+      }).returning();
+
+      nuevoEstado = estadoTrasComentarioCliente(fila.etapa, fila.estado);
+      if (nuevoEstado !== fila.estado) {
+        const actualizada = await tx.update(clienteEtapas)
+          .set({ estado: nuevoEstado, actualizadoEn: new Date() })
+          .where(and(eq(clienteEtapas.id, fila.id), eq(clienteEtapas.estado, fila.estado)))
+          .returning();
+        if (!actualizada.length) throw new CambioConcurrenteError();
+      }
+
+      await tx.insert(etapaEventos).values({
+        etapaId: fila.id, accion: 'comentario_cliente', de: fila.estado, a: nuevoEstado, usuarioId: usuario.id, comentario: null,
+      });
+    });
+
+    void avisarComentarioCliente({
+      actorId: usuario.id,
+      clientId: fila.clientId,
+      operadorId: clienteFila.operadorId,
+      cliente: clienteFila.nombre,
+      etapa: NOMBRE_ETAPA[fila.etapa],
+      enlace: `/clientes/${fila.clientId}`,
+    }).catch((e) => console.error('[avisos] comentario_cliente:', e));
+
+    return { ok: true, comentario: creado };
+  } catch (e) {
+    if (e instanceof CambioConcurrenteError) return { ok: false, status: 409, razon: 'La etapa cambió mientras tanto, recarga' };
+    throw e;
+  }
+}
+
+/**
+ * Respuesta a un comentario de primer nivel (spec §3, «Responder»): el
+ * cliente solo responde en sus propios hilos; el personal, en cualquiera que
+ * pueda ver. Nunca a una respuesta (un solo nivel de anidado). Si quien
+ * responde no es el cliente y el hilo lo abrió un cliente, avisa a su autor
+ * (evento `respuesta_cliente`, spec §4 «Actividad reciente»).
+ */
+export async function responderComentario(o: {
+  comentarioId: string; usuario: UsuarioSesion; texto: string;
+}): Promise<ResultadoComentario> {
+  const { usuario } = o;
+  if (!esUuid(o.comentarioId)) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+
+  const [padre] = await db.select().from(comentarios).where(eq(comentarios.id, o.comentarioId)).limit(1);
+  if (!padre) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+  if (padre.respuestaDe !== null) return { ok: false, status: 409, razon: 'Solo se puede responder a un comentario principal' };
+
+  const [etapaFila] = await db.select().from(clienteEtapas).where(eq(clienteEtapas.id, padre.etapaId)).limit(1);
+  if (!etapaFila) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+
+  if (usuario.rol === 'cliente') {
+    if (usuario.clientId !== etapaFila.clientId || padre.autorRol !== 'cliente' || padre.autorId !== usuario.id) {
+      return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+    }
+  } else {
+    const cliente = await clienteVisible(usuario, etapaFila.clientId);
+    if (!cliente) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+  }
+
+  const [creado] = await db.insert(comentarios).values({
+    etapaId: padre.etapaId, documentoTipo: padre.documentoTipo, documentoId: padre.documentoId, versionNumero: padre.versionNumero,
+    ancla: padre.ancla, texto: o.texto, autorId: usuario.id, autorRol: usuario.rol, respuestaDe: padre.id,
+  }).returning();
+
+  if (usuario.rol !== 'cliente' && padre.autorRol === 'cliente' && padre.autorId) {
+    const [clienteFila] = await db.select({ nombre: clients.nombre }).from(clients).where(eq(clients.id, etapaFila.clientId)).limit(1);
+    void avisarRespuestaCliente({
+      actorId: usuario.id,
+      autorComentarioId: padre.autorId,
+      cliente: clienteFila?.nombre ?? 'Cliente',
+      etapa: NOMBRE_ETAPA[etapaFila.etapa],
+      autor: usuario.nombre ?? usuario.email,
+    }).catch((e) => console.error('[avisos] respuesta_cliente:', e));
+  }
+
+  return { ok: true, comentario: creado };
+}
+
+/**
+ * Cambia el estado de un comentario de primer nivel (spec §3, «Marcar
+ * atendido»/«Descartar»): `puedeCambiarEstadoComentario` decide quién puede.
+ * El cliente nunca llega aquí (sin permiso, 404). `resueltoPor`/`resueltoEn`
+ * se fijan al marcar `atendido`/`descartado` y se limpian al reabrir.
+ */
+export async function cambiarEstadoComentario(o: {
+  comentarioId: string; usuario: UsuarioSesion; estado: EstadoComentario;
+}): Promise<ResultadoComentario> {
+  const { usuario } = o;
+  if (!esUuid(o.comentarioId)) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+
+  const [fila] = await db.select().from(comentarios).where(eq(comentarios.id, o.comentarioId)).limit(1);
+  if (!fila) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+  if (fila.respuestaDe !== null) return { ok: false, status: 409, razon: 'Solo se puede cambiar el estado de un comentario principal' };
+  if (usuario.rol === 'cliente') return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+
+  const [etapaFila] = await db.select().from(clienteEtapas).where(eq(clienteEtapas.id, fila.etapaId)).limit(1);
+  if (!etapaFila) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+
+  const cliente = await clienteVisible(usuario, etapaFila.clientId);
+  if (!cliente) return { ok: false, status: 404, razon: RAZON_COMENTARIO_INEXISTENTE };
+
+  const esOperadorAsignado = cliente.operadorId === usuario.id;
+  if (!puedeCambiarEstadoComentario(usuario.rol, esOperadorAsignado, o.estado)) {
+    return { ok: false, status: 409, razon: 'No tienes permiso para cambiar el estado de este comentario' };
+  }
+
+  const resuelto = o.estado !== 'abierto';
+  const [actualizado] = await db.update(comentarios).set({
+    estado: o.estado,
+    resueltoPor: resuelto ? usuario.id : null,
+    resueltoEn: resuelto ? new Date() : null,
+  }).where(eq(comentarios.id, fila.id)).returning();
+
+  return { ok: true, comentario: actualizado };
+}
+
+export type ComentarioSalida = {
+  id: string;
+  ancla: string;
+  texto: string;
+  estado: EstadoComentario;
+  respuestaDe: string | null;
+  autorRol: Rol;
+  autor: string;
+  versionNumero: number;
+  creadoEn: Date;
+};
+
+function nombreInterno(nombre: string | null, email: string): string {
+  return nombre ?? email;
+}
+
+/**
+ * Lista de comentarios de una etapa (spec §3, `GET /api/comentarios?etapa=`):
+ * el personal ve todos los del documento vigente (o de todas las versiones
+ * con `todasVersiones`); el cliente solo los suyos (`comentariosVisibles`)
+ * sobre la versión aprobada, con los autores internos anonimizados como
+ * «Equipo Wozial» (spec §3, «El cliente ve sus comentarios... no los
+ * internos»).
+ */
+export async function listarComentarios(o: {
+  etapaId: string; usuario: UsuarioSesion; todasVersiones: boolean;
+}): Promise<{ ok: true; comentarios: ComentarioSalida[] } | { ok: false; status: 404; razon: string }> {
+  const { usuario } = o;
+  if (!esUuid(o.etapaId)) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+
+  const [fila] = await db.select().from(clienteEtapas).where(eq(clienteEtapas.id, o.etapaId)).limit(1);
+  if (!fila) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+
+  const campos = {
+    id: comentarios.id, ancla: comentarios.ancla, texto: comentarios.texto, estado: comentarios.estado,
+    respuestaDe: comentarios.respuestaDe, autorId: comentarios.autorId, autorRol: comentarios.autorRol,
+    versionNumero: comentarios.versionNumero, creadoEn: comentarios.creadoEn,
+    autorNombre: users.nombre, autorEmail: users.email,
+  };
+
+  if (usuario.rol === 'cliente') {
+    if (usuario.clientId !== fila.clientId || !fila.contratada || fila.interna) {
+      return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+    }
+    if (!fila.versionAprobadaId) return { ok: true, comentarios: [] };
+
+    const [version] = await db.select().from(documentoVersiones).where(eq(documentoVersiones.id, fila.versionAprobadaId)).limit(1);
+    if (!version) return { ok: true, comentarios: [] };
+
+    const todos = await db.select(campos).from(comentarios)
+      .leftJoin(users, eq(users.id, comentarios.autorId))
+      .where(and(eq(comentarios.etapaId, fila.id), eq(comentarios.documentoTipo, version.documentoTipo), eq(comentarios.documentoId, version.documentoId)))
+      .orderBy(desc(comentarios.creadoEn));
+
+    const visibles = comentariosVisibles('cliente', usuario.id, todos);
+    return {
+      ok: true,
+      comentarios: visibles.map((f) => ({
+        id: f.id, ancla: f.ancla, texto: f.texto, estado: f.estado, respuestaDe: f.respuestaDe,
+        autorRol: f.autorRol, autor: f.autorRol === 'cliente' ? nombreInterno(f.autorNombre, f.autorEmail ?? 'Tú') : 'Equipo Wozial',
+        versionNumero: f.versionNumero, creadoEn: f.creadoEn,
+      })),
+    };
+  }
+
+  const cliente = await clienteVisible(usuario, fila.clientId);
+  if (!cliente) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
+
+  const condiciones = [eq(comentarios.etapaId, fila.id)];
+  if (!o.todasVersiones && fila.documentoTipo && fila.documentoId) {
+    condiciones.push(eq(comentarios.documentoTipo, fila.documentoTipo), eq(comentarios.documentoId, fila.documentoId));
+  }
+
+  const todos = await db.select(campos).from(comentarios)
+    .leftJoin(users, eq(users.id, comentarios.autorId))
+    .where(and(...condiciones))
+    .orderBy(desc(comentarios.creadoEn));
+
+  return {
+    ok: true,
+    comentarios: todos.map((f) => ({
+      id: f.id, ancla: f.ancla, texto: f.texto, estado: f.estado, respuestaDe: f.respuestaDe,
+      autorRol: f.autorRol, autor: nombreInterno(f.autorNombre, f.autorEmail ?? 'Wozial'),
+      versionNumero: f.versionNumero, creadoEn: f.creadoEn,
+    })),
+  };
 }

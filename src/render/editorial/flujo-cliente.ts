@@ -1,12 +1,14 @@
 import { escapar } from '@/render/escapar';
-import type { TipoDocumento } from '@/flujo/reglas';
+import type { TipoDocumento, Rol } from '@/flujo/reglas';
 
 /**
  * Lo que necesita `SCRIPT_FLUJO` en el navegador para saber a qué documento
  * hablar, y qué puede hacer quien mira la página. Va en `data-flujo` sobre
  * `<body>`, como JSON escapado como atributo (spec §3, «SCRIPT_FLUJO»).
- * `puedeComentar` viaja ya desde B6 aunque el modo Comentar lo activa B7: la
- * forma del atributo no debería volver a cambiar cuando eso llegue.
+ * `rol` y `esOperadorAsignado` viajan para que el panel de comentarios (B7)
+ * calcule en el cliente qué botones mostrar (Responder, Marcar atendido,
+ * Descartar) con `puedeCambiarEstadoComentario`, sin depender de datos por
+ * comentario — el servidor sigue siendo quien de verdad autoriza cada acción.
  */
 export type FlujoDatos = {
   tipo: TipoDocumento;
@@ -14,6 +16,8 @@ export type FlujoDatos = {
   etapaId: string;
   puedeEditar: boolean;
   puedeComentar: boolean;
+  rol: Rol;
+  esOperadorAsignado: boolean;
 };
 
 /** El atributo `data-flujo` completo (con el espacio delante), listo para pegar dentro de una etiqueta. */
@@ -32,11 +36,35 @@ export function rutaEditable(editable: boolean, ruta: string): string {
   return editable ? ` data-editable="${escapar(ruta)}"` : '';
 }
 
-/** Botones Editar y Versiones del panel de la cabecera (o de la barra de operador, en Growth). Vacío si no se puede editar. */
-export function botonesFlujo(puedeEditarDocumento: boolean): string {
-  if (!puedeEditarDocumento) return '';
-  return `<button type="button" class="cabecera-compartir" id="btn-flujo-editar" aria-pressed="false">Editar</button>
-    <button type="button" class="cabecera-compartir" id="btn-flujo-versiones" aria-haspopup="dialog" aria-controls="dialog-versiones">Versiones</button>`;
+/**
+ * El atributo `data-ancla` (con el espacio delante) sobre una sección, una
+ * tarjeta o un tema del banco de pilares (spec §3, «Anclas»): secciones
+ * `seccion:<id>`, tarjetas la ruta del objeto, temas `tema:<id>`. Vacío si
+ * `anclas` es falso — la vista pública (`/p/...`) nunca la recibe (ruling
+ * del controlador B7: `anclas` es una opción aparte de `editable`, porque el
+ * personal siempre puede comentar aunque no pueda editar en ese momento).
+ */
+export function rutaAncla(anclas: boolean, ancla: string): string {
+  return anclas ? ` data-ancla="${escapar(ancla)}"` : '';
+}
+
+/**
+ * Botones del panel de la cabecera (o de la barra de operador, en Growth):
+ * Editar + Versiones si se puede editar; Comentar (modo anclado) +
+ * Comentarios (panel lateral) si se puede comentar. Los dos pares son
+ * independientes entre sí — puede haber solo edición, solo comentarios, o
+ * ambos, según `puedeEditar`/`puedeComentar` de la etapa (B6/B7).
+ */
+export function botonesFlujo(puedeEditarDocumento: boolean, puedeComentarDocumento = false): string {
+  const editar = puedeEditarDocumento
+    ? `<button type="button" class="cabecera-compartir" id="btn-flujo-editar" aria-pressed="false">Editar</button>
+    <button type="button" class="cabecera-compartir" id="btn-flujo-versiones" aria-haspopup="dialog" aria-controls="dialog-versiones">Versiones</button>`
+    : '';
+  const comentar = puedeComentarDocumento
+    ? `<button type="button" class="cabecera-compartir" id="btn-flujo-comentar" aria-pressed="false">Comentar</button>
+    <button type="button" class="cabecera-compartir" id="btn-flujo-comentarios" aria-haspopup="dialog" aria-controls="dialog-comentarios">Comentarios</button>`
+    : '';
+  return `${editar}${comentar}`;
 }
 
 /** El `<dialog>` de historial de versiones: lo llena `SCRIPT_FLUJO` con un GET al abrirse. */
@@ -46,6 +74,36 @@ export function panelVersiones(): string {
     <div class="dialogo-versiones-lista" id="dialog-versiones-lista" aria-live="polite"></div>
     <p class="panel-estado" id="dialog-versiones-estado" role="status" aria-live="polite"></p>
   </dialog>`;
+}
+
+/**
+ * El panel lateral de comentarios (spec §3, «panel lateral de comentarios»):
+ * un `<dialog>` con el filtro Abiertos/Atendidos/Todos y la lista, que llena
+ * `SCRIPT_FLUJO` con un GET al abrirse (y tras cada acción). Junto a él, el
+ * recuadro flotante de «nuevo comentario» que abre un clic sobre `[data-ancla]`
+ * en modo Comentar: vive fuera del `<dialog>` a propósito, porque se abre
+ * sobre el propio documento, no dentro del panel.
+ */
+export function panelComentarios(): string {
+  return `<dialog class="dialogo-comentarios" id="dialog-comentarios" aria-label="Comentarios">
+    <div class="dialogo-cabecera"><h3>Comentarios</h3><button type="button" class="panel-boton" id="dialog-comentarios-cerrar">Cerrar</button></div>
+    <div class="comentarios-filtros" role="radiogroup" aria-label="Filtrar comentarios">
+      <button type="button" class="filtro-comentarios" data-filtro-comentarios="abierto" aria-pressed="true">Abiertos</button>
+      <button type="button" class="filtro-comentarios" data-filtro-comentarios="atendido" aria-pressed="false">Atendidos</button>
+      <button type="button" class="filtro-comentarios" data-filtro-comentarios="todos" aria-pressed="false">Todos</button>
+    </div>
+    <div class="comentarios-lista" id="comentarios-lista" aria-live="polite"></div>
+    <p class="panel-estado" id="comentarios-estado" role="status" aria-live="polite"></p>
+  </dialog>
+  <div class="recuadro-comentario" id="recuadro-comentario" role="dialog" aria-label="Nuevo comentario" hidden>
+    <p class="recuadro-comentario-ancla" id="recuadro-comentario-ancla"></p>
+    <textarea id="recuadro-comentario-texto" maxlength="2000" aria-label="Escribe tu comentario"></textarea>
+    <div class="panel-filas">
+      <button type="button" class="panel-boton" id="recuadro-comentario-cancelar">Cancelar</button>
+      <button type="button" class="panel-boton panel-primario" id="recuadro-comentario-enviar">Enviar</button>
+    </div>
+    <p class="panel-estado" id="recuadro-comentario-estado" role="status" aria-live="polite"></p>
+  </div>`;
 }
 
 /** Barra fija de abajo del modo edición: «N cambios · Guardar · Descartar». Oculta hasta que se entra en modo edición. */
@@ -107,6 +165,29 @@ export const SCRIPT_FLUJO = `(function () {
   var lista = document.getElementById('dialog-versiones-lista');
   var estadoVersiones = document.getElementById('dialog-versiones-estado');
   var cerrarBtn = document.getElementById('dialog-versiones-cerrar');
+
+  // Modo Comentar (B7, spec §3): mutuamente excluyente con el modo edición.
+  var anclas = document.querySelectorAll('[data-ancla]');
+  var enComentar = false;
+  var comentariosCache = [];
+  var anclaActual = null;
+  var filtroComentarios = 'abierto';
+  var dialogoComentariosAbierto = false;
+  var recuadroAbierto = false;
+
+  var btnComentar = document.getElementById('btn-flujo-comentar');
+  var btnComentarios = document.getElementById('btn-flujo-comentarios');
+  var dialogoComentarios = document.getElementById('dialog-comentarios');
+  var listaComentarios = document.getElementById('comentarios-lista');
+  var estadoComentarios = document.getElementById('comentarios-estado');
+  var cerrarComentariosBtn = document.getElementById('dialog-comentarios-cerrar');
+  var filtrosComentarios = document.querySelectorAll('[data-filtro-comentarios]');
+  var recuadro = document.getElementById('recuadro-comentario');
+  var recuadroAncla = document.getElementById('recuadro-comentario-ancla');
+  var recuadroTexto = document.getElementById('recuadro-comentario-texto');
+  var recuadroEnviar = document.getElementById('recuadro-comentario-enviar');
+  var recuadroCancelar = document.getElementById('recuadro-comentario-cancelar');
+  var recuadroEstado = document.getElementById('recuadro-comentario-estado');
 
   // Todas las funciones se declaran aquí arriba, fuera de cualquier bloque
   // 'if': una function declaration dentro de un bloque no es válida en ES5
@@ -176,6 +257,7 @@ export const SCRIPT_FLUJO = `(function () {
     }
     document.documentElement.classList.add('modo-edicion');
     if (btnEditar) { btnEditar.setAttribute('aria-pressed', 'true'); btnEditar.textContent = 'Salir de editar'; }
+    if (btnComentar) btnComentar.disabled = true;
     if (estadoBarra) estadoBarra.textContent = '';
     if (barra) barra.hidden = false;
     actualizarContador();
@@ -187,6 +269,7 @@ export const SCRIPT_FLUJO = `(function () {
     for (var k = 0; k < editables.length; k++) editables[k].removeAttribute('contenteditable');
     document.documentElement.classList.remove('modo-edicion');
     if (btnEditar) { btnEditar.setAttribute('aria-pressed', 'false'); btnEditar.textContent = 'Editar'; }
+    if (btnComentar) btnComentar.disabled = false;
     if (barra) barra.hidden = true;
   }
 
@@ -330,6 +413,351 @@ export const SCRIPT_FLUJO = `(function () {
     if (dialogoVersiones.close) dialogoVersiones.close(); else dialogoVersiones.removeAttribute('open');
   }
 
+  // ── Modo Comentar (B7, spec §3 «Comentarios anclados») ──────────────────
+  // Mutuamente excluyente con el modo edición (los botones se deshabilitan
+  // entre sí, arriba en entrarEdicion/salirEdicion y aquí abajo). Todas las
+  // funciones, igual que las de edición, se declaran fuera de cualquier
+  // bloque 'if'.
+
+  function elementosDeAncla(ancla) {
+    // Comparación literal del atributo, sin CSS.escape: el valor puede traer
+    // '.' o ':' (rutas y 'seccion:x'), que son válidos dentro de un string
+    // entre comillas en un selector de atributo, pero más simple y a prueba
+    // de motores viejos es recorrer la lista ya capturada al cargar.
+    var out = [];
+    for (var i = 0; i < anclas.length; i++) {
+      if (anclas[i].getAttribute('data-ancla') === ancla) out.push(anclas[i]);
+    }
+    return out;
+  }
+
+  function limpiarMarcadores() {
+    var marcadores = document.querySelectorAll('.marcador-comentario');
+    for (var i = 0; i < marcadores.length; i++) {
+      if (marcadores[i].parentNode) marcadores[i].parentNode.removeChild(marcadores[i]);
+    }
+  }
+
+  // Un marcador con número por cada ancla con comentarios abiertos (de
+  // primer nivel: una respuesta no cuenta aparte). Se recalcula desde cero
+  // en cada carga, así que siempre refleja el estado real sin arrastrar
+  // marcadores viejos.
+  function pintarMarcadores() {
+    limpiarMarcadores();
+    var conteos = {};
+    for (var i = 0; i < comentariosCache.length; i++) {
+      var c = comentariosCache[i];
+      if (c.respuestaDe || c.estado !== 'abierto') continue;
+      conteos[c.ancla] = (conteos[c.ancla] || 0) + 1;
+    }
+    for (var ancla in conteos) {
+      if (!Object.prototype.hasOwnProperty.call(conteos, ancla)) continue;
+      var elementos = elementosDeAncla(ancla);
+      for (var j = 0; j < elementos.length; j++) {
+        var marcador = document.createElement('span');
+        marcador.className = 'marcador-comentario';
+        marcador.setAttribute('aria-hidden', 'true');
+        marcador.textContent = String(conteos[ancla]);
+        elementos[j].appendChild(marcador);
+      }
+    }
+  }
+
+  // Qué botones mostrar por comentario, calculado en el cliente a partir de
+  // flujo.rol/flujo.esOperadorAsignado — el mismo criterio que
+  // puedeCambiarEstadoComentario (src/flujo/comentarios.ts). El servidor
+  // sigue siendo quien de verdad autoriza cada PATCH: esto solo decide la UI.
+  function puedeCambiarEstadoUi(nuevo) {
+    if (flujo.rol === 'cliente') return false;
+    if (flujo.rol === 'admin') return true;
+    return Boolean(flujo.esOperadorAsignado) && nuevo === 'atendido';
+  }
+
+  function fechaCortaComentario(iso) {
+    return String(iso).slice(0, 10);
+  }
+
+  function etiquetaRol(rol) {
+    if (rol === 'admin') return 'Admin';
+    if (rol === 'operador') return 'Operador';
+    return 'Cliente';
+  }
+
+  function crearBotonComentario(texto, claseExtra, alClic) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'panel-boton' + (claseExtra ? ' ' + claseExtra : '');
+    b.textContent = texto;
+    b.addEventListener('click', alClic);
+    return b;
+  }
+
+  function irAAncla(ancla) {
+    var elementos = elementosDeAncla(ancla);
+    if (!elementos.length) return;
+    var el = elementos[0];
+    if (el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('ancla-resaltada');
+    setTimeout(function () { el.classList.remove('ancla-resaltada'); }, 1600);
+    cerrarComentarios();
+  }
+
+  function pintarFilaComentario(c, respuestas) {
+    var fila = document.createElement('div');
+    fila.className = 'comentario-fila';
+
+    var cabeza = document.createElement('div');
+    cabeza.className = 'comentario-cabeza';
+    var autor = document.createElement('span');
+    autor.className = 'comentario-autor';
+    autor.textContent = c.autor + ' · ' + etiquetaRol(c.autorRol);
+    var fecha = document.createElement('span');
+    fecha.className = 'suave';
+    fecha.textContent = fechaCortaComentario(c.creadoEn);
+    cabeza.appendChild(autor);
+    cabeza.appendChild(fecha);
+
+    var texto = document.createElement('p');
+    texto.textContent = c.texto;
+
+    var anclaP = document.createElement('p');
+    anclaP.className = 'suave comentario-ancla';
+    anclaP.textContent = c.ancla;
+
+    var acciones = document.createElement('div');
+    acciones.className = 'panel-filas';
+
+    if (c.ancla !== 'general' && elementosDeAncla(c.ancla).length) {
+      acciones.appendChild(crearBotonComentario('Ir', '', function () { irAAncla(c.ancla); }));
+    }
+
+    var areaRespuesta = null;
+    if (flujo.puedeComentar) {
+      areaRespuesta = document.createElement('div');
+      areaRespuesta.className = 'respuesta-area';
+      areaRespuesta.hidden = true;
+      var campoRespuesta = document.createElement('textarea');
+      campoRespuesta.maxLength = 2000;
+      campoRespuesta.setAttribute('aria-label', 'Responder');
+      var enviarRespuestaBtn = crearBotonComentario('Enviar', 'panel-primario', function () {
+        var texto2 = campoRespuesta.value.trim();
+        if (!texto2) return;
+        enviarRespuestaBtn.disabled = true;
+        fetch('/api/comentarios/' + c.id + '/respuestas', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texto: texto2 }),
+        }).then(function (res) { return res.json(); }).then(function (b) {
+          enviarRespuestaBtn.disabled = false;
+          if (b && b.ok) { campoRespuesta.value = ''; cargarComentarios(); }
+          else if (estadoComentarios) estadoComentarios.textContent = (b && b.errores && b.errores[0]) || 'No se pudo responder.';
+        }).catch(function () {
+          enviarRespuestaBtn.disabled = false;
+          if (estadoComentarios) estadoComentarios.textContent = 'Sin conexión.';
+        });
+      });
+      areaRespuesta.appendChild(campoRespuesta);
+      areaRespuesta.appendChild(enviarRespuestaBtn);
+      acciones.appendChild(crearBotonComentario('Responder', '', function () { areaRespuesta.hidden = !areaRespuesta.hidden; }));
+    }
+
+    function botonEstado(destino, textoBoton) {
+      if (!puedeCambiarEstadoUi(destino)) return;
+      acciones.appendChild(crearBotonComentario(textoBoton, destino === 'descartado' ? 'panel-peligro' : '', function () {
+        fetch('/api/comentarios/' + c.id, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ estado: destino }),
+        }).then(function (res) { return res.json(); }).then(function (b) {
+          if (b && b.ok) cargarComentarios();
+          else if (estadoComentarios) estadoComentarios.textContent = (b && b.errores && b.errores[0]) || 'No se pudo cambiar el estado.';
+        }).catch(function () { if (estadoComentarios) estadoComentarios.textContent = 'Sin conexión.'; });
+      }));
+    }
+    if (c.estado === 'abierto') {
+      botonEstado('atendido', 'Marcar atendido');
+      botonEstado('descartado', 'Descartar');
+    } else {
+      botonEstado('abierto', 'Reabrir');
+    }
+
+    fila.appendChild(cabeza);
+    fila.appendChild(texto);
+    fila.appendChild(anclaP);
+    fila.appendChild(acciones);
+    if (areaRespuesta) fila.appendChild(areaRespuesta);
+    if (listaComentarios) listaComentarios.appendChild(fila);
+
+    for (var r = 0; r < respuestas.length; r++) {
+      var resp = document.createElement('div');
+      resp.className = 'comentario-fila comentario-respuesta';
+      var cabezaR = document.createElement('div');
+      cabezaR.className = 'comentario-cabeza';
+      var autorR = document.createElement('span');
+      autorR.className = 'comentario-autor';
+      autorR.textContent = respuestas[r].autor + ' · ' + etiquetaRol(respuestas[r].autorRol);
+      var fechaR = document.createElement('span');
+      fechaR.className = 'suave';
+      fechaR.textContent = fechaCortaComentario(respuestas[r].creadoEn);
+      cabezaR.appendChild(autorR);
+      cabezaR.appendChild(fechaR);
+      var textoR = document.createElement('p');
+      textoR.textContent = respuestas[r].texto;
+      resp.appendChild(cabezaR);
+      resp.appendChild(textoR);
+      if (listaComentarios) listaComentarios.appendChild(resp);
+    }
+  }
+
+  function pintarListaComentarios() {
+    if (!listaComentarios) return;
+    listaComentarios.textContent = '';
+
+    var principales = [];
+    var porPadre = {};
+    for (var i = 0; i < comentariosCache.length; i++) {
+      var c = comentariosCache[i];
+      if (c.respuestaDe) {
+        porPadre[c.respuestaDe] = porPadre[c.respuestaDe] || [];
+        porPadre[c.respuestaDe].push(c);
+      } else {
+        principales.push(c);
+      }
+    }
+    // Los de ancla 'general' salen arriba (spec §3); el resto, del más al
+    // menos reciente.
+    principales.sort(function (a, b) {
+      if (a.ancla === 'general' && b.ancla !== 'general') return -1;
+      if (b.ancla === 'general' && a.ancla !== 'general') return 1;
+      return new Date(b.creadoEn).getTime() - new Date(a.creadoEn).getTime();
+    });
+
+    var filtrados = principales.filter(function (c) {
+      if (filtroComentarios === 'todos') return true;
+      if (filtroComentarios === 'abierto') return c.estado === 'abierto';
+      return c.estado !== 'abierto';
+    });
+
+    if (!filtrados.length) {
+      var vacio = document.createElement('p');
+      vacio.className = 'suave';
+      vacio.textContent = 'No hay comentarios aquí.';
+      listaComentarios.appendChild(vacio);
+      return;
+    }
+
+    for (var j = 0; j < filtrados.length; j++) {
+      var respuestas = (porPadre[filtrados[j].id] || []).slice().sort(function (a, b) {
+        return new Date(a.creadoEn).getTime() - new Date(b.creadoEn).getTime();
+      });
+      pintarFilaComentario(filtrados[j], respuestas);
+    }
+  }
+
+  function cargarComentarios() {
+    fetch('/api/comentarios?etapa=' + encodeURIComponent(flujo.etapaId))
+      .then(function (res) { return res.json(); })
+      .then(function (b) {
+        comentariosCache = (b && b.ok && b.comentarios) || [];
+        pintarMarcadores();
+        pintarListaComentarios();
+      })
+      .catch(function () {
+        if (estadoComentarios) estadoComentarios.textContent = 'Sin conexión.';
+      });
+  }
+
+  function abrirComentarios() {
+    dialogoComentariosAbierto = true;
+    if (estadoComentarios) estadoComentarios.textContent = '';
+    if (dialogoComentarios.showModal) dialogoComentarios.showModal(); else dialogoComentarios.setAttribute('open', 'open');
+    cargarComentarios();
+  }
+
+  function cerrarComentarios() {
+    dialogoComentariosAbierto = false;
+    if (!dialogoComentarios) return;
+    if (dialogoComentarios.close) dialogoComentarios.close(); else dialogoComentarios.removeAttribute('open');
+  }
+
+  function posicionarRecuadro(el) {
+    // Sin getBoundingClientRect (o sin .style, en las pruebas con fake-dom)
+    // el recuadro se abre igual, solo que sin reposicionarse junto al
+    // elemento — nunca hace falta para construir o mandar el comentario.
+    if (!recuadro || !recuadro.style || !el.getBoundingClientRect) return;
+    var r = el.getBoundingClientRect();
+    var altoVentana = (window && window.innerHeight) || 800;
+    var anchoVentana = (window && window.innerWidth) || 1200;
+    var top = Math.min(altoVentana - 20, Math.max(20, r.bottom + 10));
+    var left = Math.min(anchoVentana - 20, Math.max(20, r.left));
+    recuadro.style.top = top + 'px';
+    recuadro.style.left = left + 'px';
+  }
+
+  function abrirRecuadro(el) {
+    if (!recuadro || !recuadroTexto) return;
+    anclaActual = el.getAttribute('data-ancla');
+    recuadroAbierto = true;
+    recuadro.hidden = false;
+    if (recuadroAncla) recuadroAncla.textContent = anclaActual;
+    recuadroTexto.value = '';
+    if (recuadroEstado) recuadroEstado.textContent = '';
+    posicionarRecuadro(el);
+    recuadroTexto.focus();
+  }
+
+  function cerrarRecuadro() {
+    recuadroAbierto = false;
+    if (recuadro) recuadro.hidden = true;
+    anclaActual = null;
+  }
+
+  function enviarNuevoComentario() {
+    if (!recuadroTexto || !anclaActual) return;
+    var texto = recuadroTexto.value.trim();
+    if (!texto) { if (recuadroEstado) recuadroEstado.textContent = 'Escribe el comentario.'; return; }
+    if (recuadroEnviar) recuadroEnviar.disabled = true;
+    fetch('/api/comentarios', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ etapaId: flujo.etapaId, ancla: anclaActual, texto: texto }),
+    }).then(function (res) { return res.json(); })
+      .then(function (b) {
+        if (recuadroEnviar) recuadroEnviar.disabled = false;
+        if (b && b.ok) {
+          cerrarRecuadro();
+          cargarComentarios();
+        } else if (recuadroEstado) {
+          recuadroEstado.textContent = (b && b.errores && b.errores[0]) || 'No se pudo enviar.';
+        }
+      }).catch(function () {
+        if (recuadroEnviar) recuadroEnviar.disabled = false;
+        if (recuadroEstado) recuadroEstado.textContent = 'Sin conexión.';
+      });
+  }
+
+  function entrarComentar() {
+    if (enComentar || !flujo.puedeComentar || enEdicion) return;
+    enComentar = true;
+    document.documentElement.classList.add('modo-comentar');
+    if (btnComentar) { btnComentar.setAttribute('aria-pressed', 'true'); btnComentar.textContent = 'Salir de comentar'; }
+    if (btnEditar) btnEditar.disabled = true;
+  }
+
+  function salirComentar() {
+    if (!enComentar) return;
+    enComentar = false;
+    document.documentElement.classList.remove('modo-comentar');
+    if (btnComentar) { btnComentar.setAttribute('aria-pressed', 'false'); btnComentar.textContent = 'Comentar'; }
+    if (btnEditar) btnEditar.disabled = false;
+    cerrarRecuadro();
+  }
+
+  // Delegado en document: los elementos [data-ancla] no cambian, pero así
+  // también funciona sobre cualquier hijo que se pinte después (marcadores).
+  function alClicDocumento(e) {
+    if (!enComentar) return;
+    var el = e.target && e.target.closest ? e.target.closest('[data-ancla]') : null;
+    if (!el) return;
+    e.preventDefault();
+    abrirRecuadro(el);
+  }
+
   if (btnEditar) {
     btnEditar.addEventListener('click', function () {
       if (enEdicion) salirConfirmando();
@@ -339,14 +767,19 @@ export const SCRIPT_FLUJO = `(function () {
   if (btnGuardar) btnGuardar.addEventListener('click', guardar);
   if (btnDescartar) btnDescartar.addEventListener('click', descartar);
 
-  // Un solo dueño de Escape: si el diálogo de versiones está abierto, lo
-  // cierra a él y no toca el modo edición aunque esté encendido debajo —
-  // antes, el propio <dialog> y este listener competían por la misma tecla
-  // y cerrar el diálogo también disparaba «¿salir sin guardar?».
+  // Un solo dueño de Escape: el elemento más «encima» en pantalla se cierra
+  // primero (recuadro de nuevo comentario, luego el panel de comentarios,
+  // luego el de versiones) y solo si nada de eso está abierto se sale del
+  // modo que esté activo. Antes, el propio <dialog> y este listener
+  // competían por la misma tecla y cerrar el diálogo también disparaba
+  // «¿salir sin guardar?».
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
+    if (recuadroAbierto) { cerrarRecuadro(); return; }
+    if (dialogoComentariosAbierto) { cerrarComentarios(); return; }
     if (dialogoAbierto) { cerrarVersiones(); return; }
-    if (enEdicion) salirConfirmando();
+    if (enEdicion) { salirConfirmando(); return; }
+    if (enComentar) { salirComentar(); return; }
   });
 
   if (dialogoVersiones) dialogoVersiones.addEventListener('close', function () { dialogoAbierto = false; });
@@ -355,4 +788,36 @@ export const SCRIPT_FLUJO = `(function () {
     btnVersiones.addEventListener('click', abrirVersiones);
     if (cerrarBtn) cerrarBtn.addEventListener('click', cerrarVersiones);
   }
+
+  if (btnComentar) {
+    btnComentar.addEventListener('click', function () {
+      if (enComentar) salirComentar(); else entrarComentar();
+    });
+  }
+  if (recuadroEnviar) recuadroEnviar.addEventListener('click', enviarNuevoComentario);
+  if (recuadroCancelar) recuadroCancelar.addEventListener('click', cerrarRecuadro);
+  document.addEventListener('click', alClicDocumento);
+
+  if (dialogoComentarios && btnComentarios) {
+    btnComentarios.addEventListener('click', abrirComentarios);
+    if (cerrarComentariosBtn) cerrarComentariosBtn.addEventListener('click', cerrarComentarios);
+  }
+  if (dialogoComentarios) dialogoComentarios.addEventListener('close', function () { dialogoComentariosAbierto = false; });
+
+  for (var fc = 0; fc < filtrosComentarios.length; fc++) {
+    (function (boton) {
+      boton.addEventListener('click', function () {
+        filtroComentarios = boton.getAttribute('data-filtro-comentarios');
+        for (var x = 0; x < filtrosComentarios.length; x++) {
+          filtrosComentarios[x].setAttribute('aria-pressed', String(filtrosComentarios[x] === boton));
+        }
+        pintarListaComentarios();
+      });
+    })(filtrosComentarios[fc]);
+  }
+
+  // Los marcadores (y la caché para el panel) se cargan al entrar a la
+  // página, no solo al abrir el panel: spec §3, «los elementos con
+  // comentarios abiertos llevan un marcador», sin condicionarlo al modo.
+  if (flujo.puedeComentar) cargarComentarios();
 })();`;

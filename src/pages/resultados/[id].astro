@@ -38,6 +38,7 @@ if (operable) {
       tipo: 'research', id: r.id, etapaId: etapa.id,
       puedeEditar: calcularPuedeEditar(usuario.rol, esOperadorAsignado, etapa.estado),
       puedeComentar: puedeComentar(usuario.rol, esOperadorAsignado, etapa.etapa),
+      rol: usuario.rol, esOperadorAsignado,
     };
   }
 }
@@ -59,6 +60,10 @@ const html = renderizarInvestigacion(
   // arreglos 1, punto 9.
   Boolean(flujo?.puedeEditar),
   flujo,
+  // `data-ancla` en la vista interna, nunca en la pública/portal — igual
+  // que `data-editable`, pero gobernado por `operable` (B7, spec §3): el
+  // personal siempre puede comentar aunque no pueda editar en este momento.
+  Boolean(flujo),
 );
 ---
 

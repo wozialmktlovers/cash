@@ -1,7 +1,7 @@
 import { FUNCIONES, FORMATOS, ESTADOS_TEMA, type MapaPilares, type PilarMapa, type Tema, type EstadoTema, type Estrategia } from '@/pilares/schemas';
 import type { AvanceTema } from '@/pilares/avance';
 import { escapar, encabezadoSeccion } from '@/render/editorial/comunes';
-import { rutaEditable } from '@/render/editorial/flujo-cliente';
+import { rutaEditable, rutaAncla } from '@/render/editorial/flujo-cliente';
 import { normalizar } from '@/lib/ui/buscar';
 import { COLOR_PILAR, ETIQUETA_FUNCION, ETIQUETA_FORMATO } from './secciones';
 
@@ -29,7 +29,7 @@ function contarAvance(temas: Tema[], avance?: Record<string, AvanceTema>): { tot
   return { total: temas.length, hechos };
 }
 
-function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: boolean, avance?: Record<string, AvanceTema>, ruta?: string): string {
+function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: boolean, avance?: Record<string, AvanceTema>, ruta?: string, anclas = false): string {
   const av = avance?.[t.id];
   const estado: EstadoTema = av?.estado ?? 'pendiente';
   const busqueda = normalizar([t.id, t.texto, subNombre, ETIQUETA_FUNCION[t.funcion], ETIQUETA_FORMATO[t.formato].texto].join(' '));
@@ -42,6 +42,10 @@ function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: bool
     `data-busqueda="${escapar(busqueda)}"`,
   ];
   if (interna) atributos.push(`data-estado="${estado}"`);
+  // Ancla del tema (B7, spec §3: `tema:<id>`), no la ruta del JSON: los
+  // temas del banco se identifican por su código (P2-S1-07), estable aunque
+  // el mapa se regenere, a diferencia de su índice dentro del arreglo.
+  if (anclas) atributos.push(`data-ancla="${escapar(`tema:${t.id}`)}"`);
 
   const controles = interna
     ? `<div class="tema-controles">
@@ -67,7 +71,7 @@ function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: bool
  * cual se guarda), no `p.numero - 1`: aunque hoy coinciden, la ruta de
  * `data-editable` tiene que navegar el JSON de verdad, no el número visible.
  */
-function bloquePilarOk(p: Extract<PilarMapa, { estado: 'ok' }>, indicePilar: number, ep: Estrategia['pilares'][number], interna: boolean, avance?: Record<string, AvanceTema>, editable = false): string {
+function bloquePilarOk(p: Extract<PilarMapa, { estado: 'ok' }>, indicePilar: number, ep: Estrategia['pilares'][number], interna: boolean, avance?: Record<string, AvanceTema>, editable = false, anclas = false): string {
   const temas = p.subcategorias.flatMap((s) => s.temas);
   return `<details class="pilar-bloque" open data-pilar="${p.numero}" style="--color-pilar:${COLOR_PILAR[p.numero - 1]}">
     <summary class="pilar-cabecera">
@@ -80,7 +84,7 @@ function bloquePilarOk(p: Extract<PilarMapa, { estado: 'ok' }>, indicePilar: num
     </div>
     ${p.subcategorias.map((s, i) => `<div class="panel-tema panel-subcat" role="tabpanel" id="panel-p${p.numero}-s${i + 1}" aria-labelledby="tab-p${p.numero}-s${i + 1}">
       <h4 class="panel-titulo">${escapar(s.nombre)}</h4>
-      <div class="rejilla dos">${s.temas.map((t, j) => tarjetaTema(t, p.numero, s.nombre, interna, avance, editable ? `pilares.${indicePilar}.subcategorias.${i}.temas.${j}.texto` : undefined)).join('')}</div>
+      <div class="rejilla dos">${s.temas.map((t, j) => tarjetaTema(t, p.numero, s.nombre, interna, avance, editable ? `pilares.${indicePilar}.subcategorias.${i}.temas.${j}.texto` : undefined, anclas)).join('')}</div>
     </div>`).join('')}
   </details>`;
 }
@@ -174,19 +178,21 @@ export function seccionBanco(o: {
   avance?: Record<string, AvanceTema>;
   resultId?: string;
   editable?: boolean;
+  anclas?: boolean;
 }): string {
   const { mapa, interna } = o;
   const editable = Boolean(o.editable);
+  const anclas = Boolean(o.anclas);
   const totalTemas = mapa.pilares.reduce((n, p) => n + (p.estado === 'ok' ? p.subcategorias.reduce((m, s) => m + s.temas.length, 0) : 0), 0);
 
   const bloques = [1, 2, 3, 4, 5].map((n) => {
     const indicePilar = mapa.pilares.findIndex((x) => x.numero === n);
     const p = indicePilar >= 0 ? mapa.pilares[indicePilar] : { numero: n, estado: 'vacio' as const, razon: 'No se generó este pilar.' };
     const ep = mapa.estrategia.pilares[n - 1];
-    return p.estado === 'ok' ? bloquePilarOk(p, indicePilar, ep, interna, o.avance, editable) : bloquePilarVacio(p, ep, interna, o.clienteId);
+    return p.estado === 'ok' ? bloquePilarOk(p, indicePilar, ep, interna, o.avance, editable, anclas) : bloquePilarVacio(p, ep, interna, o.clienteId);
   }).join('');
 
-  return `<section class="seccion alterna" id="banco" data-seccion${interna && o.resultId ? ` data-result-id="${escapar(o.resultId)}"` : ''}>
+  return `<section class="seccion alterna" id="banco" data-seccion${rutaAncla(anclas, 'seccion:banco')}${interna && o.resultId ? ` data-result-id="${escapar(o.resultId)}"` : ''}>
     ${encabezadoSeccion('06', 'Banco de temas', 'Los 300 temas, filtrables por pilar, subcategoría, función y formato.')}
     ${herramientas(mapa, interna, totalTemas)}
     ${interna ? avanceMini(mapa, o.avance) : ''}

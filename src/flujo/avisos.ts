@@ -17,6 +17,7 @@ export type EventoAviso =
   | 'reabierta'
   | 'aprobada'
   | 'comentario_cliente'
+  | 'respuesta_cliente'
   | 'cliente_reasignado'
   | 'entregable_generado'
   | 'job_fallido';
@@ -51,6 +52,11 @@ function candidatosDe(evento: EventoAviso, ctx: ContextoDestinatarios): (Usuario
       return ctx.etapaVisibleCliente ? [ctx.operador, ...ctx.usuariosCliente] : [ctx.operador];
     case 'comentario_cliente':
       return [ctx.operador, ...ctx.admins];
+    case 'respuesta_cliente':
+      // El único destinatario es quien abrió el hilo (el autor del
+      // comentario padre): se pasa en `ctx.usuariosCliente` con esa única
+      // entrada, igual que `aprobada` reutiliza el mismo campo.
+      return ctx.usuariosCliente;
     case 'entregable_generado':
     case 'job_fallido':
       return [ctx.autor];
@@ -106,6 +112,11 @@ export function textoAviso(evento: EventoAviso, datos: DatosAviso): { titulo: st
       return {
         titulo: `${cliente} comentó en ${etapa}`,
         texto: `${cliente} dejó un comentario en ${etapa}. Revísalo cuando puedas.`,
+      };
+    case 'respuesta_cliente':
+      return {
+        titulo: `Nueva respuesta en ${etapa}`,
+        texto: `${autor ?? 'El equipo'} respondió tu observación en ${etapa}.`,
       };
     case 'cliente_reasignado':
       return {
@@ -244,5 +255,39 @@ export async function avisarReasignacion(o: { actorId: string; nuevoOperadorId: 
     'cliente_reasignado',
     { admins: [], operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false, actorId: o.actorId, datos: { cliente: o.cliente, etapa: '' } },
     o.enlace,
+  );
+}
+
+/** Aviso de un comentario del cliente (B7, spec §3): al operador asignado y a los admins, sin incluir a quien comentó (el cliente nunca se avisa a sí mismo). */
+export async function avisarComentarioCliente(o: {
+  actorId: string; clientId: string; operadorId: string | null; cliente: string; etapa: string; enlace: string;
+}): Promise<void> {
+  const [admins, operador] = await Promise.all([adminsActivos(), usuarioPorId(o.operadorId)]);
+  await notificar(
+    'comentario_cliente',
+    { admins, operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false, actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa } },
+    o.enlace,
+  );
+}
+
+/**
+ * Aviso de una respuesta del equipo a un comentario que dejó el cliente
+ * (B7, spec §3 «Responder»; spec §4 «Actividad reciente»): solo a quien
+ * escribió el comentario original, y solo si sigue activo. El enlace es
+ * siempre `/portal` (lo fija `notificar` para cualquier destinatario con rol
+ * `cliente`), así que aquí no hace falta pasarlo.
+ */
+export async function avisarRespuestaCliente(o: {
+  actorId: string; autorComentarioId: string; cliente: string; etapa: string; autor: string;
+}): Promise<void> {
+  const autorComentario = await usuarioPorId(o.autorComentarioId);
+  if (!autorComentario || autorComentario.rol !== 'cliente') return;
+  await notificar(
+    'respuesta_cliente',
+    {
+      admins: [], operador: null, autor: null, usuariosCliente: [autorComentario], etapaVisibleCliente: false,
+      actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa, autor: o.autor },
+    },
+    '/portal',
   );
 }

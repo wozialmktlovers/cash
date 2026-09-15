@@ -93,6 +93,10 @@ export const NAVEGACION_GROWTH = `
     // (contenteditable), 'f'/'0'/'+'/'-' son texto, no atajos de la barra.
     if(e.target && e.target.isContentEditable) return;
     if(document.documentElement.classList.contains('modo-edicion')) return;
+    // Modo Comentar (B7): mismo criterio, aunque el recuadro flotante ya se
+    // filtra arriba por ser un <textarea> — cubre además cualquier otra tecla
+    // mientras se está anotando el documento.
+    if(document.documentElement.classList.contains('modo-comentar')) return;
     if(e.key==='+'||e.key==='='){e.preventDefault();moverEscala(1);}
     if(e.key==='-'||e.key==='_'){e.preventDefault();moverEscala(-1);}
     if(e.key==='0'){e.preventDefault();p=0;aplicarEscala();}

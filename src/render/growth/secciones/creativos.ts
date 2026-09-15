@@ -1,5 +1,5 @@
 import { escapar, cabeceraSeccion, hueco } from './comunes';
-import { rutaEditable } from '@/render/editorial/flujo-cliente';
+import { rutaEditable, rutaAncla } from '@/render/editorial/flujo-cliente';
 import type { UrlEtiquetada } from '@/growth/utm';
 import { RATIO_POR_FORMATO, GRUPOS, FORMATOS, type Growth, type Creativo } from '@/growth/schemas';
 
@@ -38,6 +38,7 @@ export function seccionCreativos(
   huecos: Record<string, string>,
   urls: UrlEtiquetada[] = [],
   editable = false,
+  anclas = false,
 ): string {
   // Cada pieza lleva su URL etiquetada al lado. Quien produce el creativo no
   // debería tener que saltar a la sección de trazabilidad para encontrarla:
@@ -67,7 +68,7 @@ export function seccionCreativos(
            <div class="kv"><div class="kv-k">Opción B</div><div class="copy"${rutaEditable(editable, `creativos.${indiceC}.copyB`)}>${escapar(c.copyB)}</div></div>`
         : `<p class="tiny" style="margin-top:var(--e1);">Sin copy: ${escapar(razon)}</p>`;
       const url = urlPorClave.get(`g${grupo}_${formato}`);
-      return `<div class="fmt">
+      return `<div class="fmt"${indiceC !== undefined ? rutaAncla(anclas, `creativos.${indiceC}`) : ''}>
         <div class="fmt-hd">
           <div class="${piezas.length > 1 ? 'slots-car' : 'slots'}">${piezas.map((pz) => `
             <div class="slot ar-${escapar(pz.ratio)}">

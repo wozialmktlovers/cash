@@ -18,6 +18,8 @@ export type OpcionesPilares = {
   resultId?: string;
   /** Solo en la vista interna: marca `data-editable` en el texto de la estrategia y del banco. */
   editable?: boolean;
+  /** Solo en la vista interna: marca `data-ancla` en secciones, tarjetas y temas (B7, spec §3). Nunca en `/p/...`. */
+  anclas?: boolean;
   flujo?: FlujoDatos;
 };
 
@@ -51,15 +53,16 @@ export function renderizarPilares(mapa: MapaPilares, meta: MetaPilares, opciones
     : null;
 
   const editable = Boolean(opciones?.editable);
+  const anclas = Boolean(opciones?.anclas);
 
   const cuerpo = [
-    seccionPortada({ cliente: meta.cliente, fecha: meta.fecha, resumen: mapa.estrategia.resumen, totalTemas: temas.length, avanceGlobal, editable }),
-    seccionPartida(mapa.estrategia, editable),
-    seccionPrincipios(mapa.estrategia, editable),
-    seccionPilares(mapa.estrategia, editable),
-    seccionMix(mapa.estrategia, interna, interna ? mapa.revision.mixReal : null, interna ? mapa.revision.fueraDeMargen : [], editable),
-    seccionConversion(mapa.estrategia, editable),
-    seccionBanco({ mapa, interna, clienteId: opciones?.operador?.clienteId, avance: opciones?.avance, resultId: opciones?.resultId, editable }),
+    seccionPortada({ cliente: meta.cliente, fecha: meta.fecha, resumen: mapa.estrategia.resumen, totalTemas: temas.length, avanceGlobal, editable, anclas }),
+    seccionPartida(mapa.estrategia, editable, anclas),
+    seccionPrincipios(mapa.estrategia, editable, anclas),
+    seccionPilares(mapa.estrategia, editable, anclas),
+    seccionMix(mapa.estrategia, interna, interna ? mapa.revision.mixReal : null, interna ? mapa.revision.fueraDeMargen : [], editable, anclas),
+    seccionConversion(mapa.estrategia, editable, anclas),
+    seccionBanco({ mapa, interna, clienteId: opciones?.operador?.clienteId, avance: opciones?.avance, resultId: opciones?.resultId, editable, anclas }),
     seccionCierre(mapa.estrategia, interna, editable),
   ].join('\n');
 

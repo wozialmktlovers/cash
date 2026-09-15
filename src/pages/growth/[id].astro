@@ -42,6 +42,7 @@ if (operable) {
       tipo: 'growth', id: r.id, etapaId: etapa.id,
       puedeEditar: calcularPuedeEditar(usuario.rol, esOperadorAsignado, etapa.estado),
       puedeComentar: puedeComentar(usuario.rol, esOperadorAsignado, etapa.etapa),
+      rol: usuario.rol, esOperadorAsignado,
     };
   }
 }
@@ -59,7 +60,7 @@ const html = renderizarManual(
     ? barraOperador({
         clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
         version: r.version, tipo: 'growth', tokenActivo: activo?.token ?? null, base,
-      }, Boolean(flujo?.puedeEditar))
+      }, Boolean(flujo?.puedeEditar), Boolean(flujo?.puedeComentar))
     : undefined,
   // No basta con `operable`: un operador viendo la etapa en revisión es
   // operable, pero no puede editar — B6, ronda de arreglos 1, punto 9.

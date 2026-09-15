@@ -24,6 +24,7 @@ export function renderizarInvestigacion(
   operador?: OpcionesBarra,
   editable = false,
   flujo?: FlujoDatos,
+  anclas = false,
 ): string {
   // No basta con `estado === 'ok'`: los datos guardados pudieron venir de un
   // esquema anterior (v1, sin `cifras`) o llegar corruptos. Si no cumplen el
@@ -44,16 +45,16 @@ export function renderizarInvestigacion(
 
   const cuerpo = lectura
     ? [
-        seccionPortada({ eyebrow, titular: lectura.portada.titular, resumen: lectura.portada.resumen, cifras: lectura.cifras, conIndice: true, editable }),
-        seccionDescubrimos(lectura, editable),
-        seccionClienteIdeal(lectura, editable),
-        seccionRecomendamos(lectura, editable),
-        seccionDetalle(inv, meta.cliente, '04', editable),
+        seccionPortada({ eyebrow, titular: lectura.portada.titular, resumen: lectura.portada.resumen, cifras: lectura.cifras, conIndice: true, editable, anclas }),
+        seccionDescubrimos(lectura, editable, anclas),
+        seccionClienteIdeal(lectura, editable, anclas),
+        seccionRecomendamos(lectura, editable, anclas),
+        seccionDetalle(inv, meta.cliente, '04', editable, anclas),
       ].join('\n')
     : [
         seccionPortada({ eyebrow, titular: meta.cliente, resumen: meta.giro, cifras: [], conIndice: false, editable: false }),
-        sintesisEditorial(sintesis, '01', editable),
-        seccionDetalle(inv, meta.cliente, numDetalleRespaldo, editable),
+        sintesisEditorial(sintesis, '01', editable, anclas),
+        seccionDetalle(inv, meta.cliente, numDetalleRespaldo, editable, anclas),
       ].join('\n');
 
   return envolverDocumento({

@@ -1,7 +1,7 @@
 import type { Lectura } from '@/research/schemas';
 import { iniciales } from '@/lib/ui/cliente-visual';
 import { escapar, encabezadoSeccion } from './comunes';
-import { rutaEditable } from '@/render/editorial/flujo-cliente';
+import { rutaEditable, rutaAncla } from '@/render/editorial/flujo-cliente';
 
 const ETIQUETA: Record<Lectura['descubrimos'][number]['tipo'], string> = {
   a_favor: 'A tu favor',
@@ -16,9 +16,10 @@ function listaEditable(items: string[], editable: boolean, ruta: (indice: number
 }
 
 export function seccionPortada(o: {
-  eyebrow: string; titular: string; resumen: string; cifras: Lectura['cifras']; conIndice: boolean; editable?: boolean;
+  eyebrow: string; titular: string; resumen: string; cifras: Lectura['cifras']; conIndice: boolean; editable?: boolean; anclas?: boolean;
 }): string {
   const editable = o.editable ?? false;
+  const anclas = o.anclas ?? false;
   const cifras = o.cifras.length
     ? `<div class="cifras">${o.cifras.map((c) => `<div class="cifra-tarjeta ${escapar(c.tono)} aparece">
         <span class="cifra-valor">${escapar(c.valor)}</span>
@@ -31,7 +32,7 @@ export function seccionPortada(o: {
         <a href="#recomendamos">Qué te recomendamos</a><a href="#detalle">Detalle</a>
       </nav>`
     : '';
-  return `<section class="portada" id="inicio">
+  return `<section class="portada" id="inicio"${rutaAncla(anclas, 'seccion:inicio')}>
     <div class="portada-texto">
       <div class="pila"><p class="eyebrow">${escapar(o.eyebrow)}</p><h1${rutaEditable(editable, 'lectura.datos.portada.titular')}>${escapar(o.titular)}</h1></div>
       <p class="resumen"${rutaEditable(editable, 'lectura.datos.portada.resumen')}>${escapar(o.resumen)}</p>
@@ -41,11 +42,11 @@ export function seccionPortada(o: {
   </section>`;
 }
 
-export function seccionDescubrimos(l: Lectura, editable = false): string {
-  return `<section class="seccion" id="descubrimos" data-seccion>
+export function seccionDescubrimos(l: Lectura, editable = false, anclas = false): string {
+  return `<section class="seccion" id="descubrimos" data-seccion${rutaAncla(anclas, 'seccion:descubrimos')}>
     ${encabezadoSeccion('01', 'Qué descubrimos', 'Lo más importante de la investigación, en pocas palabras.')}
     <div class="rejilla dos">
-      ${l.descubrimos.map((d, i) => `<article class="tarjeta hallazgo aparece">
+      ${l.descubrimos.map((d, i) => `<article class="tarjeta hallazgo aparece"${rutaAncla(anclas, `lectura.datos.descubrimos.${i}`)}>
         <span class="etiqueta ${escapar(d.tipo)}">${ETIQUETA[d.tipo]}</span>
         <h3${rutaEditable(editable, `lectura.datos.descubrimos.${i}.titulo`)}>${escapar(d.titulo)}</h3>
         <p${rutaEditable(editable, `lectura.datos.descubrimos.${i}.resumen`)}>${escapar(d.resumen)}</p>
@@ -55,9 +56,9 @@ export function seccionDescubrimos(l: Lectura, editable = false): string {
   </section>`;
 }
 
-export function seccionClienteIdeal(l: Lectura, editable = false): string {
+export function seccionClienteIdeal(l: Lectura, editable = false, anclas = false): string {
   const c = l.clienteIdeal;
-  return `<section class="seccion alterna" id="cliente-ideal" data-seccion>
+  return `<section class="seccion alterna" id="cliente-ideal" data-seccion${rutaAncla(anclas, 'seccion:cliente-ideal')}>
     ${encabezadoSeccion('02', 'Tu cliente ideal', 'A quién le vendes y qué la mueve.')}
     <div class="rejilla tres">
       <div class="tarjeta aparece"><h3>Quién es</h3><p${rutaEditable(editable, 'lectura.datos.clienteIdeal.quienEs')}>${escapar(c.quienEs)}</p></div>
@@ -65,7 +66,7 @@ export function seccionClienteIdeal(l: Lectura, editable = false): string {
       <div class="tarjeta aparece"><h3>Lo que quiere lograr</h3>${listaEditable(c.quiereLograr, editable, (i) => `lectura.datos.clienteIdeal.quiereLograr.${i}`)}</div>
     </div>
     <div class="rejilla dos">
-      ${c.perfiles.map((p, i) => `<article class="tarjeta perfil${i === 0 ? ' primero' : ''} aparece">
+      ${c.perfiles.map((p, i) => `<article class="tarjeta perfil${i === 0 ? ' primero' : ''} aparece"${rutaAncla(anclas, `lectura.datos.clienteIdeal.perfiles.${i}`)}>
         <span class="avatar" aria-hidden="true">${escapar(iniciales(p.nombre))}</span>
         <div class="cuerpo">
           <h3${rutaEditable(editable, `lectura.datos.clienteIdeal.perfiles.${i}.nombre`)}>${escapar(p.nombre)}</h3>
@@ -78,15 +79,15 @@ export function seccionClienteIdeal(l: Lectura, editable = false): string {
   </section>`;
 }
 
-export function seccionRecomendamos(l: Lectura, editable = false): string {
+export function seccionRecomendamos(l: Lectura, editable = false, anclas = false): string {
   const r = l.recomendamos;
   const pendientes = l.faltaConfirmar.length
     ? `<div class="pila aparece"><h3 class="subtitulo">Lo que falta confirmar</h3><div class="suave">${listaEditable(l.faltaConfirmar, editable, (i) => `lectura.datos.faltaConfirmar.${i}`)}</div></div>`
     : '';
-  return `<section class="seccion" id="recomendamos" data-seccion>
+  return `<section class="seccion" id="recomendamos" data-seccion${rutaAncla(anclas, 'seccion:recomendamos')}>
     ${encabezadoSeccion('03', 'Qué te recomendamos', 'Qué hacer, en orden de importancia.')}
     <ol class="pasos">
-      ${r.pasos.map((p, i) => `<li class="paso aparece">
+      ${r.pasos.map((p, i) => `<li class="paso aparece"${rutaAncla(anclas, `lectura.datos.recomendamos.pasos.${i}`)}>
         <h3${rutaEditable(editable, `lectura.datos.recomendamos.pasos.${i}.titulo`)}>${escapar(p.titulo)}</h3>
         <dl><dt>Qué hacer</dt><dd${rutaEditable(editable, `lectura.datos.recomendamos.pasos.${i}.queHacer`)}>${escapar(p.queHacer)}</dd></dl>
         <dl><dt>Por qué</dt><dd class="suave"${rutaEditable(editable, `lectura.datos.recomendamos.pasos.${i}.porQue`)}>${escapar(p.porQue)}</dd></dl>
@@ -95,7 +96,7 @@ export function seccionRecomendamos(l: Lectura, editable = false): string {
     <div class="pila">
       <h3 class="subtitulo">Dónde anunciarte</h3>
       <div class="rejilla cuatro">
-        ${r.dondeAnunciarte.map((d, i) => `<div class="tarjeta aparece"><p class="dato-grande"${rutaEditable(editable, `lectura.datos.recomendamos.dondeAnunciarte.${i}.canal`)}>${escapar(d.canal)}</p><p class="suave"${rutaEditable(editable, `lectura.datos.recomendamos.dondeAnunciarte.${i}.porQue`)}>${escapar(d.porQue)}</p></div>`).join('')}
+        ${r.dondeAnunciarte.map((d, i) => `<div class="tarjeta aparece"${rutaAncla(anclas, `lectura.datos.recomendamos.dondeAnunciarte.${i}`)}><p class="dato-grande"${rutaEditable(editable, `lectura.datos.recomendamos.dondeAnunciarte.${i}.canal`)}>${escapar(d.canal)}</p><p class="suave"${rutaEditable(editable, `lectura.datos.recomendamos.dondeAnunciarte.${i}.porQue`)}>${escapar(d.porQue)}</p></div>`).join('')}
       </div>
     </div>
     ${r.precio ? `<div class="tarjeta destacado aparece"><h3>Sobre tu precio</h3><p${rutaEditable(editable, 'lectura.datos.recomendamos.precio')}>${escapar(r.precio)}</p></div>` : ''}

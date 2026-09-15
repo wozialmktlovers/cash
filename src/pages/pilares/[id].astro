@@ -53,6 +53,7 @@ if (operable) {
       tipo: 'pilares', id: r.id, etapaId: etapa.id,
       puedeEditar: calcularPuedeEditar(usuario.rol, esOperadorAsignado, etapa.estado),
       puedeComentar: puedeComentar(usuario.rol, esOperadorAsignado, etapa.etapa),
+      rol: usuario.rol, esOperadorAsignado,
     };
   }
 }
@@ -72,6 +73,10 @@ const html = renderizarPilares(
     // No basta con `operable`: un operador viendo la etapa en revisión es
     // operable, pero no puede editar — B6, ronda de arreglos 1, punto 9.
     editable: Boolean(flujo?.puedeEditar),
+    // `data-ancla` en la vista interna (B7): gobernado por `operable`, no
+    // por `puedeEditar` — el personal siempre puede comentar aunque no
+    // pueda editar en este momento.
+    anclas: Boolean(flujo),
     flujo,
   },
 );
