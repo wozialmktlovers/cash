@@ -1,5 +1,9 @@
 .superpowers/
 node_modules/
+# El Escritorio se sincroniza con iCloud, que desaloja los archivos y congela
+# astro. Las dependencias viven en .nosync (iCloud lo ignora) con un enlace.
+node_modules
+node_modules.nosync/
 dist/
 .astro/
 .env
