@@ -158,7 +158,7 @@ const CLIENTE_B = '22222222-2222-2222-2222-222222222222';
 const OPERADOR_1 = '33333333-3333-3333-3333-333333333333';
 
 const usr = (rol: 'admin' | 'operador' | 'cliente', overrides: Record<string, any> = {}) => ({
-  id: OPERADOR_1, email: 'u@w.mx', nombre: 'U', rol, clientId: null, activo: true, ...overrides,
+  id: OPERADOR_1, email: 'u@w.mx', nombre: 'U', apellido: null, rol, clientId: null, activo: true, ...overrides,
 });
 
 describe('clientePortal', () => {

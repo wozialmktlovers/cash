@@ -43,6 +43,13 @@
       "when": 1789496096871,
       "tag": "0005_usuarios_client_id_rol",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789512970595,
+      "tag": "0006_usuarios_apellido",
+      "breakpoints": true
     }
   ]
 }

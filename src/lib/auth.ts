@@ -34,7 +34,7 @@ export async function validarSesion(token: string): Promise<UsuarioSesion | null
     return null;
   }
   const [u] = await db
-    .select({ id: users.id, email: users.email, nombre: users.nombre, rol: users.rol, clientId: users.clientId, activo: users.activo })
+    .select({ id: users.id, email: users.email, nombre: users.nombre, apellido: users.apellido, rol: users.rol, clientId: users.clientId, activo: users.activo })
     .from(users)
     .where(eq(users.id, s.userId))
     .limit(1);

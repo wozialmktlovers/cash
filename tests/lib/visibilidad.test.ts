@@ -4,7 +4,7 @@ import { condicionClientes, esUuid } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
 
 const u = (rol: UsuarioSesion['rol'], extra: Partial<UsuarioSesion> = {}): UsuarioSesion =>
-  ({ id: 'u1', email: 'a@b.c', nombre: null, rol, clientId: null, activo: true, ...extra });
+  ({ id: 'u1', email: 'a@b.c', nombre: null, apellido: null, rol, clientId: null, activo: true, ...extra });
 
 describe('esUuid', () => {
   it('acepta un UUID válido, mayúsculas incluidas', () => {

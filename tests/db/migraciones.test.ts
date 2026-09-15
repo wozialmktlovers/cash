@@ -152,3 +152,20 @@ describe('0005: CHECK de client_id según el rol (M2 punto 6)', () => {
     expect(sqlCheck).toContain(`CHECK (${valor})`);
   });
 });
+
+describe('0006: la columna `apellido` de users', () => {
+  const carpeta = path.resolve(__dirname, '../../drizzle');
+  const m0006 = () => leerMigraciones(carpeta).find((x: { tag: string }) => x.tag === '0006_usuarios_apellido')!;
+
+  it('solo añade la columna: nula, sin relleno ni valor por omisión', () => {
+    // Una fila con nombre y apellido vacíos es válida (es el estado de los
+    // usuarios de hoy), así que la migración no toca ningún dato existente.
+    const trozos: string[] = m0006().sql.map((t: string) => t.trim()).filter(Boolean);
+    expect(trozos).toEqual(['ALTER TABLE "users" ADD COLUMN "apellido" text;']);
+  });
+
+  it('la columna de la migración es la que declara el esquema (sin deriva con drizzle-kit)', () => {
+    const snapshot = JSON.parse(fs.readFileSync(path.join(carpeta, 'meta', '0006_snapshot.json'), 'utf8'));
+    expect(snapshot.tables['public.users'].columns.apellido).toMatchObject({ name: 'apellido', type: 'text', notNull: false });
+  });
+});

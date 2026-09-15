@@ -1,5 +1,5 @@
 export type Rol = 'admin' | 'operador' | 'cliente';
-export type UsuarioSesion = { id: string; email: string; nombre: string | null; rol: Rol; clientId: string | null; activo: boolean };
+export type UsuarioSesion = { id: string; email: string; nombre: string | null; apellido: string | null; rol: Rol; clientId: string | null; activo: boolean };
 
 const RUTAS_CLIENTE = [/^\/portal(\/|$)/, /^\/api\/portal(\/|$)/, /^\/api\/comentarios(\/|$)/, /^\/api\/notificaciones(\/|$)/, /^\/api\/logout$/, /^\/p\//];
 const RUTAS_ADMIN = [/^\/admin(\/|$)/, /^\/api\/admin(\/|$)/];

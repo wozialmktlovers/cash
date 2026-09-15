@@ -25,6 +25,7 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   rol: usuarioRol('rol').notNull().default('operador'),
   nombre: text('nombre'),
+  apellido: text('apellido'),
   // Sin .references aquí: clients se declara más abajo en el archivo. La FK
   // se agrega a mano en la migración generada.
   clientId: uuid('client_id'),

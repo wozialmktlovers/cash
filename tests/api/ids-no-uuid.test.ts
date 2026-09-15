@@ -9,7 +9,7 @@ import { DELETE as borrarArchivo } from '@/pages/api/clientes/[id]/files';
  * DATABASE_URL»: si la ruta llega a consultar, la promesa se rechaza (lo que
  * en el servidor sería un 500) y la prueba falla.
  */
-const admin = { id: '00000000-0000-4000-8000-000000000001', email: 'a@x.mx', nombre: null, rol: 'admin' as const, clientId: null, activo: true };
+const admin = { id: '00000000-0000-4000-8000-000000000001', email: 'a@x.mx', nombre: null, apellido: null, rol: 'admin' as const, clientId: null, activo: true };
 const CLIENTE_VALIDO = '00000000-0000-4000-8000-0000000000aa';
 
 let urlPrevia: string | undefined;
