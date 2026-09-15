@@ -39,12 +39,47 @@ describe('mapa de pilares · vista interna', () => {
   it('pestañas ARIA por subcategoría dentro de cada pilar', () => {
     expect((html.match(/role="tab"(?=[\s>])/g) ?? []).length).toBe(15);
   });
+
+  // Pedido: «en el banco de temas, los tópicos se puedan elegir y tachar»
+  // (Casilla + tachado, guardado con los estados existentes).
+  it('trae una casilla «Elegir tema» por tarjeta, checada solo si el estado no es pendiente', () => {
+    expect((html.match(/class="tema-elegir"/g) ?? []).length).toBe(300);
+    // P1-S1-01 está "publicado" en `avance`: su casilla llega marcada.
+    const iP1S101 = html.indexOf('data-tema="P1-S1-01"');
+    const tarjetaP1S101 = html.slice(iP1S101, html.indexOf('</article>', iP1S101));
+    expect(tarjetaP1S101).toContain('aria-label="Elegir tema P1-S1-01"');
+    expect(tarjetaP1S101).toMatch(/class="tema-elegir"[^>]*\schecked/);
+    // Un tema sin fila en `avance` queda "pendiente": su casilla no lleva `checked`.
+    const iP5S320 = html.indexOf('data-tema="P5-S3-20"');
+    const tarjetaP5S320 = html.slice(iP5S320, html.indexOf('</article>', iP5S320));
+    expect(tarjetaP5S320).not.toMatch(/class="tema-elegir"[^>]*\schecked/);
+  });
+
+  it('tacha (con `.tema-tachado`) los temas desarrollado/publicado; `.tema-elegido` marca los en_desarrollo', () => {
+    const m = mapaFalso();
+    const conAvance = {
+      'P1-S1-01': { estado: 'publicado' as const, actualizadoPor: 'eq@wozial.mx', actualizadoEn: '2026-09-15T10:00:00Z' },
+      'P1-S1-02': { estado: 'en_desarrollo' as const, actualizadoPor: 'eq@wozial.mx', actualizadoEn: '2026-09-15T10:00:00Z' },
+      'P1-S1-03': { estado: 'desarrollado' as const, actualizadoPor: 'eq@wozial.mx', actualizadoEn: '2026-09-15T10:00:00Z' },
+    };
+    const h = renderizarPilares(m, meta, { operador, avance: conAvance, resultId: 'r1' });
+
+    const tarjetaAntes = (id: string) => h.slice(h.lastIndexOf('<article class="tema-tarjeta', h.indexOf(`data-tema="${id}"`)), h.indexOf(`data-tema="${id}"`));
+
+    expect(tarjetaAntes('P1-S1-01')).toContain('tema-tachado');
+    expect(tarjetaAntes('P1-S1-03')).toContain('tema-tachado');
+    expect(tarjetaAntes('P1-S1-02')).toContain('tema-elegido');
+    expect(tarjetaAntes('P1-S1-02')).not.toContain('tema-tachado');
+    // Un tema pendiente (sin fila en avance) no lleva ninguna de las dos.
+    expect(tarjetaAntes('P5-S3-20')).not.toContain('tema-tachado');
+    expect(tarjetaAntes('P5-S3-20')).not.toContain('tema-elegido');
+  });
 });
 
 describe('mapa de pilares · vista pública', () => {
   const html = renderizarPilares(mapaFalso(), meta);
   it('sin controles, estados, notas ni supuestos', () => {
-    for (const s of ['Compartir', 'Exportar CSV', 'boton-estado', 'data-estado', 'Mix real del banco', '/api/pilares']) expect(marcado(html)).not.toContain(s);
+    for (const s of ['Compartir', 'Exportar CSV', 'boton-estado', 'data-estado', 'Mix real del banco', '/api/pilares', 'tema-elegir', 'type="checkbox"']) expect(marcado(html)).not.toContain(s);
     expect((html.match(/class="tema-tarjeta/g) ?? []).length).toBe(300);
   });
 

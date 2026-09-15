@@ -157,12 +157,28 @@ const PILARES = `
 .tema-tarjeta{background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--r-sm);padding:16px;
   display:grid;gap:8px;align-content:start;}
 .tema-tarjeta[data-estado="publicado"]{opacity:.68;}
+/* Casilla + tachado: en_desarrollo se marca «elegido» con un filo de color
+   (mismo tono que ya usa .boton-estado para ese estado); desarrollado y
+   publicado tachan el texto del tema, como pide el pedido del banco de
+   temas. El filo va con border, no con padding extra: el reset global es
+   box-sizing:border-box, así que no desplaza el resto del contenido. */
+.tema-tarjeta.tema-elegido{border-left:4px solid var(--amarillo);}
+.tema-tarjeta.tema-tachado .tema-texto{text-decoration:line-through;color:var(--suave);}
 .tema-id{font:var(--t-micro);letter-spacing:.06em;color:var(--suave);}
 .tema-etiquetas{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
 .etiqueta-formato{display:inline-flex;align-items:center;gap:5px;font:var(--t-small);color:var(--suave);}
 .etiqueta-formato svg{width:14px;height:14px;}
 .tema-texto{color:var(--texto);}
-.tema-controles{display:flex;flex-wrap:wrap;gap:8px;}
+.tema-controles{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+/* Casilla «Elegir tema»: <label> como área de toque de 44×44 (clic en
+   cualquier parte de la etiqueta marca el input real, sin trucos de JS),
+   con la casilla nativa a su tamaño normal adentro. accent-color toma el
+   token de marca en los dos temas (día/noche) sin CSS aparte. */
+.tema-elegir-envoltura{display:inline-flex;flex-shrink:0;align-items:center;justify-content:center;
+  width:44px;height:44px;cursor:pointer;}
+.tema-elegir{width:20px;height:20px;margin:0;accent-color:var(--rosa);cursor:pointer;}
+.tema-elegir:focus-visible{outline:2px solid var(--rosa);outline-offset:3px;border-radius:4px;}
+html.modo-edicion .tema-elegir-envoltura,html.modo-comentar .tema-elegir-envoltura{cursor:default;}
 .boton-estado,.boton-nota{min-height:44px;padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--linea);
   background:var(--gris);color:var(--texto);font:var(--t-small);font-weight:600;cursor:pointer;}
 .boton-estado[data-estado-actual="pendiente"]{background:var(--gris);color:var(--suave);}
@@ -182,7 +198,7 @@ dialog.panel-nota textarea{min-height:140px;padding:12px;border-radius:var(--r-s
   background:var(--gris);color:var(--tinta);font:var(--t-body);resize:vertical;}
 
 @media print{
-  .herramientas,.avance-mini-grid,.aviso-revision,.boton-estado,.boton-nota,.tema-meta,dialog.panel-nota{display:none!important;}
+  .herramientas,.avance-mini-grid,.aviso-revision,.boton-estado,.boton-nota,.tema-elegir-envoltura,.tema-meta,dialog.panel-nota{display:none!important;}
   .pilar-bloque{box-shadow:none;break-inside:avoid;}
   .tema-tarjeta{box-shadow:none;break-inside:avoid;}
 }

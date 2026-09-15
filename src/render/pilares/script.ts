@@ -228,7 +228,11 @@ export const SCRIPT_PILARES = `(function () {
     return { el: meta, creado: creado, previo: meta.textContent };
   }
 
-  // ── Botón de estado: pendiente → en_desarrollo → desarrollado → publicado → pendiente ──
+  // ── Botón de estado y casilla «Elegir tema»: comparten el mismo cambio ──
+  // Ciclo del botón: pendiente → en_desarrollo → desarrollado → publicado →
+  // pendiente. La casilla marca/desmarca sobre el mismo estado (checada
+  // cuando el estado no es pendiente) y los dos se mantienen sincronizados
+  // en los dos sentidos, incluida la reversión si el PATCH falla.
   // (ETIQUETA_ESTADO se repite aquí a propósito, en ES5 puro: si cambian los
   // nombres o el orden de ESTADOS_TEMA en pilares/schemas.ts, hay que
   // actualizar también el mismo mapa en render/pilares/banco.ts.)
@@ -238,51 +242,104 @@ export const SCRIPT_PILARES = `(function () {
     var i = CICLO_ESTADO.indexOf(actual);
     return CICLO_ESTADO[(i + 1) % CICLO_ESTADO.length];
   }
+
+  // Pinta un estado sobre la tarjeta, el botón y (si la tarjeta trae una) la
+  // casilla, sin tocar el servidor: lo usan tanto el cambio optimista como
+  // la reversión si el PATCH falla, para no repetir las mismas cinco líneas.
+  function pintarEstado(tarjeta, boton, checkbox, estado) {
+    tarjeta.setAttribute('data-estado', estado);
+    boton.setAttribute('data-estado-actual', estado);
+    boton.textContent = ETIQUETA_ESTADO[estado];
+    if (checkbox) checkbox.checked = estado !== 'pendiente';
+    tarjeta.classList.toggle('tema-tachado', estado === 'desarrollado' || estado === 'publicado');
+    tarjeta.classList.toggle('tema-elegido', estado === 'en_desarrollo');
+  }
+
+  // Único punto que guarda un cambio de estado por PATCH (regla: reusar el
+  // mismo flujo para el botón y la casilla, no duplicar el fetch). Pinta el
+  // estado nuevo de inmediato (optimista), reaplica los filtros y, si el
+  // PATCH falla, revierte tarjeta+botón+casilla al estado anterior.
+  function cambiarEstadoTema(tarjeta, boton, checkbox, nuevo) {
+    var anterior = boton.getAttribute('data-estado-actual') || 'pendiente';
+    if (nuevo === anterior) return;
+    var temaId = tarjeta.getAttribute('data-tema');
+
+    pintarEstado(tarjeta, boton, checkbox, nuevo);
+    // Si hay un filtro de estado activo, la tarjeta puede dejar de (o
+    // empezar a) hacer match: sin esto el contador y el CSV quedaban
+    // desfasados de lo que se veía hasta el siguiente filtro manual.
+    aplicarFiltros();
+
+    var m = obtenerMeta(tarjeta);
+    m.el.textContent = 'Guardado';
+
+    // Un doble clic (o dos cambios de estado seguidos antes de que conteste
+    // el primero) no debe dejar que la respuesta más vieja pise el
+    // resultado del clic más nuevo: cada cambio sube un contador propio del
+    // botón y solo el que sigue vigente toca el DOM.
+    var version = (boton._version || 0) + 1;
+    boton._version = version;
+
+    guardarCambio(temaId, { estado: nuevo }, function (datos) {
+      if (boton._version !== version) return;
+      m.el.textContent = (datos.actualizadoPor || 'Sin autor') + ' · ' + String(datos.actualizadoEn || '').slice(0, 10);
+    }, function () {
+      if (boton._version !== version) return;
+      pintarEstado(tarjeta, boton, checkbox, anterior);
+      aplicarFiltros();
+      m.el.textContent = 'No se pudo guardar';
+      setTimeout(function () {
+        if (m.creado) { if (m.el.parentNode) m.el.parentNode.removeChild(m.el); }
+        else { m.el.textContent = m.previo; }
+      }, 2600);
+    });
+  }
+
   var botonesEstado = banco.querySelectorAll('.boton-estado');
   for (var e1 = 0; e1 < botonesEstado.length; e1++) {
     (function (boton) {
       boton.addEventListener('click', function () {
         var tarjeta = boton.closest('.tema-tarjeta');
         if (!tarjeta) return;
-        var temaId = tarjeta.getAttribute('data-tema');
+        var checkbox = tarjeta.querySelector('.tema-elegir');
         var anterior = boton.getAttribute('data-estado-actual') || 'pendiente';
-        var nuevo = siguienteEstado(anterior);
-
-        tarjeta.setAttribute('data-estado', nuevo);
-        boton.setAttribute('data-estado-actual', nuevo);
-        boton.textContent = ETIQUETA_ESTADO[nuevo];
-        // Si hay un filtro de estado activo, la tarjeta puede dejar de (o
-        // empezar a) hacer match: sin esto el contador y el CSV quedaban
-        // desfasados de lo que se veía hasta el siguiente filtro manual.
-        aplicarFiltros();
-
-        var m = obtenerMeta(tarjeta);
-        m.el.textContent = 'Guardado';
-
-        // Un doble clic (o dos cambios de estado seguidos antes de que
-        // conteste el primero) no debe dejar que la respuesta más vieja
-        // pise el resultado del clic más nuevo: cada clic sube un contador
-        // propio del botón y solo el que sigue vigente toca el DOM.
-        var version = (boton._version || 0) + 1;
-        boton._version = version;
-
-        guardarCambio(temaId, { estado: nuevo }, function (datos) {
-          if (boton._version !== version) return;
-          m.el.textContent = (datos.actualizadoPor || 'Sin autor') + ' · ' + String(datos.actualizadoEn || '').slice(0, 10);
-        }, function () {
-          if (boton._version !== version) return;
-          tarjeta.setAttribute('data-estado', anterior);
-          boton.setAttribute('data-estado-actual', anterior);
-          boton.textContent = ETIQUETA_ESTADO[anterior];
-          aplicarFiltros();
-          m.el.textContent = 'No se pudo guardar';
-          setTimeout(function () {
-            if (m.creado) { if (m.el.parentNode) m.el.parentNode.removeChild(m.el); }
-            else { m.el.textContent = m.previo; }
-          }, 2600);
-        });
+        cambiarEstadoTema(tarjeta, boton, checkbox, siguienteEstado(anterior));
       });
     })(botonesEstado[e1]);
+  }
+
+  // ── Casilla «Elegir tema»: marcarla desde pendiente sube a en_desarrollo;
+  // desmarcarla vuelve a pendiente, con confirmación si el tema ya estaba
+  // desarrollado o publicado (para no perder avance por un clic de más). En
+  // modo edición o comentar no debe alternar: el modo Comentar ya intercepta
+  // el clic más arriba en la fase de captura (mismo mecanismo que protege al
+  // resto de los controles del banco), pero se guarda aquí también por si
+  // algún día una tarjeta se pinta sin el atributo data-ancla (anclas=false). ─
+  var casillasElegir = banco.querySelectorAll('.tema-elegir');
+  for (var c1 = 0; c1 < casillasElegir.length; c1++) {
+    (function (checkbox) {
+      checkbox.addEventListener('click', function (e) {
+        if (enModoEdicion() || enModoComentar()) { if (e.preventDefault) e.preventDefault(); }
+      });
+      checkbox.addEventListener('change', function () {
+        var tarjeta = checkbox.closest('.tema-tarjeta');
+        if (!tarjeta) return;
+        if (enModoEdicion() || enModoComentar()) { checkbox.checked = !checkbox.checked; return; }
+        var boton = tarjeta.querySelector('.boton-estado');
+        if (!boton) return;
+        var actual = boton.getAttribute('data-estado-actual') || 'pendiente';
+
+        if (checkbox.checked) {
+          if (actual === 'pendiente') cambiarEstadoTema(tarjeta, boton, checkbox, 'en_desarrollo');
+          return;
+        }
+
+        if (actual === 'desarrollado' || actual === 'publicado') {
+          if (!window.confirm('¿Regresar este tema a pendiente?')) { checkbox.checked = true; return; }
+        }
+        cambiarEstadoTema(tarjeta, boton, checkbox, 'pendiente');
+      });
+    })(casillasElegir[c1]);
   }
 
   // ── Nota: un solo <dialog>, reutilizado por las 300 tarjetas ───────────

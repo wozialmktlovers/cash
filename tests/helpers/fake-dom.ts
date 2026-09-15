@@ -70,6 +70,7 @@ export class FakeElement {
   doc: FakeDocument;
   private _hidden = false;
   private _value = '';
+  private _checked = false;
   private _textContent = '';
   private classes = new Set<string>();
 
@@ -93,6 +94,10 @@ export class FakeElement {
 
   get value(): string { return this._value; }
   set value(v: string) { this._value = v; }
+
+  /** Propiedad viva de `<input type="checkbox">` — separada del atributo `checked`, igual que en el DOM real. */
+  get checked(): boolean { return this._checked; }
+  set checked(v: boolean) { this._checked = !!v; }
 
   get textContent(): string { return this._textContent; }
   set textContent(v: string) { this._textContent = v; this.children = []; }

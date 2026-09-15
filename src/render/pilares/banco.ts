@@ -47,15 +47,33 @@ function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: bool
   // el mapa se regenere, a diferencia de su índice dentro del arreglo.
   if (anclas) atributos.push(`data-ancla="${escapar(`tema:${t.id}`)}"`);
 
+  // Casilla «Elegir tema»: checada cuando el estado ya no es pendiente (sea
+  // por la propia casilla o por el botón de estado, que la siguen a la
+  // inversa). Envuelta en <label> con área de 44×44, sin duplicar el `id`
+  // por tarjeta: el nombre accesible sale directo del aria-label del input
+  // (spec del pedido, regla 1). Solo en la interna, igual que el resto de
+  // los controles: el link público nunca elige ni guarda estado.
   const controles = interna
     ? `<div class="tema-controles">
+        <label class="tema-elegir-envoltura">
+          <input type="checkbox" class="tema-elegir" aria-label="Elegir tema ${escapar(t.id)}"${estado !== 'pendiente' ? ' checked' : ''}>
+        </label>
         <button type="button" class="boton-estado" data-estado-actual="${estado}">${escapar(ETIQUETA_ESTADO[estado])}</button>
         <button type="button" class="boton-nota${av?.nota ? ' con-nota' : ''}" data-nota="${escapar(av?.nota ?? '')}" data-tema-titulo="${escapar(t.texto)}" aria-label="Nota del tema ${escapar(t.id)}" aria-haspopup="dialog">Nota</button>
       </div>
       ${av ? `<p class="tema-meta suave">${escapar(av.actualizadoPor ?? 'Sin autor')} · ${escapar(fechaCorta(av.actualizadoEn))}</p>` : ''}`
     : '';
 
-  return `<article class="tema-tarjeta" ${atributos.join(' ')}>
+  // Tachado (regla 3): desarrollado/publicado se marcan `.tema-tachado`
+  // (texto en línea encima, atenuado); en_desarrollo se marca `.tema-elegido`
+  // (filo de color) para que se note que ya se eligió pero falta terminarlo.
+  // Solo en la interna: la pública nunca lleva estado, así que tampoco estas
+  // clases (evita que alguien las lea como pista de avance real).
+  const tachado = interna && (estado === 'desarrollado' || estado === 'publicado');
+  const elegido = interna && estado === 'en_desarrollo';
+  const claseTarjeta = `tema-tarjeta${tachado ? ' tema-tachado' : ''}${elegido ? ' tema-elegido' : ''}`;
+
+  return `<article class="${claseTarjeta}" ${atributos.join(' ')}>
     <p class="tema-id">${escapar(t.id)}</p>
     <div class="tema-etiquetas">
       <span class="etiqueta-funcion ${t.funcion}">${escapar(ETIQUETA_FUNCION[t.funcion])}</span>

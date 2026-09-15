@@ -57,6 +57,11 @@ function construirBanco(doc: FakeDocument) {
     textoEl.textContent = opts.texto;
     tarjeta.appendChild(textoEl);
 
+    const checkboxElegir = doc.createElement('input');
+    checkboxElegir.className = 'tema-elegir';
+    checkboxElegir.checked = opts.estado !== 'pendiente';
+    tarjeta.appendChild(checkboxElegir);
+
     const botonEstado = doc.createElement('button');
     botonEstado.className = 'boton-estado';
     botonEstado.setAttribute('data-estado-actual', opts.estado);
@@ -68,7 +73,7 @@ function construirBanco(doc: FakeDocument) {
     botonNota.setAttribute('data-tema-titulo', opts.texto);
     tarjeta.appendChild(botonNota);
 
-    return { tarjeta, botonEstado, botonNota, textoEl };
+    return { tarjeta, checkboxElegir, botonEstado, botonNota, textoEl };
   }
 
   const dialogoNota = doc.createElement('dialog');
@@ -276,6 +281,198 @@ describe('SCRIPT_PILARES · comportamiento real (fake-dom)', () => {
 
       tarjeta.dispatch('keydown', { key: 'Enter' });
       expect(dom.filtroPilar.value).toBe('2');
+    });
+  });
+
+  // Pedido: «en el banco de temas, los tópicos se puedan elegir y tachar»
+  // (Casilla + tachado). La casilla y el botón de estado comparten el mismo
+  // flujo de PATCH (cambiarEstadoTema/guardarCambio) y se mantienen
+  // sincronizados en los dos sentidos.
+  describe('casilla «Elegir tema»', () => {
+    it('marcarla desde pendiente hace PATCH a en_desarrollo y sincroniza el botón', async () => {
+      const doc = new FakeDocument();
+      const win = new FakeWindow();
+      const dom = construirBanco(doc);
+      const { tarjeta, checkboxElegir, botonEstado } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'pendiente', texto: 'Uno' });
+
+      let cuerpoEnviado: unknown = null;
+      globalThis.fetch = vi.fn().mockImplementation((_url: string, init: any) => {
+        cuerpoEnviado = JSON.parse(init.body);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, estado: 'en_desarrollo', actualizadoPor: 'eq@wozial.mx', actualizadoEn: '2026-09-15T10:00:00Z' }),
+        });
+      }) as unknown as typeof fetch;
+
+      ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+      checkboxElegir.checked = true;
+      checkboxElegir.dispatch('change');
+
+      // Optimista: la tarjeta, el botón y la casilla ya reflejan el cambio
+      // antes de que conteste el PATCH.
+      expect(tarjeta.getAttribute('data-estado')).toBe('en_desarrollo');
+      expect(botonEstado.getAttribute('data-estado-actual')).toBe('en_desarrollo');
+      expect(botonEstado.textContent).toBe('En desarrollo');
+      expect(tarjeta.classList.contains('tema-elegido')).toBe(true);
+      expect(checkboxElegir.checked).toBe(true);
+
+      expect(cuerpoEnviado).toEqual({ estado: 'en_desarrollo' });
+      await flush();
+      expect(checkboxElegir.checked).toBe(true);
+    });
+
+    it('el botón de estado también sincroniza la casilla al avanzar (pendiente → en_desarrollo)', async () => {
+      const doc = new FakeDocument();
+      const win = new FakeWindow();
+      const dom = construirBanco(doc);
+      const { checkboxElegir, botonEstado } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'pendiente', texto: 'Uno' });
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, estado: 'en_desarrollo', actualizadoPor: 'eq@wozial.mx', actualizadoEn: '2026-09-15T10:00:00Z' }),
+      }) as unknown as typeof fetch;
+
+      ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+      expect(checkboxElegir.checked).toBe(false);
+      botonEstado.dispatch('click');
+      expect(checkboxElegir.checked).toBe(true);
+      await flush();
+      expect(checkboxElegir.checked).toBe(true);
+    });
+
+    it('desmarcarla desde publicado pregunta con confirm; si se acepta, hace PATCH a pendiente', async () => {
+      const doc = new FakeDocument();
+      const win = new FakeWindow();
+      (win as any).confirm = vi.fn(() => true);
+      const dom = construirBanco(doc);
+      const { tarjeta, checkboxElegir, botonEstado } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'publicado', texto: 'Uno' });
+
+      let cuerpoEnviado: unknown = null;
+      globalThis.fetch = vi.fn().mockImplementation((_url: string, init: any) => {
+        cuerpoEnviado = JSON.parse(init.body);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ok: true, estado: 'pendiente', actualizadoPor: 'eq@wozial.mx', actualizadoEn: '2026-09-15T10:00:00Z' }),
+        });
+      }) as unknown as typeof fetch;
+
+      ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+      checkboxElegir.checked = false;
+      checkboxElegir.dispatch('change');
+
+      expect((win as any).confirm).toHaveBeenCalledWith('¿Regresar este tema a pendiente?');
+      expect(tarjeta.getAttribute('data-estado')).toBe('pendiente');
+      expect(botonEstado.getAttribute('data-estado-actual')).toBe('pendiente');
+      expect(tarjeta.classList.contains('tema-tachado')).toBe(false);
+      expect(cuerpoEnviado).toEqual({ estado: 'pendiente' });
+      await flush();
+    });
+
+    it('desmarcarla desde desarrollado y rechazar el confirm no hace PATCH y vuelve a marcarla', () => {
+      const doc = new FakeDocument();
+      const win = new FakeWindow();
+      (win as any).confirm = vi.fn(() => false);
+      const dom = construirBanco(doc);
+      const { tarjeta, checkboxElegir, botonEstado } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'desarrollado', texto: 'Uno' });
+
+      globalThis.fetch = vi.fn() as unknown as typeof fetch;
+
+      ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+      checkboxElegir.checked = false;
+      checkboxElegir.dispatch('change');
+
+      expect((win as any).confirm).toHaveBeenCalled();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      expect(checkboxElegir.checked).toBe(true);
+      expect(tarjeta.getAttribute('data-estado')).toBe('desarrollado');
+      expect(botonEstado.getAttribute('data-estado-actual')).toBe('desarrollado');
+    });
+
+    it('desmarcarla desde en_desarrollo no pregunta nada y hace PATCH directo a pendiente', () => {
+      const doc = new FakeDocument();
+      const win = new FakeWindow();
+      (win as any).confirm = vi.fn(() => true);
+      const dom = construirBanco(doc);
+      const { checkboxElegir, botonEstado } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'en_desarrollo', texto: 'Uno' });
+
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, estado: 'pendiente', actualizadoPor: null, actualizadoEn: '2026-09-15T10:00:00Z' }),
+      }) as unknown as typeof fetch;
+
+      ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+      checkboxElegir.checked = false;
+      checkboxElegir.dispatch('change');
+
+      expect((win as any).confirm).not.toHaveBeenCalled();
+      expect(botonEstado.getAttribute('data-estado-actual')).toBe('pendiente');
+    });
+
+    it('si el PATCH de la casilla falla, se revierte tanto la casilla como el botón', async () => {
+      const doc = new FakeDocument();
+      const win = new FakeWindow();
+      const dom = construirBanco(doc);
+      const { tarjeta, checkboxElegir, botonEstado } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'pendiente', texto: 'Uno' });
+
+      globalThis.fetch = vi.fn().mockResolvedValue({ ok: false }) as unknown as typeof fetch;
+
+      ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+      checkboxElegir.checked = true;
+      checkboxElegir.dispatch('change');
+      expect(checkboxElegir.checked).toBe(true); // optimista
+      expect(botonEstado.getAttribute('data-estado-actual')).toBe('en_desarrollo');
+
+      await flush();
+
+      expect(checkboxElegir.checked).toBe(false);
+      expect(botonEstado.getAttribute('data-estado-actual')).toBe('pendiente');
+      expect(botonEstado.textContent).toBe('Pendiente');
+      expect(tarjeta.getAttribute('data-estado')).toBe('pendiente');
+      expect(tarjeta.classList.contains('tema-elegido')).toBe(false);
+    });
+
+    it('no alterna en modo edición: el cambio se revierte y no hay PATCH', () => {
+      const doc = new FakeDocument();
+      const win = new FakeWindow();
+      const dom = construirBanco(doc);
+      const { checkboxElegir, botonEstado } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'pendiente', texto: 'Uno' });
+
+      globalThis.fetch = vi.fn() as unknown as typeof fetch;
+
+      ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+      doc.documentElement.classList.add('modo-edicion');
+      checkboxElegir.checked = true;
+      checkboxElegir.dispatch('change');
+
+      expect(checkboxElegir.checked).toBe(false);
+      expect(botonEstado.getAttribute('data-estado-actual')).toBe('pendiente');
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it('no alterna en modo comentar: el cambio se revierte y no hay PATCH', () => {
+      const doc = new FakeDocument();
+      const win = new FakeWindow();
+      const dom = construirBanco(doc);
+      const { checkboxElegir, botonEstado } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'pendiente', texto: 'Uno' });
+
+      globalThis.fetch = vi.fn() as unknown as typeof fetch;
+
+      ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+
+      doc.documentElement.classList.add('modo-comentar');
+      checkboxElegir.checked = true;
+      checkboxElegir.dispatch('change');
+
+      expect(checkboxElegir.checked).toBe(false);
+      expect(botonEstado.getAttribute('data-estado-actual')).toBe('pendiente');
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
   });
 });
