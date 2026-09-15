@@ -18,13 +18,14 @@ export function lista(items: string[]): string {
   return `<ul class="lista">${items.map((i) => `<li>${escapar(i)}</li>`).join('')}</ul>`;
 }
 
-/** Las celdas llegan ya como HTML seguro: quien llama escapa o usa fuente(). */
-export function tabla(encabezados: string[], filas: string[][]): string {
-  if (!filas.length) return '';
-  return `<div class="tabla"><table><thead><tr>${encabezados.map((e) => `<th>${escapar(e)}</th>`).join('')}</tr></thead>
-    <tbody>${filas.map((f) => `<tr>${f.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
-}
-
 export function sinDatos(): string {
   return '<p class="sin-datos">No se obtuvo información sobre este tema.</p>';
+}
+
+/** Número grande, título y una línea de entrada: la jerarquía que faltaba entre secciones. */
+export function encabezadoSeccion(num: string, titulo: string, entrada: string): string {
+  return `<header class="seccion-cabeza aparece">
+    <span class="seccion-num">${escapar(num)}</span>
+    <div><h2>${escapar(titulo)}</h2><p class="entrada">${escapar(entrada)}</p></div>
+  </header>`;
 }

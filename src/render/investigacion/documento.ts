@@ -4,7 +4,7 @@ import { LOGO_WOZIAL_SRC } from '@/render/marca';
 import { escapar } from './comunes';
 import { ESTILOS_INVESTIGACION } from './estilos';
 import {
-  seccionPortada, seccionDescubrimos, seccionClienteIdeal, seccionRecomendamos, seccionFaltaConfirmar,
+  seccionPortada, seccionDescubrimos, seccionClienteIdeal, seccionRecomendamos,
 } from './lectura';
 import { detalleInvestigacion, sintesisContinua } from './detalle';
 
@@ -55,15 +55,14 @@ export function renderizarInvestigacion(inv: Investigacion, meta: MetaInvestigac
 
   const cuerpo = lectura
     ? [
-        seccionPortada(eyebrow, lectura.portada.titular, lectura.portada.resumen, true),
+        seccionPortada({ eyebrow, titular: lectura.portada.titular, resumen: lectura.portada.resumen, cifras: lectura.cifras, conIndice: true }),
         seccionDescubrimos(lectura),
         seccionClienteIdeal(lectura),
         seccionRecomendamos(lectura),
-        seccionFaltaConfirmar(lectura),
         detalleInvestigacion(inv, false),
       ].join('\n')
     : [
-        seccionPortada(eyebrow, meta.cliente, meta.giro, false),
+        seccionPortada({ eyebrow, titular: meta.cliente, resumen: meta.giro, cifras: [], conIndice: false }),
         sintesisContinua(sintesis),
         detalleInvestigacion(inv, true),
       ].join('\n');
