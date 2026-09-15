@@ -67,6 +67,25 @@ const errorPostgres = (campos: Record<string, unknown>, mensaje = 'duplicate key
 const envueltoPorDrizzle = (causa: unknown) =>
   Object.assign(new Error('Failed query: update "users" set ...'), { cause: causa });
 
+// El middleware ya reserva /api/admin/* para el admin, pero la ruta lo vuelve
+// a comprobar: un cuerpo de pura identidad no pasa por validarCambioUsuario,
+// que era la segunda barrera. Sin este candado, un operador que alcanzara la
+// ruta podría editarse a sí mismo.
+describe('PATCH usuarios: solo un admin entra', () => {
+  for (const rol of ['operador', 'cliente'] as const) {
+    it(`un ${rol} recibe 403 sin tocar la base`, async () => {
+      const res = await PATCH({
+        params: { id: OTRO },
+        request: new Request(`http://x/api/admin/usuarios/${OTRO}`, { method: 'PATCH', body: JSON.stringify({ nombre: 'Ana' }) }),
+        locals: { usuario: { ...admin, id: OTRO, rol } },
+      } as any);
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toBe('solo-admin');
+      expect(espia.cambio).toBeUndefined();
+    });
+  }
+});
+
 describe('PATCH usuarios: datos de identidad', () => {
   it('un nombre larguísimo se rechaza antes de tocar la base', async () => {
     const res = await llamar({ nombre: 'a'.repeat(61) });

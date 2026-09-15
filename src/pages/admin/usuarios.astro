@@ -353,7 +353,14 @@ const invitacionesEquipo = await db
         body: JSON.stringify(cambio),
       });
       const json = await res.json();
-      return { ok: res.ok && json.ok, error: json.error as string | undefined };
+      // `usuario` es la fila tal como quedó guardada: el servidor recorta y
+      // pasa el correo a minúsculas, así que el renglón se repinta con eso y
+      // no con lo que se tecleó.
+      return {
+        ok: res.ok && json.ok,
+        error: json.error as string | undefined,
+        usuario: json.usuario as { nombre: string | null; apellido: string | null; email: string } | undefined,
+      };
     } catch {
       // Sin red, servidor caído o respuesta que no es JSON: ninguno de los
       // dos listeners de abajo envolvía esta llamada, así que una falla acá
@@ -467,14 +474,18 @@ const invitacionesEquipo = await db
     edGuardar.disabled = true;
     edError.hidden = true;
     // Vacío significa borrar el dato, y por eso va como `null` y no como ''.
-    const { ok, error } = await patchUsuario(id, { nombre: nombre || null, apellido: apellido || null, email });
+    const { ok, error, usuario } = await patchUsuario(id, { nombre: nombre || null, apellido: apellido || null, email });
     if (ok) {
-      const titulo = visible(nombre, apellido, email);
+      // Lo guardado manda sobre lo tecleado: el servidor normaliza el correo a
+      // minúsculas, y sin esto el renglón mostraría una versión que no es la
+      // que quedó en la base (justo el correo que el admin va a comunicar).
+      const guardado = { nombre: usuario?.nombre ?? nombre, apellido: usuario?.apellido ?? apellido, email: usuario?.email ?? email };
+      const titulo = visible(guardado.nombre ?? '', guardado.apellido ?? '', guardado.email);
       li.querySelector('strong')!.textContent = titulo;
-      li.querySelector('[data-correo]')!.textContent = email;
-      li.dataset.nombre = nombre;
-      li.dataset.apellido = apellido;
-      li.dataset.email = email;
+      li.querySelector('[data-correo]')!.textContent = guardado.email;
+      li.dataset.nombre = guardado.nombre ?? '';
+      li.dataset.apellido = guardado.apellido ?? '';
+      li.dataset.email = guardado.email;
       // Los controles del renglón se nombran por la persona: si cambió, sus
       // etiquetas también.
       li.querySelector('[data-editar]')?.setAttribute('aria-label', `Editar a ${titulo}`);

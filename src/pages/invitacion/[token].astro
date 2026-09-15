@@ -78,12 +78,12 @@ const MENSAJES_ESTADO: Record<'vencida' | 'usada' | 'inexistente' | 'revocada', 
           <div class="campos">
             <div class="campo">
               <label for="nombre">Nombre</label>
-              <input id="nombre" name="nombre" type="text" autocomplete="given-name" required autofocus />
+              <input id="nombre" name="nombre" type="text" maxlength="60" autocomplete="given-name" required autofocus />
             </div>
 
             <div class="campo">
               <label for="apellido">Apellido</label>
-              <input id="apellido" name="apellido" type="text" autocomplete="family-name" required />
+              <input id="apellido" name="apellido" type="text" maxlength="60" autocomplete="family-name" required />
             </div>
           </div>
 

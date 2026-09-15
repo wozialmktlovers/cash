@@ -50,7 +50,10 @@ export function validarCambioUsuario(
 /** Lo mínimo para mostrar a una persona: si aún no tiene nombre, su correo. */
 export type UsuarioMostrable = { nombre: string | null; apellido: string | null; email: string };
 
-const MAXIMO_NOMBRE = 60;
+/** Exportado porque la invitación valida el mismo tope: si aceptara nombres más
+ *  largos, esa persona quedaría con datos que ninguna pantalla puede guardar
+ *  después (ni ella en /perfil, ni un admin en Usuarios). */
+export const MAXIMO_NOMBRE = 60;
 const MAXIMO_CORREO = 200;
 // Deliberadamente laxa: solo descarta lo que claramente no es un correo. La
 // verdad la tiene el buzón de la persona, no una expresión regular.

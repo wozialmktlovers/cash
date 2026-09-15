@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import { db, pilaresTemas, users } from '@/db';
 import { temaExiste, validarCambioTema } from '@/pilares/avance';
 import { puedeOperarCliente } from '@/lib/permisos';
+import { nombreVisible } from '@/lib/usuarios';
 import { documentoVisible } from '@/lib/visibilidad';
 
 const json = (cuerpo: unknown, status = 200) =>
@@ -31,8 +32,11 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     .returning();
 
   const [autor] = fila.actualizadoPor
-    ? await db.select({ email: users.email }).from(users).where(eq(users.id, fila.actualizadoPor)).limit(1)
+    ? await db.select({ nombre: users.nombre, apellido: users.apellido, email: users.email }).from(users).where(eq(users.id, fila.actualizadoPor)).limit(1)
     : [];
 
-  return json({ ok: true, estado: fila.estado, nota: fila.nota, actualizadoPor: autor?.email ?? null, actualizadoEn: fila.actualizadoEn });
+  // Se manda el nombre ya resuelto, como en el historial de versiones y los
+  // comentarios: la regla de «nombre y apellido, o el correo» vive en el
+  // servidor y no se repite en el navegador.
+  return json({ ok: true, estado: fila.estado, nota: fila.nota, actualizadoPor: autor ? nombreVisible(autor) : null, actualizadoEn: fila.actualizadoEn });
 };

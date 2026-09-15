@@ -39,11 +39,15 @@ function esCorreoOcupado(error: unknown): boolean {
   return false;
 }
 
-// La ruta ya es admin-only por el middleware (/api/admin/*), pero
-// validarCambioUsuario repite la comprobación: es una función pura y sus
-// pruebas cubren el caso de un actor que no es admin.
+// La ruta ya es admin-only por el middleware (/api/admin/*), y aun así se
+// vuelve a comprobar aquí. Antes esa segunda barrera la ponía
+// validarCambioUsuario, pero ahora solo se llama cuando el cuerpo trae rol o
+// activo: un cuerpo de pura identidad pasa por validarDatosUsuario, que deja
+// a cualquiera editarse a sí mismo. La comprobación explícita mantiene la
+// defensa en profundidad aunque alguien mueva la ruta o toque RUTAS_ADMIN.
 export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const actor = locals.usuario;
+  if (actor.rol !== 'admin') return json({ ok: false, error: 'solo-admin' }, 403);
   const id = params.id!;
   // Un id sin forma de UUID nunca existe (M2 punto 5): 404 antes de tocar la
   // base, en vez del 500 que daba Postgres al comparar la columna uuid.

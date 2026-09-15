@@ -5,6 +5,7 @@ import { renderizarPilares } from '@/render/pilares/documento';
 import { slugificar } from '@/lib/slug';
 import { baseUrlPublica } from '@/lib/base-url';
 import { puedeOperarCliente } from '@/lib/permisos';
+import { nombreVisible } from '@/lib/usuarios';
 import { documentoVisible } from '@/lib/visibilidad';
 import { etapaDelDocumento, permisoCompartir } from '@/flujo/servicio';
 import { puedeEditar as calcularPuedeEditar } from '@/flujo/edicion';
@@ -34,7 +35,10 @@ const compartir = operable ? await permisoCompartir(usuario, c.id, 'pilares', r.
 const base = baseUrlPublica(Astro.request);
 
 const filas = await db
-  .select({ temaId: pilaresTemas.temaId, estado: pilaresTemas.estado, nota: pilaresTemas.nota, actualizadoEn: pilaresTemas.actualizadoEn, actualizadoPor: users.email })
+  .select({
+    temaId: pilaresTemas.temaId, estado: pilaresTemas.estado, nota: pilaresTemas.nota, actualizadoEn: pilaresTemas.actualizadoEn,
+    autorNombre: users.nombre, autorApellido: users.apellido, autorEmail: users.email,
+  })
   .from(pilaresTemas)
   .leftJoin(users, eq(users.id, pilaresTemas.actualizadoPor))
   .where(eq(pilaresTemas.resultId, r.id));
@@ -44,7 +48,10 @@ for (const f of filas) {
   avance[f.temaId] = {
     estado: f.estado as AvanceTema['estado'],
     nota: f.nota,
-    actualizadoPor: f.actualizadoPor,
+    // El `leftJoin` deja las tres columnas en null a la vez cuando nadie tocó
+    // el tema o su autor ya no existe; se detecta por el correo, que es la
+    // única que nunca está vacía en una fila real.
+    actualizadoPor: f.autorEmail === null ? null : nombreVisible({ nombre: f.autorNombre, apellido: f.autorApellido, email: f.autorEmail }),
     actualizadoEn: f.actualizadoEn.toISOString(),
   };
 }

@@ -110,6 +110,15 @@ const propsLayout = esCliente
           apellido: String(datos.get('apellido') ?? ''),
         }),
       });
+      // Si la sesión venció a media edición, el servidor no responde JSON:
+      // sin esto, el `await res.json()` de abajo reventaría y el mensaje
+      // hablaría de la conexión, que está perfectamente bien.
+      if (res.status === 401 || res.status === 403) {
+        errores.textContent = 'Tu sesión venció. Vuelve a iniciar sesión y repite el cambio.';
+        errores.hidden = false;
+        guardar.disabled = false;
+        return;
+      }
       const cuerpo = await res.json();
 
       if (cuerpo.ok) {
@@ -117,7 +126,13 @@ const propsLayout = esCliente
         // La cabecera la pintó el servidor con el nombre anterior; se refresca
         // aquí para no recargar la página solo por eso.
         const enCabecera = document.querySelector<HTMLElement>('.usuario-nombre, .portal-usuario');
-        if (enCabecera) enCabecera.textContent = nombreVisible({ ...cuerpo.usuario, email });
+        if (enCabecera) {
+          const texto = nombreVisible({ ...cuerpo.usuario, email });
+          enCabecera.textContent = texto;
+          // El enlace se anuncia por su nombre: si se quedara con el anterior,
+          // quien navega por voz seguiría pidiendo una persona que ya no existe.
+          enCabecera.setAttribute('aria-label', `${texto} · Mi perfil`);
+        }
       } else {
         errores.textContent = MENSAJES[cuerpo.error] ?? 'No se pudo guardar.';
         errores.hidden = false;

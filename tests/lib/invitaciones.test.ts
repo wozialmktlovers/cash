@@ -65,6 +65,16 @@ describe('validarAceptacion', () => {
     expect(r.ok).toBe(false);
   });
 
+  // Mismo tope que /perfil y que la ficha de Usuarios: si aquí entrara un
+  // nombre más largo, esa persona quedaría con datos que ningún formulario
+  // posterior puede volver a guardar.
+  it('nombre y apellido no pasan de 60 caracteres', () => {
+    const base = { password: 'x'.repeat(12), confirmacion: 'x'.repeat(12) };
+    expect(validarAceptacion({ ...base, nombre: 'a'.repeat(61), apellido: 'Pau' }).ok).toBe(false);
+    expect(validarAceptacion({ ...base, nombre: 'Ana', apellido: 'a'.repeat(61) }).ok).toBe(false);
+    expect(validarAceptacion({ ...base, nombre: 'a'.repeat(60), apellido: 'a'.repeat(60) }).ok).toBe(true);
+  });
+
   it('exige contraseña de al menos 12 caracteres', () => {
     const r = validarAceptacion({ nombre: 'Ana', apellido: 'Pau', password: 'corta1234', confirmacion: 'corta1234' });
     expect(r.ok).toBe(false);
