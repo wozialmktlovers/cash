@@ -150,7 +150,7 @@ h3 { font: var(--t-h3); letter-spacing: -0.01em; }
   background: var(--gris); border: 1px solid var(--linea);
 }
 .tema-switch button {
-  width: 38px; height: 38px; border: 0; border-radius: 50%; background: transparent;
+  width: 44px; height: 44px; border: 0; border-radius: 50%; background: transparent;
   color: var(--suave); cursor: pointer; display: grid; place-items: center;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
@@ -225,7 +225,7 @@ a.tarjeta:hover { transform: translateY(-2px); border-color: color-mix(in srgb, 
 
 .chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 18px; scrollbar-width: none; }
 .chip {
-  flex-shrink: 0; height: 38px; padding: 0 16px; border-radius: var(--r-pill);
+  flex-shrink: 0; height: 44px; padding: 0 16px; border-radius: var(--r-pill);
   border: 1px solid var(--linea); background: var(--tarjeta); color: var(--texto);
   font: var(--t-small); cursor: pointer;
 }
@@ -255,8 +255,8 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--r
 .con-icono > svg { position: absolute; left: 14px; top: 50%; translate: 0 -50%; width: 18px; height: 18px; color: var(--suave); pointer-events: none; }
 .con-icono input { padding-left: 44px; }
 .con-icono .ojo {
-  position: absolute; right: 4px; top: 50%; translate: 0 -50%;
-  width: 40px; height: 40px; border: 0; background: transparent; color: var(--suave);
+  position: absolute; right: 1px; top: 50%; translate: 0 -50%;
+  width: 44px; height: 44px; border: 0; background: transparent; color: var(--suave);
   cursor: pointer; display: grid; place-items: center; border-radius: 50%;
 }
 .con-icono .ojo svg { width: 18px; height: 18px; }
