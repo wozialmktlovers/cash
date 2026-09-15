@@ -1,5 +1,8 @@
 ---
 import '@/styles/global.css';
+import Icono from '@/components/Icono.astro';
+import TemaSwitch from '@/components/TemaSwitch.astro';
+import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
 
 const error = Astro.url.searchParams.get('error');
 const mensaje =
@@ -13,116 +16,66 @@ const mensaje =
 <html lang="es-MX">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="robots" content="noindex,nofollow" />
     <title>Entrar · Wozial Studio</title>
+    <meta name="theme-color" content={COLOR_BARRA.claro} />
+    <script is:inline set:html={SCRIPT_TEMA}></script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="mask-icon" href="/favicon.svg" color="#d4688a" />
-    <meta name="theme-color" content="#08080b" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <main class="pantalla">
-      <form class="acceso" method="POST" action="/api/login">
+    <div class="login-switch"><TemaSwitch /></div>
+    <main class="login">
+      <form method="POST" action="/api/login">
         <img class="logo" src="/logo-wozial.png" alt="Wozial" width="545" height="194" />
-        <h1>Studio</h1>
-        <p class="sub">Investigación de mercado asistida. Acceso restringido.</p>
-
-        {mensaje && <p class="aviso rosa" role="alert">{mensaje}</p>}
+        <p class="eyebrow">Studio · Acceso privado</p>
+        <h1 class="display">Investigación de mercado asistida por agentes</h1>
 
         <div class="campo">
           <label for="email">Correo</label>
-          <input id="email" name="email" type="email" autocomplete="username" required autofocus />
+          <div class="con-icono">
+            <Icono nombre="correo" />
+            <input id="email" name="email" type="email" autocomplete="username" required autofocus />
+          </div>
         </div>
 
         <div class="campo">
           <label for="password">Contraseña</label>
-          <input
-            id="password"
-            name="password"
-            type="password"
-            autocomplete="current-password"
-            required
-          />
+          <div class="con-icono">
+            <Icono nombre="candado" />
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+            <button type="button" class="ojo" id="ojo" aria-label="Mostrar contraseña" aria-pressed="false">
+              <Icono nombre="ojo" />
+            </button>
+          </div>
         </div>
 
-        <button type="submit" class="btn">Entrar</button>
+        {mensaje && <p class="aviso rosa" role="alert">{mensaje}</p>}
+
+        <button type="submit" class="btn ancho-total">Entrar</button>
       </form>
     </main>
   </body>
 </html>
 
+<script>
+  const ojo = document.getElementById('ojo') as HTMLButtonElement;
+  const clave = document.getElementById('password') as HTMLInputElement;
+  ojo.addEventListener('click', () => {
+    const mostrar = clave.type === 'password';
+    clave.type = mostrar ? 'text' : 'password';
+    ojo.setAttribute('aria-pressed', String(mostrar));
+    ojo.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+  });
+</script>
+
 <style>
-  .pantalla {
-    position: relative;
-    z-index: 1;
-    min-height: 100vh;
-    min-height: 100dvh;
-    display: grid;
-    place-items: center;
-    padding: 32px 20px;
-  }
-
-  .acceso {
-    width: 100%;
-    max-width: 400px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 40px 34px 34px;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
-  }
-
-  .acceso {
-    max-width: 440px;
-    padding: 46px 38px 38px;
-  }
-
-  .logo {
-    width: 100%;
-    max-width: 300px;
-    height: auto;
-    display: block;
-    margin-bottom: 22px;
-  }
-
-  h1 {
-    font-size: 26px;
-    font-weight: 600;
-    letter-spacing: 0.24em;
-    text-transform: uppercase;
-    color: var(--pink);
-    margin-top: 0;
-  }
-
-  @media (max-width: 480px) {
-    .logo {
-      max-width: 230px;
-    }
-
-    h1 {
-      font-size: 21px;
-    }
-  }
-
-  .aviso {
-    margin-top: 22px;
-  }
-
-  .campo {
-    margin-top: 22px;
-  }
-
-  .btn {
-    justify-content: center;
-    margin-top: 30px;
-    padding: 13px;
-  }
+  .login-switch { position: fixed; top: 16px; right: 16px; }
+  .login { min-height: 100dvh; display: grid; place-items: center; padding: 72px 16px 40px; }
+  form { width: min(400px, 100%); display: flex; flex-direction: column; gap: 18px; }
+  .logo { height: 30px; margin-bottom: 10px; }
+  .display { margin-bottom: 10px; }
 </style>
