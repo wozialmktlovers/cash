@@ -125,6 +125,40 @@ export function dependenciasCumplidas(etapa: Etapa, etapas: EtapaCliente[], hayI
   return { ok: true, razon: '' };
 }
 
+/**
+ * Decide si `POST /api/jobs` puede encolar la generación del documento de
+ * `etapa` para este cliente (fix I1, punto 1). Antes de este chequeo, la
+ * ruta insertaba el job sin mirar nada: un operador podía regenerar el
+ * documento de una etapa `en_revision` (reemplazando justo lo que el admin
+ * está por aprobar) o `aprobada` (sin pasar por «reabrir»), o saltarse una
+ * etapa sin sus dependencias. Los tres bloqueos, en orden:
+ * - ni contratada ni interna: no hay nada que generar (una etapa interna sí
+ *   deja pasar, porque alimenta a otra: investigación interna para pilares);
+ * - `en_revision` o `aprobada`: hay que resolver la revisión o reabrir antes
+ *   de reemplazar el documento;
+ * - `dependenciasCumplidas`: sin la investigación (y, para el manual, sin
+ *   pilares) no hay sobre qué generar.
+ */
+export function puedeGenerar(
+  etapa: Etapa,
+  etapas: EtapaCliente[],
+  hayInvestigacionConDatos: boolean,
+): { ok: boolean; razon: string } {
+  const fila = etapas.find((e) => e.etapa === etapa);
+  if (!fila || (!fila.contratada && !fila.interna)) {
+    return { ok: false, razon: `${NOMBRE_ETAPA[etapa]} no está contratada.` };
+  }
+
+  if (fila.estado === 'en_revision') {
+    return { ok: false, razon: 'Esta etapa está en revisión: no se puede reemplazar el documento que el admin está revisando.' };
+  }
+  if (fila.estado === 'aprobada') {
+    return { ok: false, razon: 'Esta etapa ya está aprobada: hay que reabrirla antes de generar de nuevo.' };
+  }
+
+  return dependenciasCumplidas(etapa, etapas, hayInvestigacionConDatos);
+}
+
 function razonEstadoInvalido(accion: Accion, actual: Estado): string {
   return `No se puede ${accion.replace(/_/g, ' ')} desde ${ETIQUETA_ESTADO_ETAPA[actual]}`;
 }

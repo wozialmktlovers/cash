@@ -15,6 +15,7 @@ import {
   estadoTrasGenerar,
   estadoTrasComentarioCliente,
   puedeComentar,
+  puedeGenerar,
   type EtapaCliente,
   type Estado,
 } from '@/flujo/reglas';
@@ -175,6 +176,56 @@ describe('dependenciasCumplidas', () => {
     const r = dependenciasCumplidas('desarrollo_mensual', [], true);
     expect(r.ok).toBe(false);
     expect(r.razon).toContain('Próximamente');
+  });
+});
+
+describe('puedeGenerar (I1 punto 1: 409 de POST /api/jobs)', () => {
+  it('etapa contratada, no_iniciada, sin dependencias que exigir: ok', () => {
+    const etapas = [et('investigacion', { estado: 'no_iniciada' })];
+    expect(puedeGenerar('investigacion', etapas, true).ok).toBe(true);
+  });
+
+  it('etapa ni contratada ni interna: no-ok', () => {
+    const etapas = [et('pilares', { contratada: false, interna: false, estado: 'no_iniciada' })];
+    const r = puedeGenerar('pilares', etapas, true);
+    expect(r.ok).toBe(false);
+    expect(r.razon.toLowerCase()).toContain('contratada');
+  });
+
+  it('etapa interna (no contratada) igual deja generar: alimenta a otra etapa', () => {
+    const etapas = [et('investigacion', { contratada: false, interna: true, estado: 'no_iniciada' })];
+    expect(puedeGenerar('investigacion', etapas, true).ok).toBe(true);
+  });
+
+  it('etapa en_revision: no-ok, no se puede reemplazar el documento que el admin revisa', () => {
+    const etapas = [et('investigacion', { estado: 'en_revision' })];
+    const r = puedeGenerar('investigacion', etapas, true);
+    expect(r.ok).toBe(false);
+    expect(r.razon.toLowerCase()).toContain('revisión');
+  });
+
+  it('etapa aprobada: no-ok, hay que reabrirla primero', () => {
+    const etapas = [et('investigacion', { estado: 'aprobada' })];
+    const r = puedeGenerar('investigacion', etapas, true);
+    expect(r.ok).toBe(false);
+    expect(r.razon.toLowerCase()).toContain('reabr');
+  });
+
+  it('etapa en_proceso o con_cambios: ok (regenerar es el caso normal)', () => {
+    expect(puedeGenerar('investigacion', [et('investigacion', { estado: 'en_proceso' })], true).ok).toBe(true);
+    expect(puedeGenerar('investigacion', [et('investigacion', { estado: 'con_cambios' })], true).ok).toBe(true);
+  });
+
+  it('dependencias no cumplidas: no-ok con la razón de dependenciasCumplidas', () => {
+    const etapas = [et('pilares', { estado: 'no_iniciada' })];
+    const r = puedeGenerar('pilares', etapas, false);
+    expect(r.ok).toBe(false);
+    expect(r.razon.toLowerCase()).toContain('investigación');
+  });
+
+  it('la etapa no existe en la lista: no-ok, no revienta', () => {
+    const r = puedeGenerar('pilares', [], true);
+    expect(r.ok).toBe(false);
   });
 });
 
