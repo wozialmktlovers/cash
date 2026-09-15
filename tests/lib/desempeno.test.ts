@@ -317,6 +317,21 @@ describe('carga', () => {
     const r = carga([], [], { desde: null, hasta: new Date('2026-01-01T00:00:00Z') });
     expect(r).toEqual({ clientes: 0, etapasActivas: 0, avancePromedio: 0, aprobadasEnPeriodo: 0 });
   });
+
+  it('desarrollo_mensual contratado no cuenta en el avance, igual que avanceCliente (M3, controlador punto 6)', () => {
+    // Mismo cliente que src/flujo/reglas.ts::avanceCliente ya cubre: contratar
+    // desarrollo_mensual (que se queda en no_iniciada hasta que exista su
+    // generador) no debe atorar el % en ≤75%. Antes de este fix, carga() tenía
+    // su propio filtro (sin la exclusión) y el tablero de desempeño mostraba
+    // un % distinto al que ve el mismo cliente en su portal.
+    const etapas = [
+      etm({ id: 'e1', clientId: 'c1', etapa: 'investigacion', estado: 'aprobada', contratada: true, interna: false }),
+      etm({ id: 'e2', clientId: 'c1', etapa: 'desarrollo_mensual', estado: 'no_iniciada', contratada: true, interna: false }),
+    ];
+    const p = { desde: null, hasta: new Date('2026-09-30T00:00:00Z') };
+    // Sin la exclusión: (100+0)/2 = 50. Con ella (solo investigacion): 100/1 = 100.
+    expect(carga(etapas, [], p).avancePromedio).toBe(100);
+  });
 });
 
 describe('costo', () => {

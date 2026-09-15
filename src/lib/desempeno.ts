@@ -1,11 +1,17 @@
 // Métricas puras del tablero de desempeño (spec §5). Solo cálculo sobre datos
 // en memoria: eventos, comentarios, jobs y etapas. Sin acceso a base de datos.
 //
-// Solo se importan tipos de src/flujo/reglas.ts (Etapa, Estado): el peso de
-// avance por estado se repite aquí a propósito, en vez de importar PESOS o
-// avanceCliente, para mantener este módulo desacoplado de esa lógica de
-// transición (ver clarificación de la tarea D1).
-import type { Etapa, Estado } from '@/flujo/reglas';
+// Solo se importan tipos de src/flujo/reglas.ts (Etapa, Estado) — el resto de
+// la lógica de transición (PESOS, avanceCliente) se mantenía deliberadamente
+// fuera de este módulo (ver clarificación de la tarea D1), EXCEPTO el % de
+// avance de `carga()`: ese cálculo sí importa PESOS y etapasParaAvance de
+// src/flujo/reglas.ts (M3, punto 6 del controlador). Tenerlo repetido aquí
+// hacía que este módulo NO excluyera `desarrollo_mensual` mientras esa etapa
+// no tenga generador, a diferencia de avanceCliente (portal) que sí lo
+// excluye — el tablero de desempeño y el portal terminaban mostrando un %
+// distinto para el mismo cliente. Compartir la regla (en vez de duplicarla
+// de nuevo, esta vez ya correcta) evita que se vuelvan a desalinear.
+import { PESOS, etapasParaAvance, type Etapa, type Estado } from '@/flujo/reglas';
 
 export type Evento = {
   etapaId: string;
@@ -40,15 +46,6 @@ export type EtapaM = {
 export type Periodo = { desde: Date | null; hasta: Date };
 
 const ZONA = 'America/Mexico_City';
-
-/** Réplica local de PESOS (src/flujo/reglas.ts) para no importar esa lógica de negocio; ver nota arriba. */
-const PESO_ESTADO: Record<Estado, number> = {
-  no_iniciada: 0,
-  en_proceso: 25,
-  en_revision: 50,
-  con_cambios: 60,
-  aprobada: 100,
-};
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -306,10 +303,11 @@ export function carga(
   const ACTIVOS: Estado[] = ['en_proceso', 'en_revision', 'con_cambios'];
   const etapasActivas = etapas.filter((e) => e.contratada && !e.interna && ACTIVOS.includes(e.estado)).length;
 
-  // Avance por cliente: mismo cálculo que avanceCliente (promedio del peso de
-  // las etapas contratadas y no internas; 0 sin ninguna), sin redondear cada
-  // cliente por separado para no acumular el sesgo de un doble redondeo antes
-  // de promediar entre clientes.
+  // Avance por cliente: mismo cálculo que avanceCliente (etapasParaAvance:
+  // contratadas, no internas y sin desarrollo_mensual mientras no tenga
+  // generador; 0 sin ninguna), sin redondear cada cliente por separado para
+  // no acumular el sesgo de un doble redondeo antes de promediar entre
+  // clientes.
   const porCliente = new Map<string, EtapaM[]>();
   for (const e of etapas) {
     const lista = porCliente.get(e.clientId);
@@ -318,12 +316,12 @@ export function carga(
   }
   const avancesPorCliente: number[] = [];
   for (const es of porCliente.values()) {
-    const visibles = es.filter((e) => e.contratada && !e.interna);
+    const visibles = etapasParaAvance(es);
     if (visibles.length === 0) {
       avancesPorCliente.push(0);
       continue;
     }
-    const suma = visibles.reduce((s, e) => s + PESO_ESTADO[e.estado], 0);
+    const suma = visibles.reduce((s, e) => s + PESOS[e.estado], 0);
     avancesPorCliente.push(suma / visibles.length);
   }
   const avancePromedio =
@@ -429,7 +427,7 @@ export function agruparClientesPorOperador(clientes: { id: string; operadorId: s
 
 type TipoJob = JobM['tipo'];
 
-/** Tipo de documento (job) de cada etapa; `desarrollo_mensual` no genera jobs todavía (mismo mapa que `tipoDocumentoDe`, src/flujo/reglas.ts, repetido aquí por la misma razón que PESO_ESTADO arriba: no importar esa lógica de negocio). */
+/** Tipo de documento (job) de cada etapa; `desarrollo_mensual` no genera jobs todavía (mismo mapa que `tipoDocumentoDe`, src/flujo/reglas.ts, repetido aquí para no importar esa lógica de negocio — a diferencia de PESOS/etapasParaAvance arriba, que sí se comparten para el % de avance, ver nota de imports). */
 const TIPO_POR_ETAPA: Partial<Record<Etapa, TipoJob>> = {
   investigacion: 'research',
   pilares: 'pilares',
