@@ -17,4 +17,10 @@ describe('cifrasSinRespaldo', () => {
   it('rechaza valores sin ningún dígito', () => {
     expect(cifrasSinRespaldo(con('Mucho'), fuente)).toEqual(['Mucho']);
   });
+  it('no deja pasar un número que solo es prefijo de otro concatenado en el mismo texto', () => {
+    expect(cifrasSinRespaldo(con('$180', '$001'), { t: 'de $10,000 a $18,000' })).toEqual(['$180', '$001']);
+  });
+  it('sigue tolerando «mil» y «K» como el mismo número con otro formato', () => {
+    expect(cifrasSinRespaldo(con('18 mil', '16.4K'), { t: 'de $10,000 a $18,000', s: 16400 })).toEqual([]);
+  });
 });
