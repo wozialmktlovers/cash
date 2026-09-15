@@ -85,6 +85,25 @@ export function seleccionarLecturasAConvertir(
   return [...conEnlace, ...sinEnlace];
 }
 
+/**
+ * Guarda la lectura sin pisar una edición hecha mientras el modelo estaba
+ * pensando (punto 3): relee la fila con `FOR UPDATE` dentro de una
+ * transacción y hace merge solo de la clave `lectura` sobre el `datos`
+ * FRESCO, nunca sobre la copia que se leyó al principio del ciclo — esa
+ * copia puede tener ya varios segundos y el operador pudo haber editado el
+ * documento (o pisado alguna otra etapa) en ese rato.
+ */
+async function guardarLectura(id: string, lectura: Record<string, unknown>): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [fresca] = await tx.select({ datos: researchResults.datos })
+      .from(researchResults).where(eq(researchResults.id, id)).for('update').limit(1);
+    if (!fresca) return; // la fila se borró mientras tanto: nada que guardar.
+    await tx.update(researchResults)
+      .set({ datos: { ...(fresca.datos as Record<string, unknown>), lectura } })
+      .where(eq(researchResults.id, id));
+  });
+}
+
 export async function convertirLecturasPendientes(opciones: {
   correr?: typeof correrLectura;
   tope?: number;
@@ -122,16 +141,12 @@ export async function convertirLecturasPendientes(opciones: {
         gasto += calcularCosto(modelo, e, s);
         return gasto < tope;
       });
-      await db.update(researchResults)
-        .set({ datos: { ...datos, lectura: { estado: 'ok', datos: r.datos } } })
-        .where(eq(researchResults.id, fila.id));
+      await guardarLectura(fila.id, { estado: 'ok', datos: r.datos });
       convertidas++;
     } catch (e) {
       const mensaje = e instanceof Error ? e.message : String(e);
       if (esRespuestaInvalida(e)) {
-        await db.update(researchResults)
-          .set({ datos: { ...datos, lectura: { estado: 'vacio', razon: 'No se pudo redactar la lectura para el cliente.' } } })
-          .where(eq(researchResults.id, fila.id));
+        await guardarLectura(fila.id, { estado: 'vacio', razon: 'No se pudo redactar la lectura para el cliente.' });
         invalidas++;
         log(`[lecturas] ${fila.id}: respuesta inválida, no se reintentará`);
         continue;

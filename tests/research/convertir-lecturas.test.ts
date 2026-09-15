@@ -143,11 +143,14 @@ const mockDb = vi.hoisted(() => {
   }
 
   // Objeto encadenable y a la vez «thenable»: `await` funciona sin importar
-  // en qué punto de la cadena (`.from()`, `.where()` o `.limit()`) se corte,
-  // igual que con el query builder real de drizzle.
+  // en qué punto de la cadena (`.from()`, `.where()`, `.for()` o `.limit()`)
+  // se corte, igual que con el query builder real de drizzle. `.for('update')`
+  // no bloquea nada aquí (no hay concurrencia real en el mock): se agrega
+  // solo para que el código bajo prueba pueda encadenarlo sin romperse.
   function chain(resultado: any[]): any {
     const obj: any = {
       where: () => obj,
+      for: () => obj,
       limit: (n: number) => chain(resultado.slice(0, n)),
       then: (resuelve: any, rechaza: any) => Promise.resolve(resultado).then(resuelve, rechaza),
     };
@@ -164,6 +167,10 @@ const mockDb = vi.hoisted(() => {
         },
       }),
     }),
+    // Sin aislamiento real: `tx` es el mismo `db`, así que relee sobre el
+    // mismo array compartido (`estado.filasResearch`) — justo lo que hace
+    // falta para probar el merge sobre datos frescos del punto 3.
+    transaction: (cb: (tx: any) => any) => Promise.resolve(cb(db)),
   };
 
   return { estado, TABLAS, db };
@@ -297,5 +304,28 @@ describe('convertirLecturasPendientes', () => {
     expect(mockDb.estado.actualizaciones).toHaveLength(1);
     expect(mockDb.estado.actualizaciones[0].valores.datos.lectura).toEqual({ estado: 'ok', datos: LECTURA_OK });
     expect(r.convertidas).toBe(1);
+  });
+
+  it('punto 3: guarda la lectura sobre el datos fresco, sin pisar una edición hecha mientras el modelo trabajaba', async () => {
+    mockDb.estado.filasResearch = [{ id: 'r1', clientId: 'c1', datos: copiaParcial(), version: 1 }];
+    // `correr` simula la edición concurrente: alguien cambia `datos` de la
+    // fila (agrega una clave nueva) DURANTE la llamada al modelo, antes de
+    // que la conversión llegue a guardar. Si el guardado usara la copia leída
+    // al principio del ciclo (el bug original), esta edición se perdería.
+    const correr = vi.fn(async () => {
+      const filaEnBase = mockDb.estado.filasResearch.find((f: any) => f.id === 'r1')!;
+      filaEnBase.datos = { ...filaEnBase.datos, editadoMientrasTanto: 'cambio del operador' };
+      return { datos: LECTURA_OK, tokensEntrada: 0, tokensSalida: 0 };
+    });
+
+    await convertirLecturasPendientes({ correr, tope: 10, modelo: 'claude-opus-5', log: () => {} });
+
+    expect(mockDb.estado.actualizaciones).toHaveLength(1);
+    const guardado = mockDb.estado.actualizaciones[0].valores.datos;
+    // La lectura se guardó...
+    expect(guardado.lectura).toEqual({ estado: 'ok', datos: LECTURA_OK });
+    // ...pero SIN perder la edición concurrente, porque se releyó `datos`
+    // fresco dentro de la transacción en vez de usar la copia del principio.
+    expect(guardado.editadoMientrasTanto).toBe('cambio del operador');
   });
 });
