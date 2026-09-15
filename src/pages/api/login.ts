@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { db, users } from '@/db';
 import { verifyPassword, crearSesion } from '@/lib/auth';
+import { destinoTrasLogin } from '@/lib/permisos';
 
 const intentos = new Map<string, { n: number; hasta: number }>();
 const MAX = 3, VENTANA = 5 * 60_000, BLOQUEO = 15 * 60_000;
@@ -18,7 +19,9 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   }
 
   const [u] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-  const ok = u ? await verifyPassword(u.passwordHash, password) : false;
+  // Un usuario desactivado se rechaza igual que una contraseña incorrecta:
+  // no revela si la cuenta existe.
+  const ok = u && u.activo ? await verifyPassword(u.passwordHash, password) : false;
 
   if (!ok) {
     const vigente = reg && reg.hasta > ahora;
@@ -33,5 +36,5 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
     httpOnly: true, secure: import.meta.env.PROD, sameSite: 'lax',
     path: '/', maxAge: 30 * 86400,
   });
-  return redirect('/');
+  return redirect(destinoTrasLogin(u!.rol));
 };

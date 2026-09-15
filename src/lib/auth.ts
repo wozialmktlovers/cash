@@ -1,7 +1,8 @@
 import { hash, verify } from '@node-rs/argon2';
 import { randomBytes } from 'node:crypto';
 import { eq, lt } from 'drizzle-orm';
-import { db, sessions } from '@/db';
+import { db, sessions, users } from '@/db';
+import type { UsuarioSesion } from '@/lib/permisos';
 
 const DIAS_SESION = 30;
 
@@ -24,7 +25,7 @@ export async function crearSesion(userId: string): Promise<string> {
   return id;
 }
 
-export async function validarSesion(token: string): Promise<{ userId: string } | null> {
+export async function validarSesion(token: string): Promise<UsuarioSesion | null> {
   if (!token) return null;
   const [s] = await db.select().from(sessions).where(eq(sessions.id, token)).limit(1);
   if (!s) return null;
@@ -32,7 +33,17 @@ export async function validarSesion(token: string): Promise<{ userId: string } |
     await db.delete(sessions).where(eq(sessions.id, token));
     return null;
   }
-  return { userId: s.userId };
+  const [u] = await db
+    .select({ id: users.id, email: users.email, nombre: users.nombre, rol: users.rol, clientId: users.clientId, activo: users.activo })
+    .from(users)
+    .where(eq(users.id, s.userId))
+    .limit(1);
+  // Usuario borrado o desactivado: la sesión ya no vale, se cierra.
+  if (!u || !u.activo) {
+    await db.delete(sessions).where(eq(sessions.id, token));
+    return null;
+  }
+  return u;
 }
 
 export async function cerrarSesion(token: string): Promise<void> {

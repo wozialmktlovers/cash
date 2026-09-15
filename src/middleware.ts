@@ -1,11 +1,12 @@
 import { defineMiddleware } from 'astro:middleware';
 import { validarSesion } from '@/lib/auth';
 import { mismoOrigen, requiereVerificacion } from '@/lib/csrf';
+import { rutaPermitida } from '@/lib/permisos';
 import { arrancarWorker } from '@/research/worker';
 
 arrancarWorker();
 
-const PUBLICAS = [/^\/login$/, /^\/api\/login$/, /^\/p\//];
+const PUBLICAS = [/^\/login$/, /^\/api\/login$/, /^\/p\//, /^\/invitacion\//, /^\/api\/invitacion\//];
 
 export const onRequest = defineMiddleware(async (ctx, next) => {
   const ruta = ctx.url.pathname;
@@ -29,6 +30,16 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     return ctx.redirect('/login');
   }
 
-  ctx.locals.userId = sesion.userId;
+  ctx.locals.userId = sesion.id;
+  ctx.locals.usuario = sesion;
+
+  const acceso = rutaPermitida(sesion.rol, ruta);
+  if (acceso === 'prohibido') {
+    return ruta.startsWith('/api/')
+      ? new Response(JSON.stringify({ error: 'Prohibido' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
+      : ctx.redirect('/');
+  }
+  if (acceso === 'redirigir-portal') return ctx.redirect('/portal');
+
   return next();
 });
