@@ -20,8 +20,14 @@ export function filasGrafica<T>(
 // no debe dividir entre cero ni dar un porcentaje negativo: se dibuja vacío.
 const pct = (n: number, tope: number) => (tope <= 0 ? 0 : Math.round((n / tope) * 100));
 
-/** Barras horizontales. Con una sola fila no hay nada que comparar. */
-export function graficaBarras(filas: FilaGrafica[], leyenda: string): string {
+/**
+ * Barras horizontales. Con una sola fila no hay nada que comparar.
+ * `formato` da el texto del valor a la derecha de cada barra; por omisión
+ * son pesos (uso original: precios de la competencia), pero el tablero de
+ * desempeño (D2) lo usa también para días, así que se puede sustituir sin
+ * tocar el resto de la función.
+ */
+export function graficaBarras(filas: FilaGrafica[], leyenda: string, formato: (n: number) => string = formatearMonto): string {
   if (filas.length < 2) return '';
   const tope = Math.max(...filas.map((f) => f.max));
   return `<figure class="grafica">
@@ -29,7 +35,7 @@ export function graficaBarras(filas: FilaGrafica[], leyenda: string): string {
     ${filas.map((f) => `<div class="barra-fila${f.destacada ? ' destacada' : ''}">
       <span class="barra-nombre">${escapar(f.nombre)}</span>
       <span class="barra-pista"><span class="barra-relleno" style="width:${pct(f.max, tope)}%"></span></span>
-      <span class="barra-valor">${formatearMonto(f.max)}</span>
+      <span class="barra-valor">${formato(f.max)}</span>
     </div>`).join('')}
   </figure>`;
 }

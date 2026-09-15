@@ -1,0 +1,341 @@
+---
+import { asc, eq, inArray, ne } from 'drizzle-orm';
+import Base from '@/layouts/Base.astro';
+import Icono from '@/components/Icono.astro';
+import { db, clients, clienteEtapas, etapaEventos, comentarios, researchJobs, users } from '@/db';
+import { condicionClientes, esUuid } from '@/lib/visibilidad';
+import { ETAPAS, NOMBRE_ETAPA, PESOS, type Etapa, type Estado } from '@/flujo/reglas';
+import {
+  periodo, resumenEstadistico, tiemposPorEtapa, calidad, carga, costo,
+  type Evento, type ComentarioM, type JobM, type EtapaM, type Periodo,
+} from '@/lib/desempeno';
+import { graficaBarras, type FilaGrafica } from '@/render/investigacion/graficas';
+
+// El middleware ya manda al cliente a /portal antes de llegar aquí
+// (rutaPermitida en src/lib/permisos.ts no incluye /desempeno entre las
+// rutas del cliente). Esta guarda es solo por si esa regla cambia algún día.
+const usuario = Astro.locals.usuario;
+if (usuario.rol === 'cliente') return Astro.redirect('/portal');
+
+const esAdmin = usuario.rol === 'admin';
+
+// ── Periodo ──────────────────────────────────────────────────────────────
+const CLAVES_PERIODO = ['mes', 'mes_anterior', '90', 'todo'] as const;
+type ClavePeriodo = (typeof CLAVES_PERIODO)[number];
+const periodoParam = Astro.url.searchParams.get('periodo');
+const claveActiva: ClavePeriodo = (CLAVES_PERIODO as readonly string[]).includes(periodoParam ?? '')
+  ? (periodoParam as ClavePeriodo)
+  : 'mes';
+const periodoActual: Periodo = periodo(claveActiva, new Date());
+
+const PERIODOS: { clave: ClavePeriodo; texto: string }[] = [
+  { clave: 'mes', texto: 'Este mes' },
+  { clave: 'mes_anterior', texto: 'Mes anterior' },
+  { clave: '90', texto: 'Últimos 90 días' },
+  { clave: 'todo', texto: 'Todo' },
+];
+
+// ── Alcance (clientes visibles) ─────────────────────────────────────────
+// Solo el admin puede acotar por operador; para el operador, `?operador=`
+// se ignora (condicionClientes ya lo deja viendo solo lo suyo).
+const operadorParam = esAdmin ? (Astro.url.searchParams.get('operador') ?? '') : '';
+const operadorFiltro = esUuid(operadorParam) ? operadorParam : '';
+const cond = operadorFiltro ? eq(clients.operadorId, operadorFiltro) : condicionClientes(usuario);
+
+const lista = await db.select().from(clients).where(cond).orderBy(asc(clients.nombre));
+const ids = lista.map((c) => c.id);
+const operadorDeCliente = new Map(lista.map((c) => [c.id, c.operadorId]));
+
+function enlacePeriodo(clave: ClavePeriodo): string {
+  const params = new URLSearchParams({ periodo: clave });
+  if (operadorFiltro) params.set('operador', operadorFiltro);
+  return `/desempeno?${params.toString()}`;
+}
+
+// Solo admin ve el select, y lo ve aunque el filtro actual no traiga
+// resultados (para poder quitarlo).
+const operadoresSelect = esAdmin
+  ? await db.select({ id: users.id, nombre: users.nombre, email: users.email }).from(users).where(ne(users.rol, 'cliente')).orderBy(users.nombre)
+  : [];
+const nombreOperador = new Map<string, string>(
+  esAdmin ? operadoresSelect.map((o) => [o.id, o.nombre ?? o.email]) : [[usuario.id, usuario.nombre ?? usuario.email]],
+);
+
+// ── Consulta (una sola vez por tabla, nunca por cliente) ────────────────
+const etapasFilas = ids.length
+  ? await db
+      .select({
+        id: clienteEtapas.id, clientId: clienteEtapas.clientId, etapa: clienteEtapas.etapa,
+        estado: clienteEtapas.estado, contratada: clienteEtapas.contratada, interna: clienteEtapas.interna,
+      })
+      .from(clienteEtapas)
+      .where(inArray(clienteEtapas.clientId, ids))
+  : [];
+const etapas: EtapaM[] = etapasFilas.map((e) => ({ ...e, operadorId: operadorDeCliente.get(e.clientId) ?? null }));
+
+const eventosFilas = ids.length
+  ? await db
+      .select({
+        etapaId: etapaEventos.etapaId, clientId: clienteEtapas.clientId, etapa: clienteEtapas.etapa,
+        accion: etapaEventos.accion, de: etapaEventos.de, a: etapaEventos.a, creadoEn: etapaEventos.creadoEn,
+      })
+      .from(etapaEventos)
+      .innerJoin(clienteEtapas, eq(clienteEtapas.id, etapaEventos.etapaId))
+      .where(inArray(clienteEtapas.clientId, ids))
+  : [];
+const eventos: Evento[] = eventosFilas;
+
+const comentariosFilas = ids.length
+  ? await db
+      .select({ etapaId: comentarios.etapaId, autorRol: comentarios.autorRol, creadoEn: comentarios.creadoEn })
+      .from(comentarios)
+      .innerJoin(clienteEtapas, eq(clienteEtapas.id, comentarios.etapaId))
+      .where(inArray(clienteEtapas.clientId, ids))
+  : [];
+const comentariosM: ComentarioM[] = comentariosFilas;
+
+const jobsFilas = ids.length ? await db.select().from(researchJobs).where(inArray(researchJobs.clientId, ids)) : [];
+// costo_usd es numeric: postgres-js lo entrega como string. Un valor corrupto
+// cuenta como 0 en vez de volver NaN todas las sumas del tablero.
+const jobs: JobM[] = jobsFilas.map((j) => {
+  const n = Number(j.costoUsd);
+  return { clientId: j.clientId, tipo: j.tipo, costoUsd: Number.isNaN(n) ? 0 : n, creadoPor: j.creadoPor, creadoEn: j.createdAt };
+});
+
+// ── Métricas (funciones puras de src/lib/desempeno.ts) ──────────────────
+// tiemposPorEtapa y calidad no reciben periodo (ver su firma en D1): reflejan
+// todo el historial de los clientes en alcance. Solo `carga` (aprobadas en
+// el periodo) y `costo` (del periodo) respetan el filtro de periodo.
+const cargaRes = carga(etapas, eventos, periodoActual);
+const costoRes = costo(jobs, operadorDeCliente, periodoActual);
+const tiemposRes = tiemposPorEtapa(eventos);
+const calidadRes = calidad(eventos, comentariosM);
+
+const diasAprobarProm = resumenEstadistico(Object.values(tiemposRes.duracion).flat()).promedio;
+const esperaRevisionProm = resumenEstadistico(tiemposRes.esperaRevision).promedio;
+const rondasProm = resumenEstadistico(calidadRes.rondasPorEtapaAprobada).promedio;
+
+// ── Barras ────────────────────────────────────────────────────────────
+const formatoDias = (n: number) => `${n.toFixed(1)} días`;
+
+const filasDias: FilaGrafica[] = [];
+for (const et of ETAPAS) {
+  const r = resumenEstadistico(tiemposRes.duracion[et]);
+  if (r.promedio !== null) filasDias.push({ nombre: NOMBRE_ETAPA[et], min: r.promedio, max: r.promedio, destacada: false });
+}
+const graficaDiasHtml = graficaBarras(filasDias, 'Días promedio por etapa', formatoDias);
+
+const NOMBRE_TIPO: Record<'research' | 'pilares' | 'growth', string> = {
+  research: 'Investigación', pilares: 'Mapa de pilares', growth: 'Manual de campaña',
+};
+const filasCosto: FilaGrafica[] = (['research', 'pilares', 'growth'] as const).map((t) => ({
+  nombre: NOMBRE_TIPO[t], min: costoRes.porEtapa[t], max: costoRes.porEtapa[t], destacada: false,
+}));
+const graficaCostoHtml = costoRes.total > 0 ? graficaBarras(filasCosto, 'Costo por tipo') : '';
+
+// ── Tabla «Por operador» (admin) ─────────────────────────────────────────
+const ORDEN_ETAPA = new Map(ETAPAS.map((e, i) => [e, i]));
+const clientIdDeEtapaId = new Map(etapas.map((e) => [e.id, e.clientId]));
+
+type GrupoOperador = { clave: string; nombre: string; clientIds: Set<string> };
+const grupos = new Map<string, GrupoOperador>();
+for (const c of lista) {
+  const clave = c.operadorId ?? 'sin_asignar';
+  const previo = grupos.get(clave);
+  if (previo) previo.clientIds.add(c.id);
+  else grupos.set(clave, { clave, nombre: c.operadorId ? (nombreOperador.get(c.operadorId) ?? 'Operador') : 'Sin asignar', clientIds: new Set([c.id]) });
+}
+
+// El costo por operador (costoRes.porOperador) se atribuye por creado_por
+// (con el operador del cliente como respaldo), no por la asignación actual
+// del cliente: si un admin corrió un job de un cliente ajeno, ese costo
+// puede no aparecer bajo ningún operador de esta tabla. Es la misma
+// definición de "por operador" de la spec (§5), aceptada como límite conocido.
+const filasPorOperador = [...grupos.values()]
+  .map((g) => {
+    const etapasG = etapas.filter((e) => g.clientIds.has(e.clientId));
+    const eventosG = eventos.filter((e) => g.clientIds.has(e.clientId));
+    const comentariosG = comentariosM.filter((c) => g.clientIds.has(clientIdDeEtapaId.get(c.etapaId) ?? ''));
+    const cargaG = carga(etapasG, eventosG, periodoActual);
+    const diasG = resumenEstadistico(Object.values(tiemposPorEtapa(eventosG).duracion).flat()).promedio;
+    const rondasG = resumenEstadistico(calidad(eventosG, comentariosG).rondasPorEtapaAprobada).promedio;
+    return { nombre: g.nombre, ...cargaG, dias: diasG, rondas: rondasG, costo: costoRes.porOperador.get(g.clave) ?? 0 };
+  })
+  .sort((a, b) => (a.nombre === 'Sin asignar' ? 1 : b.nombre === 'Sin asignar' ? -1 : a.nombre.localeCompare(b.nombre, 'es')));
+
+// ── Tabla «Por cliente» ──────────────────────────────────────────────────
+function avanceDeCliente(etapasCliente: EtapaM[]): number {
+  const visibles = etapasCliente.filter((e) => e.contratada && !e.interna);
+  if (visibles.length === 0) return 0;
+  const suma = visibles.reduce((s, e) => s + PESOS[e.estado], 0);
+  return Math.round(suma / visibles.length);
+}
+function etapaActualDe(etapasCliente: EtapaM[]): string {
+  const visibles = etapasCliente
+    .filter((e) => e.contratada && !e.interna)
+    .sort((a, b) => (ORDEN_ETAPA.get(a.etapa) ?? 0) - (ORDEN_ETAPA.get(b.etapa) ?? 0));
+  if (visibles.length === 0) return '—';
+  const actual = visibles.find((e) => e.estado !== 'aprobada');
+  return actual ? NOMBRE_ETAPA[actual.etapa] : 'Completado';
+}
+
+const etapasPorCliente = new Map<string, EtapaM[]>();
+for (const e of etapas) {
+  const l = etapasPorCliente.get(e.clientId);
+  if (l) l.push(e);
+  else etapasPorCliente.set(e.clientId, [e]);
+}
+
+const filasPorCliente = lista.map((c) => ({
+  nombre: c.nombre,
+  avance: avanceDeCliente(etapasPorCliente.get(c.id) ?? []),
+  etapaActual: etapaActualDe(etapasPorCliente.get(c.id) ?? []),
+  operador: c.operadorId ? (nombreOperador.get(c.operadorId) ?? 'Operador') : 'Sin asignar',
+  costo: costoRes.porCliente.get(c.id) ?? 0,
+}));
+
+// ── Formato de números (spec: días «4.2 días», dinero «$12.34 USD», % «63%») ──
+const dias = (n: number | null) => (n === null ? '—' : `${n.toFixed(1)} días`);
+const dinero = (n: number) => `$${n.toFixed(2)} USD`;
+const pct = (n: number) => `${Math.round(n)}%`;
+---
+
+<Base titulo="Desempeño" activo="desempeno">
+  <div class="encabezado">
+    <div>
+      <h1>Desempeño</h1>
+      <p class="sub">Tiempos, calidad, carga y costo por operador y por cliente.</p>
+    </div>
+  </div>
+
+  <nav class="chips" aria-label="Filtrar por periodo">
+    {PERIODOS.map((p) => (
+      <a href={enlacePeriodo(p.clave)} class:list={['chip', { activo: claveActiva === p.clave }]} aria-current={claveActiva === p.clave ? 'page' : undefined}>
+        {p.texto}
+      </a>
+    ))}
+  </nav>
+
+  {esAdmin && operadoresSelect.length > 0 && (
+    <form method="GET" class="campo" style="max-width:280px;margin-bottom:22px">
+      <label for="operador-filtro">Operador</label>
+      <input type="hidden" name="periodo" value={claveActiva} />
+      <select id="operador-filtro" name="operador">
+        <option value="">Todos</option>
+        {operadoresSelect.map((o) => <option value={o.id} selected={o.id === operadorFiltro}>{o.nombre ?? o.email}</option>)}
+      </select>
+    </form>
+  )}
+
+  {lista.length === 0 ? (
+    <div class="tarjeta vacio">
+      <Icono nombre="grafica" />
+      <strong>Todavía no hay actividad en este periodo</strong>
+      {operadorFiltro ? 'Ese operador no tiene clientes asignados.' : 'En cuanto haya clientes con etapas en marcha, aparecen aquí.'}
+    </div>
+  ) : (
+    <>
+      <section class="indicadores" aria-label="Carga y avance">
+        <div class="indicador rosa"><Icono nombre="clientes" /><span class="valor cifra">{cargaRes.clientes}</span><span class="nombre">Clientes</span></div>
+        <div class="indicador azul"><Icono nombre="reloj" /><span class="valor cifra">{cargaRes.etapasActivas}</span><span class="nombre">Etapas activas</span></div>
+        <div class="indicador verde"><Icono nombre="grafica" /><span class="valor cifra">{pct(cargaRes.avancePromedio)}</span><span class="nombre">Avance promedio</span></div>
+        <div class="indicador amarillo"><Icono nombre="check" /><span class="valor cifra">{cargaRes.aprobadasEnPeriodo}</span><span class="nombre">Aprobadas en el periodo</span></div>
+      </section>
+
+      <section class="indicadores" aria-label="Tiempos, calidad y costo" style="margin-top:12px">
+        <div class="indicador rosa"><Icono nombre="reloj" /><span class="valor cifra">{dias(diasAprobarProm)}</span><span class="nombre">Días promedio a aprobar</span></div>
+        <div class="indicador azul"><Icono nombre="reloj" /><span class="valor cifra">{dias(esperaRevisionProm)}</span><span class="nombre">Espera promedio en revisión</span></div>
+        <div class="indicador amarillo"><Icono nombre="alerta" /><span class="valor cifra">{rondasProm === null ? '—' : rondasProm.toFixed(1)}</span><span class="nombre">Rondas de cambios promedio</span></div>
+        <div class="indicador verde"><Icono nombre="dinero" /><span class="valor cifra">{dinero(costoRes.total)}</span><span class="nombre">Costo del periodo</span></div>
+      </section>
+      <p class="secundario" style="margin-top:10px">Los tiempos y las rondas consideran todo el historial de los clientes visibles; el costo, solo el periodo elegido.</p>
+
+      <section class="seccion">
+        <h2>Barras</h2>
+        <div class="rejilla">
+          {graficaDiasHtml
+            ? <Fragment set:html={graficaDiasHtml} />
+            : <div class="tarjeta vacio"><Icono nombre="grafica" /><strong>Todavía no hay actividad en este periodo</strong>Faltan etapas aprobadas para comparar días por etapa.</div>}
+          {graficaCostoHtml
+            ? <Fragment set:html={graficaCostoHtml} />
+            : <div class="tarjeta vacio"><Icono nombre="dinero" /><strong>Todavía no hay actividad en este periodo</strong>Sin costo registrado en el periodo elegido.</div>}
+        </div>
+      </section>
+
+      {esAdmin && (
+        <section class="seccion">
+          <h2>Por operador</h2>
+          <section class="tarjeta">
+            <div class="tabla-envoltura">
+              <table>
+                <thead>
+                  <tr><th>Operador</th><th>Clientes</th><th>Etapas activas</th><th>Avance</th><th>Días a aprobar</th><th>Rondas</th><th>Costo</th></tr>
+                </thead>
+                <tbody>
+                  {filasPorOperador.map((f) => (
+                    <tr>
+                      <td>{f.nombre}</td>
+                      <td>{f.clientes}</td>
+                      <td>{f.etapasActivas}</td>
+                      <td>{pct(f.avancePromedio)}</td>
+                      <td>{dias(f.dias)}</td>
+                      <td>{f.rondas === null ? '—' : f.rondas.toFixed(1)}</td>
+                      <td>{dinero(f.costo)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      )}
+
+      <section class="seccion">
+        <h2>Por cliente</h2>
+        <section class="tarjeta">
+          <div class="tabla-envoltura">
+            <table>
+              <thead>
+                <tr><th>Cliente</th><th>Avance</th><th>Etapa actual</th><th>Operador</th><th>Costo</th></tr>
+              </thead>
+              <tbody>
+                {filasPorCliente.map((f) => (
+                  <tr>
+                    <td>{f.nombre}</td>
+                    <td>{pct(f.avance)}</td>
+                    <td>{f.etapaActual}</td>
+                    <td>{f.operador}</td>
+                    <td>{dinero(f.costo)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </>
+  )}
+</Base>
+
+<style>
+  /* Estado activo de los chips de periodo (son enlaces, no botones: cada
+     clic recarga con el periodo nuevo, así que no hay aria-pressed que
+     alternar por JS). */
+  .chip.activo { background: var(--tinta); border-color: var(--tinta); color: var(--fondo); }
+  .chip { text-decoration: none; display: inline-flex; align-items: center; }
+
+  /* graficaBarras (src/render/investigacion/graficas.ts) inyecta HTML crudo
+     por set:html, así que sus clases no reciben el hash de scoping de Astro:
+     se declaran con :global(). Mismos tokens que usa esa gráfica en los
+     documentos rendidos (src/render/investigacion/estilos.ts). */
+  .rejilla { grid-template-columns: 1fr; }
+  @media (min-width: 900px) { .rejilla { grid-template-columns: repeat(2, 1fr); } }
+  :global(.grafica) { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: var(--r); padding: 24px; display: grid; gap: 12px; box-shadow: var(--sombra); }
+  :global(.grafica figcaption) { font: var(--t-micro); letter-spacing: 0.1em; text-transform: uppercase; color: var(--suave); }
+  :global(.barra-fila) { display: grid; grid-template-columns: minmax(0, 160px) minmax(0, 1fr) auto; gap: 14px; align-items: center; font: var(--t-small); }
+  :global(.barra-nombre) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :global(.barra-pista) { position: relative; height: 14px; border-radius: var(--r-pill); background: var(--gris); }
+  :global(.barra-relleno) { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--azul); }
+  :global(.barra-valor) { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--tinta); }
+  @media (max-width: 699px) { :global(.barra-fila) { grid-template-columns: 1fr auto; } :global(.barra-pista) { grid-column: 1 / -1; grid-row: 2; } }
+</style>
