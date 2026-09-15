@@ -6,18 +6,13 @@ import { crearShareLink, revocarShareLink } from '@/lib/share';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { documentoVisible, type DocumentoTipo } from '@/lib/visibilidad';
 import { permisoCompartir } from '@/flujo/servicio';
+import { baseUrlPublica } from '@/lib/base-url';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
-
-function baseUrl(request: Request): string {
-  const configurada = process.env.PUBLIC_BASE_URL?.replace(/\/+$/, '');
-  if (configurada) return configurada;
-  return new URL(request.url).origin;
-}
 
 export const POST: APIRoute = async ({ request, locals }) => {
   let crudo: { resultId?: string; tipo?: string };
@@ -48,7 +43,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const slug = slugificar(doc.cliente.nombre);
 
   const token = await crearShareLink(resultId, tipo);
-  return json({ ok: true, token, url: `${baseUrl(request)}/p/${slug}/${token}` }, 201);
+  return json({ ok: true, token, url: `${baseUrlPublica(request)}/p/${slug}/${token}` }, 201);
 };
 
 export const DELETE: APIRoute = async ({ request, locals }) => {

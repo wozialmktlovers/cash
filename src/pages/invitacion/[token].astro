@@ -34,7 +34,7 @@ const MENSAJES_ERROR: Record<string, string> = {
   'ya-existe': 'Ya existe una cuenta con ese correo. Si es tuya, entra desde la página de acceso.',
   usada: 'Esta invitación ya se usó.',
   vencida: 'Esta invitación venció.',
-  inexistente: 'Esta invitación no existe.',
+  inexistente: 'Esta invitación no existe o fue revocada.',
   revocada: 'Esta invitación ya no es válida. Pide una nueva a tu equipo.',
 };
 const avisoError = errorParam ? (MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la invitación.') : null;
@@ -42,7 +42,8 @@ const avisoError = errorParam ? (MENSAJES_ERROR[errorParam] ?? 'No se pudo compl
 const MENSAJES_ESTADO: Record<'vencida' | 'usada' | 'inexistente' | 'revocada', string> = {
   vencida: 'Esta invitación venció. Pide que te manden una nueva.',
   usada: 'Esta invitación ya se usó. Si ya tienes cuenta, entra desde la página de acceso.',
-  inexistente: 'Esta invitación no existe. Revisa el enlace o pide que te manden uno nuevo.',
+  // Revocar borra la invitación (M2 punto 4), así que un enlace revocado llega aquí.
+  inexistente: 'Esta invitación no existe o fue revocada. Revisa el enlace o pide que te manden uno nuevo.',
   revocada: 'Esta invitación ya no es válida. Pide una nueva a tu equipo.',
 };
 ---

@@ -3,6 +3,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db, pilaresTemas, shareLinks, users } from '@/db';
 import { renderizarPilares } from '@/render/pilares/documento';
 import { slugificar } from '@/lib/slug';
+import { baseUrlPublica } from '@/lib/base-url';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { documentoVisible } from '@/lib/visibilidad';
 import { etapaDelDocumento, permisoCompartir } from '@/flujo/servicio';
@@ -29,7 +30,8 @@ const activo = links.find((l) => !l.revocado) ?? null;
 // Misma regla que `POST /api/share` (M2 punto 1): si este usuario no puede
 // crear el link, la vista interna muestra la razón en lugar del botón.
 const compartir = operable ? await permisoCompartir(usuario, c.id, 'pilares', r.id) : null;
-const base = (process.env.PUBLIC_BASE_URL ?? Astro.url.origin).replace(/\/+$/, '');
+// Mismo origen público que usa POST /api/share (M2 punto 4: detrás del proxy).
+const base = baseUrlPublica(Astro.request);
 
 const filas = await db
   .select({ temaId: pilaresTemas.temaId, estado: pilaresTemas.estado, nota: pilaresTemas.nota, actualizadoEn: pilaresTemas.actualizadoEn, actualizadoPor: users.email })

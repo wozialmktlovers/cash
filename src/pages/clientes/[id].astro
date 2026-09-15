@@ -1,5 +1,5 @@
 ---
-import { eq, desc, and, ne } from 'drizzle-orm';
+import { eq, desc, and, ne, gt, isNull, asc } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import LinksEditor from '@/components/LinksEditor';
@@ -10,11 +10,11 @@ import { iniciales, tinte } from '@/lib/ui/cliente-visual';
 import { ETIQUETA_ESTADO } from '@/lib/ui/progreso';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { clienteVisible } from '@/lib/visibilidad';
-import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults, clienteEtapas, etapaEventos, users } from '@/db';
+import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults, clienteEtapas, etapaEventos, users, invitaciones } from '@/db';
 import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, tipoDocumentoDe, dependenciasCumplidas, type Etapa } from '@/flujo/reglas';
 import { botonesEtapa, marcaEtapa, COLOR_ESTADO } from '@/flujo/ui';
 import { etapasDelCliente, comentariosAbiertosPorEtapa, enlaceDocumento } from '@/flujo/servicio';
-import { fechaHora as fechaHoraMx } from '@/lib/ui/fecha';
+import { fechaHora as fechaHoraMx, fechaCorta } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
@@ -39,6 +39,17 @@ const operadorAsignadoValido = !!cliente.operadorId && operadoresActivos.some((o
 // ── Usuarios del cliente ───────────────────────────
 const usuariosCliente = operable
   ? await db.select({ id: users.id, nombre: users.nombre, email: users.email, activo: users.activo }).from(users).where(and(eq(users.rol, 'cliente'), eq(users.clientId, cliente.id))).orderBy(users.nombre)
+  : [];
+
+// ── Invitaciones pendientes (M2 punto 4) ──────────
+// Sin usar y sin vencer (mismo criterio que `esPendiente`), de usuarios de
+// este cliente: quien puede operar la ficha puede invitar aquí, y por lo
+// mismo revocar (`DELETE /api/invitaciones` repite el permiso).
+const invitacionesPendientes = operable
+  ? await db.select({ id: invitaciones.id, email: invitaciones.email, rol: invitaciones.rol, expiraEn: invitaciones.expiraEn })
+      .from(invitaciones)
+      .where(and(eq(invitaciones.clientId, cliente.id), eq(invitaciones.rol, 'cliente'), isNull(invitaciones.usadaEn), gt(invitaciones.expiraEn, new Date())))
+      .orderBy(asc(invitaciones.expiraEn))
   : [];
 
 const enlaces = await db.select().from(clientLinks).where(eq(clientLinks.clientId, cliente.id));
@@ -208,6 +219,22 @@ const historial: ItemHistorial[] = [
               </li>
             ))}
           </ul>
+        )}
+        {invitacionesPendientes.length > 0 && (
+          <>
+            <h3 class="subtitulo-invitaciones">Invitaciones pendientes</h3>
+            <ul class="lista" id="invitaciones-pendientes">
+              {invitacionesPendientes.map((inv) => (
+                <li class="renglon" data-invitacion-id={inv.id}>
+                  <div class="cuerpo">
+                    <strong>{inv.email}</strong>
+                    <p class="secundario">Usuario de cliente · vence {fechaCorta(inv.expiraEn)}</p>
+                  </div>
+                  <button type="button" class="btn fantasma chico" data-revocar-invitacion={inv.id} aria-label={`Revocar la invitación de ${inv.email}`}>Revocar</button>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </section>
     )}
@@ -509,6 +536,32 @@ const historial: ItemHistorial[] = [
     });
 
     document.getElementById('iu-copiar')!.addEventListener('click', () => copiar(iuEnlace.value, iuEnlace));
+
+    // Una invitación nueva revoca las pendientes del mismo correo (M2 punto
+    // 4): al cerrar el diálogo tras crear una, se recarga para que la lista
+    // de pendientes refleje las dos cosas.
+    dialogoInvitarUsuario.addEventListener('close', () => {
+      if (!iuResultado.hidden) window.location.reload();
+    });
+  }
+
+  // ── Revocar invitaciones pendientes (M2 punto 4).
+  for (const boton of document.querySelectorAll<HTMLButtonElement>('[data-revocar-invitacion]')) {
+    boton.addEventListener('click', async () => {
+      boton.disabled = true;
+      try {
+        const res = await fetch(`/api/invitaciones?id=${encodeURIComponent(boton.dataset.revocarInvitacion ?? '')}`, { method: 'DELETE' });
+        if (res.ok) {
+          boton.closest('li')?.remove();
+          toast('Invitación revocada');
+          return;
+        }
+        toast('No se pudo revocar la invitación.', 'error');
+      } catch {
+        toast('No se pudo contactar al servidor.', 'error');
+      }
+      boton.disabled = false;
+    });
   }
 </script>
 
@@ -517,4 +570,5 @@ const historial: ItemHistorial[] = [
   .ficha-titulo { flex: 1; min-width: 0; }
   .ficha-titulo h1 { overflow-wrap: anywhere; }
   .tarjeta-cabeza-flex { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .subtitulo-invitaciones { margin: 18px 0 0; font-size: 0.9rem; }
 </style>

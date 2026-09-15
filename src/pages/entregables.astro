@@ -4,6 +4,7 @@ import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import { db, clients, researchResults, growthResults, pilaresResults, shareLinks } from '@/db';
 import { slugificar } from '@/lib/slug';
+import { baseUrlPublica } from '@/lib/base-url';
 import { condicionClientes } from '@/lib/visibilidad';
 import { fechaCorta } from '@/lib/ui/fecha';
 
@@ -35,7 +36,8 @@ const links = documentos.length
 const linkPorDocumento = new Map<string, (typeof links)[number]>();
 for (const l of links) if (!linkPorDocumento.has(l.documentoId)) linkPorDocumento.set(l.documentoId, l);
 
-const base = process.env.PUBLIC_BASE_URL?.replace(/\/+$/, '') || Astro.url.origin;
+// Mismo origen público que usa POST /api/share (M2 punto 4: detrás del proxy).
+const base = baseUrlPublica(Astro.request);
 // Fix menores, punto 2: fechas del Studio en hora de México, igual que el
 // portal (helper centralizado en src/lib/ui/fecha.ts).
 const fecha = fechaCorta;

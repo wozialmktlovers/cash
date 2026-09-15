@@ -45,6 +45,16 @@ export function invitacionVigente(
   return 'valida';
 }
 
+/**
+ * Pendiente = todavía se puede aceptar por fecha: sin usar y sin vencer. Es
+ * lo que listan la ficha del cliente y `/admin/usuarios` con su botón
+ * «Revocar» (fix menores M2, punto 4); una vencida o usada ya no hace falta
+ * revocarla.
+ */
+export function esPendiente(inv: { expiraEn: Date; usadaEn: Date | null }, ahora: Date): boolean {
+  return estadoInvitacion(inv, ahora) === 'valida';
+}
+
 export function validarAceptacion(o: { nombre: string; password: string; confirmacion: string }): { ok: true } | { ok: false; errores: string[] } {
   const errores: string[] = [];
   if (!o.nombre || !o.nombre.trim()) errores.push('El nombre es obligatorio');

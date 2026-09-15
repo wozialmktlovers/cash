@@ -1,8 +1,9 @@
 ---
-import { asc, eq, inArray, ne } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, ne } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
-import { db, users, clients } from '@/db';
+import { db, users, clients, invitaciones } from '@/db';
+import { fechaCorta } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
 
@@ -40,6 +41,14 @@ const nombrePorCliente = new Map(nombresCliente.map((c) => [c.id, c.nombre]));
 const clientesTodos = await db.select({ id: clients.id, nombre: clients.nombre }).from(clients).orderBy(asc(clients.nombre));
 
 const ETIQUETA_ROL: Record<'admin' | 'operador', string> = { admin: 'Admin', operador: 'Operador' };
+
+// Invitaciones de equipo pendientes (M2 punto 4): sin usar, sin vencer y sin
+// cliente (las de usuarios de cliente se revocan desde la ficha de cada uno).
+const invitacionesEquipo = await db
+  .select({ id: invitaciones.id, email: invitaciones.email, rol: invitaciones.rol, expiraEn: invitaciones.expiraEn })
+  .from(invitaciones)
+  .where(and(isNull(invitaciones.clientId), ne(invitaciones.rol, 'cliente'), isNull(invitaciones.usadaEn), gt(invitaciones.expiraEn, new Date())))
+  .orderBy(asc(invitaciones.expiraEn));
 ---
 
 <Base titulo="Usuarios" activo="usuarios">
@@ -92,6 +101,24 @@ const ETIQUETA_ROL: Record<'admin' | 'operador', string> = { admin: 'Admin', ope
       </ul>
     )}
   </section>
+
+  {invitacionesEquipo.length > 0 && (
+    <section class="tarjeta">
+      <h2>Invitaciones de equipo pendientes</h2>
+      <p class="sub" style="margin-bottom:18px">Aún no se aceptan. Revocar deja el enlace sin efecto.</p>
+      <ul class="lista" id="invitaciones-equipo">
+        {invitacionesEquipo.map((inv) => (
+          <li class="renglon" data-invitacion-id={inv.id}>
+            <div class="cuerpo">
+              <strong>{inv.email}</strong>
+              <p class="secundario">{inv.rol === 'admin' || inv.rol === 'operador' ? ETIQUETA_ROL[inv.rol] : inv.rol} · vence {fechaCorta(inv.expiraEn)}</p>
+            </div>
+            <button type="button" class="btn fantasma chico" data-revocar-invitacion={inv.id} aria-label={`Revocar la invitación de ${inv.email}`}>Revocar</button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )}
 
   <section class="tarjeta">
     <h2>Usuarios de clientes</h2>
@@ -244,6 +271,31 @@ const ETIQUETA_ROL: Record<'admin' | 'operador', string> = { admin: 'Admin', ope
   });
 
   document.getElementById('inv-copiar')!.addEventListener('click', () => copiar(enlaceInput.value, enlaceInput));
+
+  // Una invitación nueva revoca las pendientes del mismo correo (M2 punto
+  // 4): al cerrar el diálogo tras crear una, se recarga la lista.
+  dialogo.addEventListener('close', () => {
+    if (!resultado.hidden) window.location.reload();
+  });
+
+  // ── Revocar invitaciones de equipo pendientes (M2 punto 4).
+  for (const boton of document.querySelectorAll<HTMLButtonElement>('[data-revocar-invitacion]')) {
+    boton.addEventListener('click', async () => {
+      boton.disabled = true;
+      try {
+        const res = await fetch(`/api/invitaciones?id=${encodeURIComponent(boton.dataset.revocarInvitacion ?? '')}`, { method: 'DELETE' });
+        if (res.ok) {
+          boton.closest('li')?.remove();
+          toast('Invitación revocada');
+          return;
+        }
+        toast('No se pudo revocar la invitación.', 'error');
+      } catch {
+        toast('No se pudo contactar al servidor.', 'error');
+      }
+      boton.disabled = false;
+    });
+  }
 
   // ── Equipo: rol y activo, cada uno con su PATCH ───
   function revertirSelect(select: HTMLSelectElement, valorAnterior: string) {

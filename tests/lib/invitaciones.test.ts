@@ -7,6 +7,7 @@ import {
   invitacionVigente,
   validarAceptacion,
   puedeInvitar,
+  esPendiente,
 } from '@/lib/invitaciones';
 import type { UsuarioSesion } from '@/lib/permisos';
 
@@ -136,5 +137,16 @@ describe('puedeInvitar', () => {
   it('cliente no invita a nadie', () => {
     expect(puedeInvitar(u('cliente', { clientId: 'c1' }), 'cliente', cliente)).toBe(false);
     expect(puedeInvitar(u('cliente'), 'operador', null)).toBe(false);
+  });
+});
+
+describe('esPendiente (M2 punto 4: lista de invitaciones por revocar)', () => {
+  const ahora = new Date('2026-01-10T00:00:00.000Z');
+  it('pendiente: sin usar y sin vencer', () => {
+    expect(esPendiente({ expiraEn: new Date('2026-01-11'), usadaEn: null }, ahora)).toBe(true);
+  });
+  it('una usada o vencida ya no está pendiente', () => {
+    expect(esPendiente({ expiraEn: new Date('2026-01-11'), usadaEn: new Date('2026-01-09') }, ahora)).toBe(false);
+    expect(esPendiente({ expiraEn: new Date('2026-01-09'), usadaEn: null }, ahora)).toBe(false);
   });
 });
