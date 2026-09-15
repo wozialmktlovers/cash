@@ -25,3 +25,13 @@ export function validarCliente(datos: unknown):
   if (r.success) return { ok: true, datos: r.data };
   return { ok: false, errores: r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) };
 }
+
+export type ResumenCliente = { id: string; nombre: string; giro: string; ciudad: string | null };
+
+/**
+ * Lo que la paleta ⌘K puede ver de un cliente. Se arma campo por campo para
+ * que añadir columnas a la tabla nunca las filtre a la respuesta.
+ */
+export function resumenCliente(c: ResumenCliente): ResumenCliente {
+  return { id: c.id, nombre: c.nombre, giro: c.giro, ciudad: c.ciudad };
+}
