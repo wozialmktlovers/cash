@@ -108,6 +108,26 @@ describe('avanceCliente', () => {
     // (25+50)/2 = 37.5 -> 38
     expect(avanceCliente(etapas)).toBe(38);
   });
+
+  // Ruling del controller (menores, punto 5): mientras desarrollo_mensual no
+  // tenga generador, una etapa contratada de ese tipo no cuenta en el
+  // promedio. Sin esta exclusión, su peso 0 (siempre no_iniciada) diluye el
+  // avance de las demás etapas ya aprobadas, dejándolo atorado ≤75% para
+  // siempre.
+  it('no cuenta una etapa desarrollo_mensual contratada, aunque esté visible', () => {
+    const etapas = [
+      et('investigacion', { estado: 'aprobada' }),
+      et('pilares', { estado: 'aprobada' }),
+      et('manual_campana', { estado: 'aprobada' }),
+      et('desarrollo_mensual', { estado: 'no_iniciada' }),
+    ];
+    // Sin la exclusión: (100+100+100+0)/4 = 75. Con ella: 100/100/100 -> 100.
+    expect(avanceCliente(etapas)).toBe(100);
+  });
+
+  it('con solo desarrollo_mensual contratada (y ninguna otra visible), da 0', () => {
+    expect(avanceCliente([et('desarrollo_mensual', { estado: 'no_iniciada' })])).toBe(0);
+  });
 });
 
 describe('etapasVisiblesCliente', () => {

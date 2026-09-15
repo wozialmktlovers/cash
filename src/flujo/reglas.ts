@@ -77,9 +77,23 @@ export type EtapaCliente = {
   documentoId: string | null;
 };
 
-/** % de avance: promedio redondeado del peso de las etapas contratadas y no internas; 0 si no hay ninguna. */
+/**
+ * % de avance: promedio redondeado del peso de las etapas contratadas y no
+ * internas; 0 si no hay ninguna.
+ *
+ * Ruling del controller (menores, punto 5): mientras `desarrollo_mensual` no
+ * tenga generador («Próximamente» — ver `dependenciasCumplidas` más abajo),
+ * una etapa contratada de ese tipo no cuenta en este promedio ni en el
+ * anillo del portal (`src/lib/portal.ts::resumenPortal`, que llama a esta
+ * misma función). Sin esta exclusión, contratar `desarrollo_mensual` dejaba
+ * el avance atorado en ≤75% para siempre, porque su estado nunca puede
+ * pasar de `no_iniciada` (peso 0) hasta que exista el generador. La marca de
+ * «próximamente» ya usada en `portal.ts`/`clientes/[id].astro`
+ * (`etapa === 'desarrollo_mensual'`) es la misma que se usa aquí — no hay
+ * una bandera dedicada, así que se reutiliza ese criterio.
+ */
 export function avanceCliente(etapas: EtapaCliente[]): number {
-  const visibles = etapas.filter((e) => e.contratada && !e.interna);
+  const visibles = etapas.filter((e) => e.contratada && !e.interna && e.etapa !== 'desarrollo_mensual');
   if (visibles.length === 0) return 0;
   const suma = visibles.reduce((acc, e) => acc + PESOS[e.estado], 0);
   return Math.round(suma / visibles.length);
