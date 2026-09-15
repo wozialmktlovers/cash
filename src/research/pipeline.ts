@@ -9,6 +9,8 @@ import { correrSintesis } from './agents/sintesis';
 import { correrLectura } from './agents/lectura';
 import { calcularCosto, leerTopeUsd } from '@/lib/cost';
 import { esRespuestaInvalida } from './convertir-lecturas';
+import { contarEtapasConDatos } from '@/lib/precheck';
+import { registrarEntregable } from '@/flujo/servicio';
 
 export const ETAPAS = ['competencia','audiencia','canales','mercado','sintesis','lectura'] as const;
 export type Etapa = typeof ETAPAS[number];
@@ -194,9 +196,20 @@ export async function ejecutarJob(jobId: string): Promise<void> {
   if (entrada) datos.lectura = entrada;
 
   const previas = await db.select().from(researchResults).where(eq(researchResults.clientId, job.clientId));
-  await db.insert(researchResults).values({
+  const [resultado] = await db.insert(researchResults).values({
     jobId, clientId: job.clientId, datos, version: previas.length + 1,
-  });
+  }).returning({ id: researchResults.id });
+
+  // Solo se registra como entregable si de verdad trae datos: el pipeline
+  // inserta una fila aunque las seis etapas fallen, para dejar constancia
+  // del intento, y esa fila vacía no debe poner la etapa en_proceso.
+  if (contarEtapasConDatos(datos) > 0) {
+    try {
+      await registrarEntregable(job.clientId, 'research', resultado.id, job.creadoPor);
+    } catch (e) {
+      console.error('[flujo] registrarEntregable research:', e);
+    }
+  }
 
   const todasFallaron = ETAPAS.every((e) => estado[e] !== 'ok');
   await db.update(researchJobs).set({

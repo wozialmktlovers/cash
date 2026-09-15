@@ -4,6 +4,7 @@ import { armarContexto } from '@/research/contexto';
 import { repartirPorTope, superaTope } from '@/research/pipeline';
 import { calcularCosto, leerTopeUsd } from '@/lib/cost';
 import { investigacionUtil } from '@/lib/precheck';
+import { registrarEntregable } from '@/flujo/servicio';
 import { correrEstrategia, correrPilar, correrCorreccion } from './agentes';
 import {
   asignarIds, todosLosTemas, buscarDuplicados, mixReal, fueraDeMargen, aplicarReemplazos, sonParecidos,
@@ -146,9 +147,15 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
   estado.revision = 'ok';
 
   const previas = await db.select({ id: pilaresResults.id }).from(pilaresResults).where(eq(pilaresResults.clientId, job.clientId));
-  await db.insert(pilaresResults).values({
+  const [resultado] = await db.insert(pilaresResults).values({
     jobId, clientId: job.clientId, datos: { estrategia, pilares, revision }, version: previas.length + 1,
-  });
+  }).returning({ id: pilaresResults.id });
+
+  try {
+    await registrarEntregable(job.clientId, 'pilares', resultado.id, job.creadoPor);
+  } catch (e) {
+    console.error('[flujo] registrarEntregable pilares:', e);
+  }
 
   await db.update(researchJobs).set({
     estado: 'completado', etapas: estado, etapaActual: null, finishedAt: new Date(),

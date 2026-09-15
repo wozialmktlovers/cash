@@ -1,8 +1,16 @@
 import type { APIRoute } from 'astro';
 import { asc } from 'drizzle-orm';
+import { z } from 'zod';
 import { db, clients } from '@/db';
 import { validarCliente, resumenCliente } from '@/lib/clientes';
 import { condicionClientes } from '@/lib/visibilidad';
+import { ETAPAS, type Etapa } from '@/flujo/reglas';
+import { aplicarPlanContratacion } from '@/flujo/servicio';
+
+// Por omisión, un cliente nuevo se contrata con las tres etapas que ya
+// existen (desarrollo mensual todavía no se puede vender: «Próximamente»).
+const ETAPAS_ALTA_DEFECTO: Etapa[] = ['investigacion', 'pilares', 'manual_campana'];
+const etapasSchema = z.array(z.enum(ETAPAS)).min(1, 'Selecciona al menos una etapa').optional();
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -30,11 +38,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const r = validarCliente(crudo);
   if (!r.ok) return json({ ok: false, errores: r.errores }, 400);
 
+  const etapasR = etapasSchema.safeParse((crudo as { etapas?: unknown })?.etapas);
+  if (!etapasR.success) return json({ ok: false, errores: etapasR.error.issues.map((i) => i.message) }, 400);
+  const etapasSeleccionadas = etapasR.data ?? ETAPAS_ALTA_DEFECTO;
+
   // Al alta, el responsable es quien lo da de alta (admin u operador); se
   // reasigna después desde la ficha del cliente.
   const [creado] = await db
     .insert(clients)
     .values({ ...r.datos, operadorId: locals.usuario.id })
     .returning({ id: clients.id });
+
+  await aplicarPlanContratacion(creado.id, etapasSeleccionadas);
+
   return json({ ok: true, id: creado.id }, 201);
 };

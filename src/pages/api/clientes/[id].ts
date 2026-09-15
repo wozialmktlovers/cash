@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
-import { db, clients } from '@/db';
+import { eq, inArray } from 'drizzle-orm';
+import { db, clients, documentoVersiones, researchResults, growthResults, pilaresResults } from '@/db';
 import { validarCliente } from '@/lib/clientes';
 import { clienteOperable } from '@/lib/visibilidad';
 
@@ -40,11 +40,23 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
 
   if (!(await clienteOperable(locals.usuario, id))) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
 
-  const [borrado] = await db
-    .delete(clients)
-    .where(eq(clients.id, id))
-    .returning({ id: clients.id });
+  // `documento_versiones` no tiene FK hacia research/growth/pilares_results
+  // (ver comentario en el schema): borrar el cliente en cascada deja esas
+  // versiones huérfanas si no se limpian primero, a mano, en la misma
+  // transacción que el borrado.
+  const borrado = await db.transaction(async (tx) => {
+    const [investigaciones, manuales, pilares] = await Promise.all([
+      tx.select({ id: researchResults.id }).from(researchResults).where(eq(researchResults.clientId, id)),
+      tx.select({ id: growthResults.id }).from(growthResults).where(eq(growthResults.clientId, id)),
+      tx.select({ id: pilaresResults.id }).from(pilaresResults).where(eq(pilaresResults.clientId, id)),
+    ]);
+    const documentoIds = [...investigaciones, ...manuales, ...pilares].map((r) => r.id);
+    if (documentoIds.length > 0) {
+      await tx.delete(documentoVersiones).where(inArray(documentoVersiones.documentoId, documentoIds));
+    }
+    return tx.delete(clients).where(eq(clients.id, id)).returning({ id: clients.id });
+  });
 
-  if (!borrado) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
-  return json({ ok: true, id: borrado.id });
+  if (borrado.length === 0) return json({ ok: false, errores: ['El cliente no existe'] }, 404);
+  return json({ ok: true, id: borrado[0].id });
 };

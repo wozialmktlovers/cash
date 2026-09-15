@@ -3,6 +3,7 @@ import { db, researchJobs, researchResults, growthResults, clients } from '@/db'
 import { calcularCosto, leerTopeUsd } from '@/lib/cost';
 import { investigacionUtil } from '@/lib/precheck';
 import { repartirPorTope, superaTope } from '@/research/pipeline';
+import { registrarEntregable } from '@/flujo/servicio';
 import { armarContextoGrowth } from './contexto';
 import { correrEstructura } from './agents/estructura';
 import { correrCreativos } from './agents/creativos';
@@ -123,9 +124,15 @@ export async function ejecutarGrowth(jobId: string): Promise<void> {
   for (const etapa of ETAPAS_GROWTH) Object.assign(datos, resultados[etapa] ?? {});
 
   const previas = await db.select().from(growthResults).where(eq(growthResults.clientId, job.clientId));
-  await db.insert(growthResults).values({
+  const [resultado] = await db.insert(growthResults).values({
     jobId, clientId: job.clientId, datos, version: previas.length + 1,
-  });
+  }).returning({ id: growthResults.id });
+
+  try {
+    await registrarEntregable(job.clientId, 'growth', resultado.id, job.creadoPor);
+  } catch (e) {
+    console.error('[flujo] registrarEntregable growth:', e);
+  }
 
   const todasFallaron = ETAPAS_GROWTH.every((e) => estado[e] !== 'ok');
   await db.update(researchJobs).set({
