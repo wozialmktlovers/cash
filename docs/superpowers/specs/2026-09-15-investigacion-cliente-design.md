@@ -134,7 +134,7 @@ Al arrancar el servidor, el worker revisa las filas de `research_results` sin `d
 
 ### Presentación de respaldo (sin lectura)
 
-Si `lectura` no existe o no es `ok`, no se muestran las secciones 2 a 6:
+Si `lectura` no existe o no es `ok`, no se muestran las secciones 3 a 6 y la portada cambia:
 
 - **Portada:** titular = nombre del cliente, resumen = giro.
 - **Síntesis estratégica** en formato continuo, si existe: los 4 hallazgos, posicionamiento y focos.
