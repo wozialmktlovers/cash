@@ -1,6 +1,7 @@
 ---
 import { eq } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
+import Icono from '@/components/Icono.astro';
 import { db, clients, clientLinks, clientFiles } from '@/db';
 import { revisarAntesDeInvestigar } from '@/lib/precheck';
 
@@ -20,67 +21,76 @@ const revision = revisarAntesDeInvestigar({
   ciudad: cliente.ciudad,
 });
 
+// Cada advertencia de revisarAntesDeInvestigar nombra el dato que falta; se
+// asocia a su renglón por esa palabra para no duplicar los textos aquí.
+const advertencia = (clave: string) => revision.advertencias.find((a) => a.toLowerCase().includes(clave));
+
+const renglones = [
+  { nombre: 'Giro', valor: cliente.giro, aviso: undefined },
+  { nombre: 'Producto', valor: cliente.producto, aviso: undefined },
+  { nombre: 'Ciudad', valor: cliente.ciudad ?? 'Sin ciudad', aviso: advertencia('ciudad') },
+  { nombre: 'Ticket', valor: cliente.ticket ?? 'Sin ticket', aviso: advertencia('ticket') },
+  { nombre: 'Enlaces', valor: `${enlaces.length}`, aviso: advertencia('enlaces') },
+  { nombre: 'Archivos con texto', valor: `${conTexto.length} de ${archivos.length}`, aviso: advertencia('archivos') },
+];
+
 const estimado = Number(process.env.COST_ESTIMATE_USD || 8);
 const tope = Number(process.env.COST_LIMIT_USD || 15);
-const dinero = (n: number) =>
-  n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 ---
 
-<Base titulo={`Investigar · ${cliente.nombre}`} migas={`Clientes › ${cliente.nombre} › Investigar`}>
+<Base titulo={`Investigar · ${cliente.nombre}`} activo="clientes" volver={{ href: `/clientes/${cliente.id}`, texto: cliente.nombre }}>
   <div class="encabezado">
     <div>
+      <p class="eyebrow">Social Research</p>
       <h1>Investigar a {cliente.nombre}</h1>
       <p class="sub">Cinco agentes: competencia, audiencia, canales, mercado y síntesis.</p>
     </div>
   </div>
 
-  <section class="tarjeta">
-    <h2>Lo que se va a enviar</h2>
-    <p class="sub">Esto es todo el contexto que recibirán los agentes.</p>
+  <div class="investigar">
+    <section class="tarjeta">
+      <h2>Lo que se va a enviar</h2>
+      <p class="sub">Nada de lo que falta bloquea la investigación, pero baja la calidad del resultado.</p>
+      <ul class="lista">
+        {renglones.map((r) => (
+          <li class="renglon">
+            <span class="icono-tinte" style={r.aviso ? 'color:var(--amarillo)' : 'color:var(--verde)'}>
+              <Icono nombre={r.aviso ? 'alerta' : 'check'} />
+            </span>
+            <div class="cuerpo">
+              <strong>{r.nombre}</strong>
+              <p class="secundario">{r.valor}</p>
+              {r.aviso && <p class="ayuda" style="color:var(--amarillo)">{r.aviso}</p>}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
 
-    <dl class="datos">
-      <div><dt>Giro</dt><dd>{cliente.giro}</dd></div>
-      <div><dt>Producto</dt><dd>{cliente.producto}</dd></div>
-      <div><dt>Ciudad</dt><dd>{cliente.ciudad ?? '—'}</dd></div>
-      <div><dt>Ticket</dt><dd>{cliente.ticket ?? '—'}</dd></div>
-      <div><dt>Enlaces</dt><dd>{enlaces.length}</dd></div>
-      <div><dt>Archivos con texto</dt><dd>{conTexto.length} de {archivos.length}</dd></div>
-    </dl>
-  </section>
-
-  {
-    revision.advertencias.length > 0 && (
-      <section class="tarjeta">
-        <h2>Antes de lanzar</h2>
-        <p class="sub">
-          Nada de esto bloquea la investigación, pero baja la calidad del resultado.
-        </p>
-        {revision.advertencias.map((a) => <p class="aviso amarillo">{a}</p>)}
-      </section>
-    )
-  }
-
-  <section class="tarjeta">
-    <h2>Costo</h2>
-    <p class="sub">Cada investigación gasta dinero real de la cuenta de Anthropic.</p>
-
-    <dl class="datos">
-      <div><dt>Estimado</dt><dd>{dinero(estimado)}</dd></div>
-      <div><dt>Tope duro</dt><dd>{dinero(tope)}</dd></div>
-    </dl>
-
-    <p class="aviso" style="margin-top:20px">
-      Al alcanzar el tope, las etapas que falten se declaran vacías en lugar de continuar.
-    </p>
-
-    <div class="aviso rosa" id="error" hidden></div>
-
-    <div class="acciones">
-      <button type="button" class="btn" id="lanzar">Lanzar investigación</button>
-      <a href={`/clientes/${cliente.id}`} class="btn fantasma">Cancelar</a>
-    </div>
-  </section>
+    <aside class="tarjeta costo">
+      <p class="eyebrow">Costo estimado</p>
+      <p class="display cifra">{dinero(estimado)}</p>
+      <p class="secundario">Tope duro: <span class="cifra">{dinero(tope)}</span></p>
+      <p class="aviso" style="margin-top:16px">Al alcanzar el tope, las etapas que falten se declaran vacías en lugar de continuar.</p>
+      <div class="aviso rosa" id="error" role="alert" style="margin-top:12px" hidden></div>
+      <div class="acciones">
+        <button type="button" class="btn ancho-total" id="lanzar">Lanzar investigación</button>
+        <a href={`/clientes/${cliente.id}`} class="btn fantasma ancho-total">Cancelar</a>
+      </div>
+    </aside>
+  </div>
 </Base>
+
+<style>
+  .investigar { display: grid; gap: 18px; }
+  .investigar .tarjeta + .tarjeta { margin-top: 0; }
+  .icono-tinte svg { width: 22px; height: 22px; }
+  @media (min-width: 900px) {
+    .investigar { grid-template-columns: 1fr 340px; align-items: start; }
+    .costo { position: sticky; top: 90px; }
+  }
+</style>
 
 <script>
   const lanzar = document.getElementById('lanzar') as HTMLButtonElement;
