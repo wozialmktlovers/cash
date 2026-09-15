@@ -3,7 +3,7 @@
  * módulos) contra una página armada a mano, sin jsdom (no está instalado y
  * el proyecto no permite `npm install`). Cubre solo lo que esos scripts
  * usan: querySelectorAll/querySelector con selectores simples (etiqueta,
- * `.clase`, `[attr]`, `[attr="valor"]`) con combinador de descendiente
+ * `.clase`, `[attr]`, `[attr="valor"]`, con `:not(simple)` detrás) con combinador de descendiente
  * (`.a b`), closest, getAttribute/setAttribute, classList, `hidden`,
  * `value`/`textContent`, addEventListener con click/keydown en fase de
  * burbuja (por omisión) o de captura (`{capture:true}` o el tercer
@@ -30,6 +30,15 @@ function esCaptura(opciones?: Opciones): boolean {
 type Attrs = Record<string, string>;
 
 function matchesSimple(el: FakeElement, token: string): boolean {
+  // `base:not(simple)` (uno o varios `:not`, cada uno con un selector
+  // simple): lo usa src/scripts/etapas.ts para separar los botones de una
+  // sola acción de los que abren un diálogo.
+  const nots = /^(.*?)((?::not\([^()]+\))+)$/.exec(token);
+  if (nots) {
+    const [, base, sufijo] = nots;
+    const excluidos = Array.from(sufijo.matchAll(/:not\(([^()]+)\)/g), (m) => m[1]);
+    return (base === '' || matchesSimple(el, base)) && excluidos.every((ex) => !matchesSimple(el, ex));
+  }
   if (token === '*') return true;
   if (token.startsWith('.')) return el.classList.contains(token.slice(1));
   if (token.startsWith('[')) {

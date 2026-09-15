@@ -38,7 +38,11 @@ const MENSAJE_ACCION: Record<string, string> = {
 };
 
 // ── Botones de una sola acción: Iniciar, Solicitar autorización ──────────
-document.querySelectorAll<HTMLButtonElement>('[data-accion]').forEach((boton) => {
+// Se excluyen los que abren un diálogo: «Pedir cambios» y «Reabrir» también
+// llevan `data-accion` (el diálogo la lee de ahí), y si entraran aquí la
+// transición saldría sin comentario al abrir el diálogo, cambiando el estado
+// y avisando al operador antes de que el admin escriba nada.
+document.querySelectorAll<HTMLButtonElement>('[data-accion]:not([data-abrir])').forEach((boton) => {
   boton.addEventListener('click', async () => {
     const etapaId = boton.dataset.etapaId!;
     const accion = boton.dataset.accion!;
