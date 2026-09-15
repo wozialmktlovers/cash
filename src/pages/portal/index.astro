@@ -1,0 +1,172 @@
+---
+// Portada del portal del cliente (spec §4, C1): avance, tarjetas por etapa
+// visible y actividad reciente. Ver también src/lib/portal.ts (resumenPortal,
+// clientePortal, actividadPortal) y src/layouts/PortalBase.astro.
+import PortalBase from '@/layouts/PortalBase.astro';
+import Icono from '@/components/Icono.astro';
+import { etapasDelCliente } from '@/flujo/servicio';
+import { clientePortal, resumenPortal, actividadPortal, type EtapaClientePortal } from '@/lib/portal';
+
+const usuario = Astro.locals.usuario;
+const resultado = await clientePortal(usuario, Astro.url.searchParams);
+
+// Sin acceso: para admin u operador es un 404 en blanco, como en el resto
+// del Studio (regla de la casa). Para un cliente cuya cuenta no tiene
+// clientId (dato inconsistente que no debería pasar) es distinto: un 404 en
+// blanco lo dejaría sin ninguna forma de cerrar sesión, así que se sigue
+// renderizando la página con un mensaje amable y el botón Salir de
+// PortalBase, con el código de estado en 404 igual (ruling C1 #1).
+if (!resultado && usuario.rol !== 'cliente') return new Response(null, { status: 404 });
+if (!resultado) Astro.response.status = 404;
+
+let datos: {
+  cliente: NonNullable<typeof resultado>['cliente'];
+  vistaPrevia: boolean;
+  resumen: ReturnType<typeof resumenPortal>;
+  actividad: Awaited<ReturnType<typeof actividadPortal>>;
+} | null = null;
+
+if (resultado) {
+  const etapas = await etapasDelCliente(resultado.cliente.id);
+  const resumen = resumenPortal(etapas as EtapaClientePortal[]);
+  // Sin etapas visibles no puede haber actividad que mostrar (ni aprobaciones
+  // ni respuestas): se evita la consulta.
+  const actividad = resumen.tarjetas.length > 0
+    ? await actividadPortal(resumen.tarjetas.map((t) => ({ id: t.etapaId, etapa: t.etapa })))
+    : [];
+  datos = { cliente: resultado.cliente, vistaPrevia: resultado.vistaPrevia, resumen, actividad };
+}
+
+// Saludo «Hola, {nombre del usuario o de la empresa}»: el nombre propio de
+// quien tiene la sesión si lo hay (el cliente real), o el de la empresa. En
+// vista previa (admin/operador) siempre es el de la empresa: el saludo es el
+// que vería el cliente, no el de quien está mirando.
+const saludoNombre = datos ? (datos.vistaPrevia ? datos.cliente.nombre : (usuario.nombre ?? datos.cliente.nombre)) : null;
+
+const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+
+// Anillo de avance: SVG con stroke-dasharray/stroke-dashoffset según el
+// porcentaje (ruling C1 #7).
+const RADIO = 52;
+const CIRCUNFERENCIA = Math.round(2 * Math.PI * RADIO * 100) / 100;
+const avance = datos?.resumen.avance ?? 0;
+const desplazamiento = Math.round(CIRCUNFERENCIA * (1 - avance / 100) * 100) / 100;
+---
+
+<PortalBase
+  titulo={datos ? datos.cliente.nombre : 'Portal'}
+  nombreEmpresa={datos ? datos.cliente.nombre : 'Wozial'}
+  vistaPrevia={datos?.vistaPrevia ? { clienteId: datos.cliente.id } : undefined}
+>
+  {!datos && (
+    <div class="tarjeta vacio">
+      <Icono nombre="alerta" />
+      <strong>Todavía no podemos abrir tu portal</strong>
+      <p>Tu cuenta no está vinculada a ninguna empresa. Escríbenos y lo resolvemos cuanto antes.</p>
+    </div>
+  )}
+
+  {datos && (
+    <>
+      <p class="eyebrow">Portal del cliente</p>
+      <h1 class="display">Hola, {saludoNombre}</h1>
+
+      <section class="portal-resumen" aria-label="Tu avance">
+        <div class="anillo-envoltura">
+          <svg class="anillo-avance" viewBox="0 0 120 120" role="img" aria-label={`Avance ${avance}%`}>
+            <circle class="anillo-fondo" cx="60" cy="60" r={RADIO} />
+            <g transform="rotate(-90 60 60)">
+              <circle class="anillo-valor" cx="60" cy="60" r={RADIO} stroke-dasharray={CIRCUNFERENCIA} stroke-dashoffset={desplazamiento} />
+            </g>
+          </svg>
+          <span class="anillo-cifra" aria-hidden="true">{avance}%</span>
+        </div>
+        <p class="sub">Así va tu proyecto con Wozial. En cuanto una etapa esté lista, la vas a ver aquí.</p>
+      </section>
+
+      <section class="seccion">
+        <h2>Tus etapas</h2>
+        {datos.resumen.tarjetas.length === 0 ? (
+          <div class="tarjeta vacio">
+            <Icono nombre="vacio" />
+            <strong>Tu equipo está preparando tus primeros entregables</strong>
+          </div>
+        ) : (
+          <div class="portal-etapas">
+            {datos.resumen.tarjetas.map((t) => (
+              <article class="tarjeta portal-etapa">
+                <div class="portal-etapa-cabeza">
+                  <span class="portal-etapa-numero" aria-hidden="true">{t.numero}</span>
+                  <div class="portal-etapa-cuerpo">
+                    <h3>{t.nombre}</h3>
+                    <p class="secundario">{t.estadoCliente} · actualizado el {fecha(t.actualizadoEn)}</p>
+                  </div>
+                </div>
+                <div class="acciones">
+                  {t.listo && <a class="btn suave chico" href={`/portal/documentos/${t.etapaId}`}>Ver documento</a>}
+                  {t.listo && t.puedeComentar && (
+                    <a class="btn fantasma chico" href={`/portal/documentos/${t.etapaId}#observaciones`}>Dejar observaciones</a>
+                  )}
+                  {t.proximamente && <span class="etiqueta marca">Próximamente</span>}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {datos.resumen.tarjetas.length > 0 && (
+        <section class="seccion">
+          <h2>Actividad reciente</h2>
+          {datos.actividad.length === 0 ? (
+            <p class="secundario">Todavía no hay actividad para mostrar.</p>
+          ) : (
+            <ul class="portal-actividad">
+              {datos.actividad.map((ev) => (
+                <li>
+                  <span class="portal-actividad-punto" aria-hidden="true"><Icono nombre="check" /></span>
+                  <div>
+                    <p>{ev.etiqueta}</p>
+                    <p class="secundario">{fecha(ev.creadoEn)}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+    </>
+  )}
+</PortalBase>
+
+<style>
+  .portal-resumen { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin: 18px 0 8px; }
+
+  .anillo-envoltura { position: relative; width: 132px; height: 132px; flex-shrink: 0; }
+  .anillo-avance { width: 100%; height: 100%; }
+  .anillo-fondo { fill: none; stroke: var(--gris); stroke-width: 10; }
+  .anillo-valor { fill: none; stroke: var(--rosa); stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
+  @media (prefers-reduced-motion: reduce) { .anillo-valor { transition: none; } }
+  .anillo-cifra { position: absolute; inset: 0; display: grid; place-items: center; font: var(--t-h1); color: var(--tinta); letter-spacing: var(--tracking-titulo); }
+
+  .portal-resumen .sub { max-width: 42ch; margin-top: 0; }
+
+  .portal-etapas { display: flex; flex-direction: column; gap: 14px; }
+  .portal-etapa-cabeza { display: flex; align-items: flex-start; gap: 14px; }
+  .portal-etapa-numero {
+    flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+    background: var(--rosa-s); color: var(--rosa); font: var(--t-small); font-weight: 700;
+    display: grid; place-items: center;
+  }
+  .portal-etapa-cuerpo { min-width: 0; }
+  .portal-etapa-cuerpo h3 { margin-bottom: 2px; }
+
+  .portal-actividad { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  .portal-actividad li { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--linea); }
+  .portal-actividad li:last-child { border-bottom: 0; }
+  .portal-actividad-punto {
+    flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%;
+    background: var(--verde-s); color: var(--verde); display: grid; place-items: center;
+  }
+  .portal-actividad-punto svg { width: 16px; height: 16px; }
+</style>

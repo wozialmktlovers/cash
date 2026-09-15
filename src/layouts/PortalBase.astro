@@ -1,0 +1,112 @@
+---
+// Layout del portal del cliente (spec §4, C1): misma línea editorial que el
+// Studio (tokens, SCRIPT_TEMA, Poppins, cabecera tipo píldora), pero sin la
+// barra lateral — el cliente solo entra a /portal y a sus documentos.
+import '@/styles/global.css';
+import Icono from '@/components/Icono.astro';
+import TemaSwitch from '@/components/TemaSwitch.astro';
+import Campana from '@/components/Campana';
+import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
+
+interface Props {
+  titulo: string;
+  /** Nombre de la empresa en la cabecera. */
+  nombreEmpresa: string;
+  /** Presente cuando lo abre alguien interno (admin u operador asignado): banda «Vista previa». */
+  vistaPrevia?: { clienteId: string };
+}
+
+const { titulo, nombreEmpresa, vistaPrevia } = Astro.props;
+---
+
+<html lang="es-MX">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>{titulo} · Wozial</title>
+    <meta name="theme-color" content={COLOR_BARRA.claro} />
+    <script is:inline set:html={SCRIPT_TEMA}></script>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#d4688a" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <a class="saltar" href="#contenido">Saltar al contenido</a>
+
+    {vistaPrevia && (
+      <div class="portal-vista-previa">
+        <span><Icono nombre="ojo" />Vista previa del portal</span>
+        <a href={`/clientes/${vistaPrevia.clienteId}`}><Icono nombre="atras" />Volver a la ficha</a>
+      </div>
+    )}
+
+    <div class="portal-app">
+      <div class="portal-cabecera-envoltura">
+        <header class="portal-cabecera">
+          <a href="/portal" class="marca" aria-label="Portal · inicio">
+            <img class="logo" src="/logo-wozial.png" alt="Wozial" width="545" height="194" />
+          </a>
+          <span class="portal-empresa">{nombreEmpresa}</span>
+          <TemaSwitch />
+          <Campana client:load />
+          <form method="POST" action="/api/logout">
+            <button type="submit" class="btn fantasma chico">Salir</button>
+          </form>
+        </header>
+      </div>
+
+      <main id="contenido" class="portal-contenido">
+        <slot />
+      </main>
+    </div>
+
+    <div class="toasts" id="toasts"></div>
+  </body>
+</html>
+
+<style>
+  .portal-vista-previa {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center; gap: 18px; flex-wrap: wrap;
+    padding: 10px 16px; background: var(--tinta); color: var(--fondo); font: var(--t-small); font-weight: 600; text-align: center;
+  }
+  .portal-vista-previa span, .portal-vista-previa a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
+  .portal-vista-previa svg { width: 16px; height: 16px; }
+  .portal-vista-previa a { color: var(--fondo); text-decoration: underline; text-underline-offset: 3px; }
+
+  .portal-app { min-height: 100dvh; }
+
+  /* Cabecera flotante tipo píldora, a juego con la de los documentos
+     editoriales (src/render/editorial/cabecera.ts), pero sticky en vez de
+     fija: aquí no hay barra de progreso de lectura que sincronizar. */
+  .portal-cabecera-envoltura {
+    position: sticky; top: 12px; z-index: 40;
+    display: flex; justify-content: center; padding: 0 16px; margin-bottom: 8px;
+  }
+  .portal-cabecera {
+    width: min(85%, 1100px); display: flex; align-items: center; gap: 12px; min-height: 64px;
+    padding: 8px 16px; border-radius: var(--r-pill); flex-wrap: wrap;
+    background: color-mix(in srgb, var(--tarjeta) 86%, transparent); backdrop-filter: blur(16px);
+    border: 1px solid var(--linea); box-shadow: var(--sombra);
+  }
+  .portal-cabecera .marca { flex-shrink: 0; }
+  .portal-cabecera form { flex-shrink: 0; }
+  .portal-empresa {
+    flex: 1; min-width: 0; font: var(--t-h3); color: var(--tinta);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  @media (max-width: 560px) {
+    .portal-cabecera { gap: 6px; padding: 8px; }
+    .portal-empresa { display: none; }
+  }
+
+  .portal-contenido {
+    width: 85%; max-width: 1100px; margin: 0 auto;
+    padding: 28px 0 60px;
+  }
+  @media (min-width: 900px) { .portal-contenido { padding: 40px 0 80px; } }
+</style>
