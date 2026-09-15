@@ -334,6 +334,17 @@ export function carga(
   return { clientes, etapasActivas, avancePromedio, aprobadasEnPeriodo };
 }
 
+/**
+ * Operador al que se atribuye el costo de un job: quien lo corrió si se sabe
+ * (`creadoPor`), o si no el operador asignado hoy al cliente. Extraída
+ * (limpieza M3, punto 1) porque la página repetía este mismo criterio a mano
+ * en el desglose operador × etapa (`desempeno.astro`), y las dos copias
+ * podían desalinearse con un cambio futuro en una sola.
+ */
+export function operadorDeJob(job: { creadoPor: string | null; clientId: string }, operadorDeCliente: Map<string, string | null>): string | null {
+  return job.creadoPor ?? operadorDeCliente.get(job.clientId) ?? null;
+}
+
 export function costo(
   jobs: JobM[],
   operadorDeCliente: Map<string, string | null>,
@@ -356,8 +367,7 @@ export function costo(
     porCliente.set(j.clientId, (porCliente.get(j.clientId) ?? 0) + j.costoUsd);
     porEtapa[j.tipo] += j.costoUsd;
 
-    const operadorId = j.creadoPor ?? operadorDeCliente.get(j.clientId) ?? null;
-    const clave = operadorId ?? 'sin_asignar';
+    const clave = operadorDeJob(j, operadorDeCliente) ?? 'sin_asignar';
     porOperador.set(clave, (porOperador.get(clave) ?? 0) + j.costoUsd);
   }
 

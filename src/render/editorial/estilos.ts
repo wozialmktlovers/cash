@@ -93,7 +93,8 @@ body[data-vista-previa] .cabecera{top:54px;}
 .panel-compartir{position:fixed;z-index:61;right:16px;width:min(380px,calc(100vw - 24px));
   background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--r);box-shadow:var(--sombra);
   padding:20px;display:grid;gap:14px;}
-.panel-compartir[hidden]{display:none;}
+/* Regla propia quitada (limpieza M3, punto 1): el [hidden]{display:none!important}
+   global (arriba en este mismo archivo) ya cubre .panel-compartir[hidden]. */
 .panel-eyebrow{font:var(--t-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--rosa);}
 .panel-link{display:flex;gap:8px;}
 .panel-url{flex:1;min-width:0;min-height:44px;padding:0 12px;border-radius:var(--r-sm);border:1px solid var(--linea);

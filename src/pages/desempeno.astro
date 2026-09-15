@@ -6,7 +6,7 @@ import { db, clients, clienteEtapas, etapaEventos, comentarios, researchJobs, us
 import { condicionClientes, esUuid } from '@/lib/visibilidad';
 import { ETAPAS, NOMBRE_ETAPA, PESOS, type Etapa, type Estado } from '@/flujo/reglas';
 import {
-  periodo, resumenEstadistico, tiemposPorEtapa, calidad, carga, costo,
+  periodo, resumenEstadistico, tiemposPorEtapa, calidad, carga, costo, operadorDeJob,
   enPeriodoCerrado, agruparClientesPorOperador, desglosePorEtapa,
   type Evento, type ComentarioM, type JobM, type EtapaM, type Periodo,
 } from '@/lib/desempeno';
@@ -224,7 +224,7 @@ const filasDesgloseOperador = filasPorOperador.map((f) => {
   const idsSet = new Set(gruposOperador.get(f.clave) ?? []);
   const operadorIdReal = f.clave === 'sin_asignar' ? null : f.clave;
   const eventosGCerrados = eventosCerrados.filter((e) => idsSet.has(e.clientId));
-  const jobsAtribuidos = jobs.filter((j) => (j.creadoPor ?? operadorDeCliente.get(j.clientId) ?? null) === operadorIdReal);
+  const jobsAtribuidos = jobs.filter((j) => operadorDeJob(j, operadorDeCliente) === operadorIdReal);
   return { nombre: f.nombre, porEtapa: desglosePorEtapa(eventosGCerrados, jobsAtribuidos) };
 });
 

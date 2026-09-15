@@ -72,17 +72,23 @@ export function planContratacion(seleccion: Etapa[]): { etapa: Etapa; contratada
 }
 
 /**
- * Aplica `planContratacion` a un cliente: crea o actualiza las 4 filas.
- * Idempotente, así que sirve tanto para el alta (todo nuevo) como para el
- * PUT de la ficha (upsert sobre lo que ya exista).
+ * Aplica un plan ya calculado (`planContratacion`) a un cliente: crea o
+ * actualiza las 4 filas. Idempotente, así que sirve tanto para el alta (todo
+ * nuevo) como para el PUT de la ficha (upsert sobre lo que ya exista).
  *
  * Acepta un `ejecutor` opcional para que quien ya tiene abierta una
  * transacción propia (el alta de cliente: insertar la fila de `clients` y
  * contratar sus etapas debe ser todo o nada) pase su `tx` y esto no abra una
  * segunda transacción anidada. Sin `ejecutor`, abre la suya.
+ *
+ * Recibe el `plan` ya resuelto (no la `seleccion` cruda) para que quien ya
+ * necesitó `planContratacion(seleccion)` antes de llamar aquí —el PUT de
+ * `api/clientes/[id]/etapas.ts`, que primero calcula el plan para decidir si
+ * hay cambios riesgosos— no lo recalcule una segunda vez (limpieza M3,
+ * punto 1). `aplicarPlanContratacion` sigue siendo la puerta pública para
+ * quien parte de una selección cruda (el alta de cliente).
  */
-export async function aplicarPlanContratacion(clientId: string, seleccion: Etapa[], ejecutor?: Ejecutor): Promise<void> {
-  const plan = planContratacion(seleccion);
+export async function aplicarPlan(clientId: string, plan: ReturnType<typeof planContratacion>, ejecutor?: Ejecutor): Promise<void> {
   const aplicar = async (tx: Ejecutor) => {
     for (const p of plan) {
       await tx.insert(clienteEtapas)
@@ -95,6 +101,11 @@ export async function aplicarPlanContratacion(clientId: string, seleccion: Etapa
   };
   if (ejecutor) await aplicar(ejecutor);
   else await db.transaction((tx) => aplicar(tx));
+}
+
+/** Atajo de `aplicarPlan` para quien parte de una selección cruda en vez de un plan ya calculado. */
+export async function aplicarPlanContratacion(clientId: string, seleccion: Etapa[], ejecutor?: Ejecutor): Promise<void> {
+  await aplicarPlan(clientId, planContratacion(seleccion), ejecutor);
 }
 
 /**

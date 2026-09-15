@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { z } from 'zod';
 import { ETAPAS, cambiosContratacionRiesgosos } from '@/flujo/reglas';
-import { aplicarPlanContratacion, etapasDelCliente, planContratacion, registrarEventosContratacion } from '@/flujo/servicio';
+import { aplicarPlan, etapasDelCliente, planContratacion, registrarEventosContratacion } from '@/flujo/servicio';
 import { clienteOperable } from '@/lib/visibilidad';
 
 const json = (cuerpo: unknown, status = 200) =>
@@ -46,7 +46,10 @@ export const PUT: APIRoute = async ({ params, request, locals }) => {
     return json({ ok: false, errores: riesgos.map((rg) => rg.razon) }, 409);
   }
 
-  await aplicarPlanContratacion(id, r.data.etapas);
+  // `plan` ya se calculó arriba para decidir los riesgos: se aplica
+  // directamente (aplicarPlan) en vez de volver a llamar planContratacion
+  // dentro de aplicarPlanContratacion (limpieza M3, punto 1).
+  await aplicarPlan(id, plan);
 
   if (riesgos.length > 0) {
     await registrarEventosContratacion(id, riesgos, locals.usuario.id);

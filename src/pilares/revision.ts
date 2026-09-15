@@ -37,12 +37,28 @@ export function todosLosTemas(pilares: PilarMapa[]): Tema[] {
   return pilares.flatMap((p) => (p.estado === 'ok' ? p.subcategorias.flatMap((s) => s.temas) : []));
 }
 
-/** Pares [primero, repetido] en orden de aparición. El segundo es el que se reescribe. */
+/**
+ * Pares [primero, repetido] en orden de aparición. El segundo es el que se
+ * reescribe.
+ *
+ * `sonParecidos` normaliza y saca el set de palabras de cada texto que
+ * recibe; llamarla directamente aquí repetiría ese trabajo por cada PAR
+ * (O(n²) normalizaciones sobre solo n temas distintos). Con el banco
+ * completo de pilares (hasta 15 subcategorías × varios temas cada una) ya
+ * es un número de pares nada despreciable, así que se precalcula la
+ * normalización y el set de palabras de cada tema una sola vez (limpieza
+ * M3, punto 1) y el criterio de "parecidos" se repite aquí sobre esos
+ * valores ya calculados, en vez de sobre `sonParecidos(texto, texto)`.
+ */
 export function buscarDuplicados(temas: Tema[]): [string, string][] {
+  const normalizados = temas.map((t) => normalizarTema(t.texto));
+  const setsPalabras = temas.map((t) => palabras(t.texto));
+
   const pares: [string, string][] = [];
   for (let i = 0; i < temas.length; i++) {
     for (let j = i + 1; j < temas.length; j++) {
-      if (sonParecidos(temas[i].texto, temas[j].texto)) pares.push([temas[i].id, temas[j].id]);
+      const parecidos = normalizados[i] === normalizados[j] || jaccard(setsPalabras[i], setsPalabras[j]) >= 0.6;
+      if (parecidos) pares.push([temas[i].id, temas[j].id]);
     }
   }
   return pares;

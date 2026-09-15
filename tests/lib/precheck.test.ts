@@ -19,46 +19,51 @@ describe('revisión previa', () => {
   });
 });
 
-describe('precheck del manual de campaña', () => {
+describe('precheck del mapa de pilares', () => {
+  // `puedeGenerarGrowth` (equivalente para el manual de campaña) se quitó en
+  // la limpieza de M3 por no tener ya ningún llamador; este describe pasó a
+  // probar `puedeGenerarPilares`, la única función de este par que sigue en
+  // uso (la pantalla de confirmación de pilares), sin perder la cobertura
+  // de `contarEtapasConDatos` que ya traían estos casos.
   it('no deja generarlo sin investigación previa', async () => {
-    const { puedeGenerarGrowth } = await import('@/lib/precheck');
-    const r = puedeGenerarGrowth({ etapasConDatos: 0 });
+    const { puedeGenerarPilares } = await import('@/lib/precheck');
+    const r = puedeGenerarPilares({ etapasConDatos: 0 });
     expect(r.ok).toBe(false);
     expect(r.razon).toMatch(/investigación/i);
   });
 
   it('lo permite en cuanto una etapa produjo datos', async () => {
-    const { puedeGenerarGrowth } = await import('@/lib/precheck');
-    expect(puedeGenerarGrowth({ etapasConDatos: 1 }).ok).toBe(true);
+    const { puedeGenerarPilares } = await import('@/lib/precheck');
+    expect(puedeGenerarPilares({ etapasConDatos: 1 }).ok).toBe(true);
   });
 
   it('la razón nunca va vacía cuando bloquea: el operador tiene que saber por qué', async () => {
-    const { puedeGenerarGrowth } = await import('@/lib/precheck');
-    expect(puedeGenerarGrowth({ etapasConDatos: 0 }).razon.length).toBeGreaterThan(20);
+    const { puedeGenerarPilares } = await import('@/lib/precheck');
+    expect(puedeGenerarPilares({ etapasConDatos: 0 }).razon.length).toBeGreaterThan(20);
   });
 
   it('una investigación que falló entera no cuenta como base', async () => {
     // El pipeline inserta una fila de resultado aunque fallen las cinco
     // etapas, para dejar constancia del intento. Si el precheck solo mirara
-    // que la fila existe, dejaría generar una campaña sobre nada. Pasó en
-    // producción con el cliente de prueba.
-    const { contarEtapasConDatos, puedeGenerarGrowth } = await import('@/lib/precheck');
+    // que la fila existe, dejaría generar un mapa de pilares sobre nada.
+    // Pasó en producción con el cliente de prueba.
+    const { contarEtapasConDatos, puedeGenerarPilares } = await import('@/lib/precheck');
     const fallida = {
       competencia: { estado: 'vacio', razon: 'x' }, audiencia: { estado: 'vacio', razon: 'x' },
       canales: { estado: 'vacio', razon: 'x' }, mercado: { estado: 'vacio', razon: 'x' },
       sintesis: { estado: 'vacio', razon: 'x' },
     };
     expect(contarEtapasConDatos(fallida)).toBe(0);
-    expect(puedeGenerarGrowth({ etapasConDatos: contarEtapasConDatos(fallida) }).ok).toBe(false);
+    expect(puedeGenerarPilares({ etapasConDatos: contarEtapasConDatos(fallida) }).ok).toBe(false);
   });
 
   it('una investigación parcial sí sirve de base', async () => {
-    const { contarEtapasConDatos, puedeGenerarGrowth } = await import('@/lib/precheck');
+    const { contarEtapasConDatos, puedeGenerarPilares } = await import('@/lib/precheck');
     const parcial = {
       competencia: { estado: 'ok', datos: {} }, audiencia: { estado: 'vacio', razon: 'x' },
     };
     expect(contarEtapasConDatos(parcial)).toBe(1);
-    expect(puedeGenerarGrowth({ etapasConDatos: 1 }).ok).toBe(true);
+    expect(puedeGenerarPilares({ etapasConDatos: 1 }).ok).toBe(true);
   });
 
   it('no revienta con datos corruptos o ausentes', async () => {

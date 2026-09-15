@@ -10,26 +10,11 @@ export function revisarAntesDeInvestigar(d: {
   return { advertencias, listo: true };
 }
 
-/**
- * El manual de campaña solo existe encadenado a una investigación completada.
- * Aquí no hay «se advierte y decide el operador» como en la investigación:
- * sin datos de origen no hay nada sobre lo que razonar, y generarlo igualmente
- * sería inventar la campaña entera.
- */
-export function puedeGenerarGrowth(d: { etapasConDatos: number }):
-  { ok: boolean; razon: string } {
-  // No basta con que exista una fila de resultado. El pipeline de
-  // investigación inserta una aunque fallen las cinco etapas, para dejar
-  // constancia del intento. Generar el manual sobre esa fila daría una
-  // campaña construida sobre nada.
-  if (d.etapasConDatos === 0) {
-    return {
-      ok: false,
-      razon: 'Este cliente aún no tiene una investigación con datos. El manual de campaña parte de ella, y una investigación que falló entera no sirve de base.',
-    };
-  }
-  return { ok: true, razon: '' };
-}
+// `puedeGenerarGrowth` (equivalente para el manual de campaña) se quitó en la
+// limpieza de M3: ninguna página lo llamaba ya — el precheck de growth vive
+// solo del lado del servidor (API), y la pantalla de confirmación usa
+// `puedeGenerarPilares`. Si el manual de campaña necesita su propia pantalla
+// de confirmación algún día, se puede volver a extraer de aquí (git log).
 
 /** El mapa de pilares, como el manual, parte de una investigación con datos. */
 export function puedeGenerarPilares(d: { etapasConDatos: number }): { ok: boolean; razon: string } {
