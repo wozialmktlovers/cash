@@ -57,7 +57,12 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
           clientId: inv!.rol === 'cliente' ? inv!.clientId : null,
           activo: true,
         })
+        // Dos invitaciones distintas del mismo correo aceptadas a la vez pueden
+        // pasar ambas la consulta de arriba; la restricción única decide y la
+        // perdedora sale como «ya existe» en lugar de un 500.
+        .onConflictDoNothing({ target: users.email })
         .returning({ id: users.id });
+      if (!creado) throw new YaExisteError();
       creadoId = creado.id;
     });
   } catch (e) {

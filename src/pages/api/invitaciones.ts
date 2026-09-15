@@ -40,6 +40,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
   let cliente: { id: string; operadorId: string | null } | null = null;
   if (rol === 'cliente') {
     if (!clientIdSolicitado) return json({ error: 'cliente-obligatorio' }, 400);
+    // Un id con forma inválida haría fallar la columna uuid con un 500.
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientIdSolicitado)) {
+      return json({ error: 'cliente-invalido' }, 400);
+    }
     const [c] = await db.select({ id: clients.id, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, clientIdSolicitado)).limit(1);
     if (!c) return json({ error: 'cliente-invalido' }, 400);
     cliente = c;
