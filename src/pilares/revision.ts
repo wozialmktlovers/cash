@@ -1,9 +1,9 @@
-import { normalizar } from '@/lib/ui/buscar';
+import { normalizarTema } from './texto';
 import { FUNCIONES, type Estrategia, type Funcion, type PilarGenerado, type PilarMapa, type Tema } from './schemas';
 
-export function normalizarTema(t: string): string {
-  return normalizar(t).replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
-}
+// Re-exportado desde el módulo hoja `texto.ts` para no romper los imports
+// existentes de `normalizarTema` desde `@/pilares/revision`.
+export { normalizarTema };
 
 /** Palabras de 4 letras o más: las cortas («de», «tu», «no») hacen parecer iguales temas distintos. */
 export function palabras(t: string): Set<string> {

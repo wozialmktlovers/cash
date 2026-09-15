@@ -58,4 +58,9 @@ describe('reemplazosSchema', () => {
   it('acepta temas con id', () => {
     expect(reemplazosSchema.safeParse({ temas: [{ id: 'P1-S1-01', texto: 'Nuevo', funcion: 'venta', formato: 'reel' }] }).success).toBe(true);
   });
+  it('rechaza números de tema fuera de 01-20', () => {
+    const conId = (id: string) => ({ temas: [{ id, texto: 'Nuevo', funcion: 'venta', formato: 'reel' }] });
+    expect(reemplazosSchema.safeParse(conId('P1-S1-00')).success).toBe(false);
+    expect(reemplazosSchema.safeParse(conId('P1-S1-21')).success).toBe(false);
+  });
 });

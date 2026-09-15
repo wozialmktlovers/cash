@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { SISTEMA_PILARES, armarEntradaEstrategia, armarEntradaPilar, armarEntradaCorreccion } from '@/pilares/agentes';
+import { FUNCIONES } from '@/pilares/schemas';
 import { estrategiaFalsa } from '../fixtures/pilares';
 import completa from '../fixtures/investigacion-completa.json';
 
@@ -29,10 +30,14 @@ describe('entradas', () => {
     for (const campo of ['texto', 'funcion', 'formato', 'reel', 'carrusel', 'story']) expect(e).toContain(campo);
   });
 
-  it('la corrección lista los ids a reescribir y los temas a evitar', () => {
+  it('la corrección lista los ids a reescribir con su etiqueta actual, las funciones válidas y los temas a evitar', () => {
     const e = armarEntradaCorreccion(estrategiaFalsa(), 2, [{ id: 'P2-S1-04', texto: 'Tema viejo', funcion: 'venta', formato: 'reel' }], ['Otro tema']);
     expect(e).toContain('P2-S1-04');
     expect(e).toContain('Tema viejo');
     expect(e).toContain('Otro tema');
+    // La etiqueta [función · formato] del tema a reescribir.
+    expect(e).toContain('venta · reel');
+    // El placeholder de función en el JSON de salida lista los valores explícitos, no "...".
+    for (const f of FUNCIONES) expect(e).toContain(f);
   });
 });

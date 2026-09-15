@@ -1,8 +1,13 @@
 import { pedirJson } from '@/research/claude';
 import {
-  estrategiaSchema, pilarSchemaPara, reemplazosSchema,
+  estrategiaSchema, pilarSchemaPara, reemplazosSchema, FUNCIONES, FORMATOS,
   type Estrategia, type PilarGenerado, type Tema,
 } from './schemas';
+
+// Listas explícitas para el prompt de corrección: se arman desde las
+// constantes de `schemas.ts` para no repetir a mano los valores del enum.
+const FUNCIONES_LISTA = FUNCIONES.join(' | ');
+const FORMATOS_LISTA = FORMATOS.join(' | ');
 
 export const SISTEMA_PILARES = `Eres estratega y planner de contenidos para Facebook e Instagram en una agencia mexicana. Tu trabajo no es redactar posts: defines por qué debe existir cada pieza y cómo conecta los objetivos del negocio con lo que la audiencia quiere ver y valora.
 
@@ -71,12 +76,12 @@ ${JSON.stringify(estrategia, null, 2)}
 
 ## Tu tarea
 Estos temas del pilar ${numero} («${estrategia.pilares[numero - 1].nombre}») se parecen demasiado a otros del mapa. Reescribe cada uno con un ángulo nuevo, sin salirte de su subcategoría, y conserva su id.
-${aReescribir.map((t) => `- ${t.id}: ${t.texto}`).join('\n')}
+${aReescribir.map((t) => `- ${t.id} [${t.funcion} · ${t.formato}]: ${t.texto}`).join('\n')}
 
 Temas del mapa que no puedes repetir ni parafrasear:
 ${evitar.map((t) => `- ${t}`).join('\n')}
 
-Devuelve { "temas": [ { "id": "el mismo", "texto": "máx. 160", "funcion": "...", "formato": "reel | carrusel | story" } ] }`;
+Devuelve { "temas": [ { "id": "el mismo", "texto": "máx. 160", "funcion": "${FUNCIONES_LISTA}", "formato": "${FORMATOS_LISTA}" } ] }`;
 }
 
 export async function correrEstrategia(ctx: string, investigacion: Record<string, unknown>, onUso?: (e: number, s: number) => boolean) {

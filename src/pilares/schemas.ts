@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { normalizar } from '@/lib/ui/buscar';
+import { normalizarTema } from './texto';
 
 export const FUNCIONES = ['autoridad', 'conexion', 'engagement', 'prueba_social', 'venta'] as const;
 export const FORMATOS = ['reel', 'carrusel', 'story'] as const;
@@ -50,7 +50,8 @@ export const temaGeneradoSchema = z.object({
 });
 export type TemaGenerado = z.infer<typeof temaGeneradoSchema>;
 
-const claveTexto = (t: string) => normalizar(t).replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+// Mismo normalizador que usa `revision.ts` para detectar duplicados entre pilares.
+const claveTexto = normalizarTema;
 
 /** Esquema de un pilar atado a las subcategorías que definió la estrategia. */
 export function pilarSchemaPara(nombres: string[]) {
@@ -76,7 +77,8 @@ export function pilarSchemaPara(nombres: string[]) {
 export type PilarGenerado = { subcategorias: { nombre: string; temas: TemaGenerado[] }[] };
 
 export const reemplazosSchema = z.object({
-  temas: z.array(z.object({ id: z.string().regex(/^P[1-5]-S[1-3]-\d{2}$/), ...temaGeneradoSchema.shape })),
+  // El número de tema va de 01 a 20: nada de 00 ni de 21 en adelante.
+  temas: z.array(z.object({ id: z.string().regex(/^P[1-5]-S[1-3]-(0[1-9]|1\d|20)$/), ...temaGeneradoSchema.shape })),
 });
 
 export type Tema = TemaGenerado & { id: string };
