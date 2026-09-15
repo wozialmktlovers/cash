@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { db, researchResults, growthResults, clients, clientLinks } from '@/db';
 import { resolverShareLink } from '@/lib/share';
-import { renderizarPresentacion } from '@/render/presentation';
+import { renderizarInvestigacion } from '@/render/investigacion/documento';
 import { renderizarManual } from '@/render/growth/manual';
 import { slugificar } from '@/lib/slug';
 
@@ -43,7 +43,7 @@ export async function resolverDocumentoPublico(token: string): Promise<
         destino: sitio?.url,
         creadoEn: r.createdAt,
       })
-    : renderizarPresentacion(r.datos as any, { cliente: c.nombre, giro: c.giro, fecha });
+    : renderizarInvestigacion(r.datos as any, { cliente: c.nombre, giro: c.giro, fecha });
 
   return { tipo: 'html', html, slug: slugificar(c.nombre) };
 }

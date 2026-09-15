@@ -32,10 +32,20 @@ export function barraOperador(o: OpcionesBarra): string {
     ? `.nav{top:var(--barra-h);}
        .prog{top:calc(var(--barra-h) + 62px);}
        body{padding-top:calc(var(--barra-h) + 64px);}`
-    : `.nav-bar{top:var(--barra-h);}
-       .prog{top:calc(var(--barra-h) + 62px);}
-       .deck{margin-top:var(--barra-h);height:calc(100vh - var(--barra-h));height:calc(100dvh - var(--barra-h));}
-       @media (max-width:420px){ .prog{top:calc(var(--barra-h) + 56px);} }`;
+    : `.doc-barra{top:var(--barra-h);}
+       body{padding-top:var(--barra-h);}
+       /* El documento nuevo trae los tokens del Studio: la barra toma sus colores
+          para no quedar como una franja negra sobre el tema claro. */
+       #barra-op{background:color-mix(in srgb,var(--tarjeta) 94%,transparent);border-bottom-color:var(--linea);}
+       #barra-op .bo-marca{color:var(--rosa);}
+       #barra-op .bo-cliente,#barra-op .bo-estado{color:var(--suave);}
+       #barra-op .bo-btn{color:var(--texto);border-color:var(--linea);}
+       #barra-op .bo-btn:hover{color:var(--rosa);border-color:var(--rosa);}
+       #barra-op .bo-primario{background:var(--rosa);border-color:var(--rosa);color:var(--sobre-acento);}
+       #barra-op .bo-peligro{color:var(--rojo);border-color:var(--rojo);}
+       #barra-op input{background:var(--gris);border-color:var(--linea);color:var(--tinta);}
+       #barra-op .bo-panel{background:var(--tarjeta);border-top-color:var(--linea);}
+       @media (min-width:900px){ #barra-op .bo-panel{background:transparent;} }`;
 
   return `
 <div id="barra-op">

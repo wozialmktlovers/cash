@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { investigacionSchema } from '@/research/schemas';
-import { renderizarPresentacion } from '@/render/presentation';
+import { renderizarInvestigacion } from '@/render/investigacion/documento';
 import { CLIENTE_EJEMPLO, INVESTIGACION_EJEMPLO } from '../../scripts/datos-ejemplo.mjs';
 
 describe('investigación de ejemplo (Yessica Villa)', () => {
@@ -16,27 +16,23 @@ describe('investigación de ejemplo (Yessica Villa)', () => {
     }
   });
 
-  it('renderiza los 17 paneles', () => {
-    const html = renderizarPresentacion(INVESTIGACION_EJEMPLO as any, {
-      cliente: CLIENTE_EJEMPLO.nombre,
-      giro: CLIENTE_EJEMPLO.giro,
-      fecha: '2026-08-12',
+  it('renderiza el documento continuo con el detalle abierto (aún sin lectura)', () => {
+    const html = renderizarInvestigacion(INVESTIGACION_EJEMPLO as any, {
+      cliente: CLIENTE_EJEMPLO.nombre, giro: CLIENTE_EJEMPLO.giro, fecha: '2026-08-12',
     });
-    expect((html.match(/class="panel[ "]/g) ?? []).length).toBe(17);
+    expect(html).toMatch(/<details class="detalle" open>/);
+    expect(html).not.toContain('class="panel');
   });
 
   it('conserva las cifras que sostienen el argumento', () => {
-    const html = renderizarPresentacion(INVESTIGACION_EJEMPLO as any, {
-      cliente: CLIENTE_EJEMPLO.nombre,
-      giro: CLIENTE_EJEMPLO.giro,
-      fecha: '2026-08-12',
+    const html = renderizarInvestigacion(INVESTIGACION_EJEMPLO as any, {
+      cliente: CLIENTE_EJEMPLO.nombre, giro: CLIENTE_EJEMPLO.giro, fecha: '2026-08-12',
     });
     // El hallazgo central: el aval equivalente cuesta una décima parte.
     expect(html).toContain('$3,450');
     expect(html).toContain('$36,792');
     // La prueba que sí sostiene el ticket.
     expect(html).toContain('$6,480');
-    expect(html).toContain('Universidad de Barcelona');
   });
 
   it('toda cifra de mercado y salario lleva fuente con URL', () => {

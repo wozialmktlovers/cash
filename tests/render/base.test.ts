@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { TOKENS, CSS_COMUN } from '@/render/base';
-import { ESTILOS } from '@/render/estilos';
 
 describe('base de render compartida', () => {
   it('los tokens traen la escala de videollamada y los grises', () => {
@@ -21,12 +20,5 @@ describe('base de render compartida', () => {
     expect(CSS_COMUN).not.toContain('.panel{');
     expect(CSS_COMUN).not.toContain('.dots{');
     expect(CSS_COMUN).not.toContain('.mas{');
-  });
-
-  it('ESTILOS sigue componiendo base y deck, sin perder nada', () => {
-    expect(ESTILOS).toContain('--esc');       // de tokens
-    expect(ESTILOS).toContain('.card{');      // de comunes
-    expect(ESTILOS).toContain('.deck{');      // del deck
-    expect(ESTILOS).toContain('.panel{');
   });
 });
