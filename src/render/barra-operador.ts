@@ -34,6 +34,10 @@ export function barraOperador(o: OpcionesBarra): string {
        body{padding-top:calc(var(--barra-h) + 64px);}`
     : `.doc-barra{top:var(--barra-h);}
        body{padding-top:var(--barra-h);}
+       /* La barra fija se suma a la cabecera del documento: sin esto, las anclas
+          del índice dejan el título de la sección debajo de las dos barras. */
+       html{scroll-padding-top:calc(var(--barra-h) + 96px);}
+       .indice-lateral{top:calc(var(--barra-h) + 96px);}
        /* El documento nuevo trae los tokens del Studio: la barra toma sus colores
           para no quedar como una franja negra sobre el tema claro. */
        #barra-op{background:color-mix(in srgb,var(--tarjeta) 94%,transparent);border-bottom-color:var(--linea);}

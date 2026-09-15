@@ -11,6 +11,8 @@ describe('barra de operador', () => {
     expect(b).toContain('.doc-barra{top:var(--barra-h);}');
     expect(b).toContain('var(--tarjeta)');
     expect(b).not.toContain('.deck{');
+    expect(b).toContain('scroll-padding-top:calc(var(--barra-h) + 96px)');
+    expect(b).toContain('.indice-lateral{top:calc(var(--barra-h) + 96px);}');
   });
   it('en el manual de Growth conserva su desplazamiento', () => {
     const b = barraOperador({ ...base, tipo: 'growth' });

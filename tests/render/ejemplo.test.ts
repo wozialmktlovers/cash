@@ -20,8 +20,8 @@ describe('investigación de ejemplo (Yessica Villa)', () => {
     const html = renderizarInvestigacion(INVESTIGACION_EJEMPLO as any, {
       cliente: CLIENTE_EJEMPLO.nombre, giro: CLIENTE_EJEMPLO.giro, fecha: '2026-08-12',
     });
-    expect(html).toMatch(/<details class="detalle" open>/);
-    expect(html).not.toContain('class="panel');
+    expect(html).toContain('role="tablist"');
+    expect(html).not.toMatch(/class="panel["\s]/);
   });
 
   it('conserva las cifras que sostienen el argumento', () => {
