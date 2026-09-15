@@ -123,4 +123,9 @@ const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month
 <style>
   .link-publico { display: flex; gap: 8px; margin-top: 10px; max-width: 520px; }
   .link-publico input { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+  /* En móvil este input es tocable (selecciona el texto para copiarlo a
+     mano si falla el botón), así que necesita el mínimo de 44px del spec. */
+  @media (max-width: 899px) {
+    .link-publico input { min-height: 44px; }
+  }
 </style>

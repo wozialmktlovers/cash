@@ -185,6 +185,12 @@ a.tarjeta:hover { transform: translateY(-2px); border-color: color-mix(in srgb, 
 .rejilla { display: grid; gap: 14px; grid-template-columns: 1fr; }
 @media (min-width: 600px) { .rejilla { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1000px) { .rejilla.tres { grid-template-columns: repeat(3, 1fr); } }
+/* .tarjeta + .tarjeta de arriba también entra dentro de una rejilla y empuja
+   cada tarjeta después de la primera 18px hacia abajo, aunque el grid ya las
+   separa con `gap`. Se anula aquí para las tarjetas que son hijas directas
+   de una rejilla (lista de clientes, "Clientes recientes"/"En curso" del
+   tablero, las dos tarjetas de acción de la ficha). */
+.rejilla > .tarjeta { margin-top: 0; }
 
 /* ── Indicadores ───────────────────────────────────── */
 
@@ -375,6 +381,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--r
 .accion .icono-tinte svg { width: 22px; height: 22px; }
 .accion .btn { align-self: flex-start; margin-top: 12px; }
 
+/* Icono del checklist de investigar.astro: vive fuera de un componente Astro
+   con scope propio (el <svg> lo pone Icono.astro y no recibe el atributo
+   data-astro-cid del <style> con scope de esa página), así que la regla debe
+   vivir aquí para poder alcanzarlo. */
+.renglon .icono-tinte svg { width: 22px; height: 22px; }
+
 /* ── Renglones ─────────────────────────────────────── */
 
 .renglon {
@@ -483,3 +495,12 @@ td { padding: 14px 16px; border-top: 1px solid var(--linea); }
 
 /* hidden debe ganarle a cualquier display de clase. */
 [hidden] { display: none !important; }
+
+/* ── Áreas táctiles mínimas en móvil (spec §6) ────────
+   Estos elementos quedan por debajo de 44px solo en pantallas angostas donde
+   se tocan con el dedo; en escritorio se dejan como están porque ahí se usan
+   con mouse. */
+@media (max-width: 899px) {
+  .btn.chico { min-height: 44px; }
+  .volver, .menu-lista button, .seccion-cabeza a { min-height: 44px; display: inline-flex; align-items: center; }
+}

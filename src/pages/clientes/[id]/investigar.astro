@@ -84,8 +84,11 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
 
 <style>
   .investigar { display: grid; gap: 18px; }
+  /* Este grid no es .rejilla, así que .tarjeta + .tarjeta de global.css sigue
+     aplicando aquí; se anula aparte. El tamaño del icono del checklist vive
+     en global.css (.renglon .icono-tinte svg) porque un <style> con scope no
+     puede alcanzar el <svg> que pinta Icono.astro. */
   .investigar .tarjeta + .tarjeta { margin-top: 0; }
-  .icono-tinte svg { width: 22px; height: 22px; }
   @media (min-width: 900px) {
     .investigar { grid-template-columns: 1fr 340px; align-items: start; }
     .costo { position: sticky; top: 90px; }
