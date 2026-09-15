@@ -99,9 +99,10 @@ export function correoInvitacion(o: {
   };
 }
 
-export function validarAceptacion(o: { nombre: string; password: string; confirmacion: string }): { ok: true } | { ok: false; errores: string[] } {
+export function validarAceptacion(o: { nombre: string; apellido: string; password: string; confirmacion: string }): { ok: true } | { ok: false; errores: string[] } {
   const errores: string[] = [];
   if (!o.nombre || !o.nombre.trim()) errores.push('El nombre es obligatorio');
+  if (!o.apellido || !o.apellido.trim()) errores.push('El apellido es obligatorio');
   if (!o.password || o.password.length < 12) errores.push('La contraseña debe tener al menos 12 caracteres');
   if (o.password !== o.confirmacion) errores.push('Las contraseñas no coinciden');
   return errores.length ? { ok: false, errores } : { ok: true };

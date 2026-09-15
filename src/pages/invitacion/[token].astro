@@ -30,7 +30,7 @@ if (estado === 'valida') {
 
 const errorParam = Astro.url.searchParams.get('error');
 const MENSAJES_ERROR: Record<string, string> = {
-  datos: 'Revisa los datos: nombre, una contraseña de al menos 12 caracteres y que la confirmación coincida.',
+  datos: 'Revisa los datos: nombre, apellido, una contraseña de al menos 12 caracteres y que la confirmación coincida.',
   'ya-existe': 'Ya existe una cuenta con ese correo. Si es tuya, entra desde la página de acceso.',
   usada: 'Esta invitación ya se usó.',
   vencida: 'Esta invitación venció.',
@@ -72,9 +72,19 @@ const MENSAJES_ESTADO: Record<'vencida' | 'usada' | 'inexistente' | 'revocada', 
 
           <input type="hidden" name="token" value={token} />
 
-          <div class="campo">
-            <label for="nombre">Nombre</label>
-            <input id="nombre" name="nombre" type="text" autocomplete="name" required autofocus />
+          {/* `.campos` ya es la rejilla del resto de las formas: una columna en
+              móvil y dos a partir de 700px, así que nombre y apellido quedan
+              lado a lado en escritorio sin estilos nuevos. */}
+          <div class="campos">
+            <div class="campo">
+              <label for="nombre">Nombre</label>
+              <input id="nombre" name="nombre" type="text" autocomplete="given-name" required autofocus />
+            </div>
+
+            <div class="campo">
+              <label for="apellido">Apellido</label>
+              <input id="apellido" name="apellido" type="text" autocomplete="family-name" required />
+            </div>
           </div>
 
           <div class="campo">

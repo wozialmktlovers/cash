@@ -14,6 +14,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const form = await request.formData();
   const token = String(form.get('token') ?? '');
   const nombre = String(form.get('nombre') ?? '').trim();
+  const apellido = String(form.get('apellido') ?? '').trim();
   const password = String(form.get('password') ?? '');
   const confirmacion = String(form.get('confirmacion') ?? '');
 
@@ -25,7 +26,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const estado = estadoInvitacion(inv ?? null, new Date());
   if (estado !== 'valida') return volver(estado);
 
-  const validacion = validarAceptacion({ nombre, password, confirmacion });
+  const validacion = validarAceptacion({ nombre, apellido, password, confirmacion });
   if (!validacion.ok) return volver('datos');
 
   let creadoId: string | undefined;
@@ -69,6 +70,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
           passwordHash,
           rol: inv!.rol,
           nombre,
+          apellido,
           clientId: inv!.rol === 'cliente' ? inv!.clientId : null,
           activo: true,
         })

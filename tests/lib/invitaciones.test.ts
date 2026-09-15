@@ -56,22 +56,31 @@ describe('estadoInvitacion', () => {
 
 describe('validarAceptacion', () => {
   it('exige nombre', () => {
-    const r = validarAceptacion({ nombre: '  ', password: '123456789012', confirmacion: '123456789012' });
+    const r = validarAceptacion({ nombre: '  ', apellido: 'Pau', password: '123456789012', confirmacion: '123456789012' });
+    expect(r.ok).toBe(false);
+  });
+
+  it('el apellido es obligatorio', () => {
+    const r = validarAceptacion({ nombre: 'Ana', apellido: '  ', password: 'x'.repeat(12), confirmacion: 'x'.repeat(12) });
     expect(r.ok).toBe(false);
   });
 
   it('exige contraseña de al menos 12 caracteres', () => {
-    const r = validarAceptacion({ nombre: 'Ana', password: 'corta1234', confirmacion: 'corta1234' });
+    const r = validarAceptacion({ nombre: 'Ana', apellido: 'Pau', password: 'corta1234', confirmacion: 'corta1234' });
     expect(r.ok).toBe(false);
   });
 
   it('exige que la confirmación coincida', () => {
-    const r = validarAceptacion({ nombre: 'Ana', password: '123456789012', confirmacion: 'otra12345678' });
+    const r = validarAceptacion({ nombre: 'Ana', apellido: 'Pau', password: '123456789012', confirmacion: 'otra12345678' });
     expect(r.ok).toBe(false);
   });
 
+  it('con nombre y apellido pasa', () => {
+    expect(validarAceptacion({ nombre: 'Ana', apellido: 'Pau', password: 'x'.repeat(12), confirmacion: 'x'.repeat(12) }).ok).toBe(true);
+  });
+
   it('acepta datos válidos', () => {
-    const r = validarAceptacion({ nombre: 'Ana', password: '123456789012', confirmacion: '123456789012' });
+    const r = validarAceptacion({ nombre: 'Ana', apellido: 'Pau', password: '123456789012', confirmacion: '123456789012' });
     expect(r.ok).toBe(true);
   });
 });
