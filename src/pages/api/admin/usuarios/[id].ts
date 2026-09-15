@@ -3,6 +3,7 @@ import { and, count, eq } from 'drizzle-orm';
 import { db, users, sessions } from '@/db';
 import { validarCambioUsuario } from '@/lib/usuarios';
 import type { Rol } from '@/lib/permisos';
+import { esUuid } from '@/lib/visibilidad';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } });
@@ -15,6 +16,9 @@ const ROLES: Rol[] = ['admin', 'operador', 'cliente'];
 export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const actor = locals.usuario;
   const id = params.id!;
+  // Un id sin forma de UUID nunca existe (M2 punto 5): 404 antes de tocar la
+  // base, en vez del 500 que daba Postgres al comparar la columna uuid.
+  if (!esUuid(id)) return json({ ok: false, error: 'no-existe' }, 404);
 
   let crudo: unknown;
   try {

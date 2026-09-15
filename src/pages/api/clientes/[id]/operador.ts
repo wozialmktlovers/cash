@@ -1,13 +1,11 @@
 import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { db, clients, users } from '@/db';
-import { clienteOperable } from '@/lib/visibilidad';
+import { clienteOperable, esUuid } from '@/lib/visibilidad';
 import { avisarReasignacion } from '@/flujo/avisos';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } });
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Solo el admin reasigna al responsable de un cliente.
 export const PATCH: APIRoute = async ({ params, request, locals }) => {
@@ -28,7 +26,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const { operadorId } = (crudo ?? {}) as { operadorId?: unknown };
   // Forma inválida se rechaza antes de tocar la base: un id que no es UUID
   // haría fallar la columna con un 500 en vez de un 400 claro.
-  if (typeof operadorId !== 'string' || !UUID_RE.test(operadorId)) {
+  if (typeof operadorId !== 'string' || !esUuid(operadorId)) {
     return json({ ok: false, error: 'operador-invalido' }, 400);
   }
 

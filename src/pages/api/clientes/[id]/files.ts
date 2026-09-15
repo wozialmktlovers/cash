@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { db, clientFiles } from '@/db';
 import { guardarArchivo, borrarArchivo, mimePermitido, MAX_BYTES } from '@/lib/files';
 import { extraerTexto, recortarTexto } from '@/lib/extract';
-import { clienteOperable } from '@/lib/visibilidad';
+import { clienteOperable, esUuid } from '@/lib/visibilidad';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -73,6 +73,9 @@ export const DELETE: APIRoute = async ({ params, url, locals }) => {
   const clientId = params.id!;
   const fileId = url.searchParams.get('fileId');
   if (!fileId) return json({ ok: false, errores: ['Falta fileId'] }, 400);
+  // Mismo criterio que los ids de la ruta (M2 punto 5): uno que no es UUID
+  // no existe, 404 sin llegar a Postgres (que respondía 500).
+  if (!esUuid(fileId)) return json({ ok: false, errores: ['El archivo no existe'] }, 404);
 
   if (!(await clienteOperable(locals.usuario, clientId))) return json({ ok: false, errores: ['El archivo no existe'] }, 404);
 

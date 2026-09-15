@@ -20,8 +20,11 @@ import { hash } from '@node-rs/argon2';
  *
  * La contraseña vive solo en las variables del servicio: nunca en el repositorio.
  * Una vez creado o recuperado el usuario, conviene borrar ambas variables.
+ *
+ * `opciones.sql` permite pasar un cliente de postgres.js (o un doble, en las
+ * pruebas); sin él, abre y cierra su propia conexión con DATABASE_URL.
  */
-export async function bootstrapAdmin() {
+export async function bootstrapAdmin(opciones = {}) {
   const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD;
 
@@ -32,7 +35,7 @@ export async function bootstrapAdmin() {
     return;
   }
 
-  const sql = postgres(process.env.DATABASE_URL, { max: 1 });
+  const sql = opciones.sql ?? postgres(process.env.DATABASE_URL, { max: 1 });
   try {
     const h = await hash(password, { memoryCost: 19456, timeCost: 2, parallelism: 1 });
 
@@ -42,7 +45,7 @@ export async function bootstrapAdmin() {
       if (!existente) {
         // Con roles, un usuario nuevo nace operador; este es el único punto
         // que crea un admin directamente.
-        await tx`INSERT INTO users (email, password_hash, rol, activo) VALUES (${email}, ${h}, 'admin', true)`;
+        await tx`INSERT INTO users (email, password_hash, rol, activo, client_id) VALUES (${email}, ${h}, 'admin', true, NULL)`;
         console.log(`[admin] usuario creado: ${email} — borra ADMIN_EMAIL y ADMIN_PASSWORD de las variables`);
         return;
       }
@@ -56,12 +59,16 @@ export async function bootstrapAdmin() {
       }
 
       // Ruta de recuperación: nadie con acceso de admin en este momento.
-      await tx`UPDATE users SET rol = 'admin', activo = true, password_hash = ${h} WHERE id = ${existente.id}`;
+      // `client_id = NULL` (M2 punto 5): si el correo era de un usuario de
+      // cliente, al volverlo admin deja de pertenecer a ese cliente; conservarlo
+      // le daría acceso de admin «atado» a un cliente y viola el CHECK de 0005.
+      await tx`UPDATE users SET rol = 'admin', activo = true, password_hash = ${h}, client_id = NULL WHERE id = ${existente.id}`;
       console.log(`[admin] acceso de administrador recuperado: ${email} — borra ADMIN_EMAIL y ADMIN_PASSWORD de las variables`);
     });
   } catch (e) {
     console.error('[admin] no se pudo preparar el usuario:', e instanceof Error ? e.message : e);
   } finally {
-    await sql.end();
+    // Solo cierra la conexión que abrió aquí; una prestada la cierra su dueño.
+    if (!opciones.sql) await sql.end();
   }
 }

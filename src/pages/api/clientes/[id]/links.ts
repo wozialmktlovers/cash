@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { and, eq } from 'drizzle-orm';
 import { db, clientLinks } from '@/db';
 import { validarUrl, normalizarUrl } from '@/lib/links';
-import { clienteOperable } from '@/lib/visibilidad';
+import { clienteOperable, esUuid } from '@/lib/visibilidad';
 
 const TIPOS = ['sitio', 'instagram', 'facebook', 'tiktok', 'youtube', 'ventas', 'otro'] as const;
 type Tipo = (typeof TIPOS)[number];
@@ -45,6 +45,9 @@ export const DELETE: APIRoute = async ({ params, url, locals }) => {
   const clientId = params.id!;
   const linkId = url.searchParams.get('linkId');
   if (!linkId) return json({ ok: false, errores: ['Falta linkId'] }, 400);
+  // Mismo criterio que los ids de la ruta (M2 punto 5): uno que no es UUID
+  // no existe, 404 sin llegar a Postgres (que respondía 500).
+  if (!esUuid(linkId)) return json({ ok: false, errores: ['El enlace no existe'] }, 404);
 
   if (!(await clienteOperable(locals.usuario, clientId))) return json({ ok: false, errores: ['El enlace no existe'] }, 404);
 
