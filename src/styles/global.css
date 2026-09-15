@@ -452,7 +452,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--r
   padding: 14px 0; border-bottom: 1px solid var(--linea);
 }
 .renglon:last-child { border-bottom: 0; }
-.renglon .cuerpo { flex: 1; min-width: 200px; }
+/* `overflow-wrap: anywhere` porque aquí el título suele ser un correo: una
+   cadena sin espacios que en móvil desbordaba la tarjeta a lo ancho. Es el
+   caso de quien todavía no tiene nombre ni apellido. */
+.renglon .cuerpo { flex: 1; min-width: 200px; overflow-wrap: anywhere; }
 .renglon .cuerpo strong { color: var(--tinta); font-weight: 600; }
 .cifra { font-variant-numeric: tabular-nums; }
 
