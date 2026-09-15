@@ -21,6 +21,8 @@ export type OpcionesPilares = {
   /** Solo en la vista interna: marca `data-ancla` en secciones, tarjetas y temas (B7, spec §3). Nunca en `/p/...`. */
   anclas?: boolean;
   flujo?: FlujoDatos;
+  /** Enlace «← Mi portal» — solo en el portal del cliente (C2, spec §4). */
+  volver?: { href: string; texto: string };
 };
 
 const INDICE: [string, string, string][] = [
@@ -77,5 +79,6 @@ export function renderizarPilares(mapa: MapaPilares, meta: MetaPilares, opciones
     operador: opciones?.operador,
     scriptsExtra: SCRIPT_PILARES,
     flujo: opciones?.flujo,
+    volver: opciones?.volver,
   });
 }

@@ -65,6 +65,15 @@ p{max-width:68ch;}
 .cabecera-compartir svg{width:16px;height:16px;flex-shrink:0;}
 @media (max-width:520px){.cabecera-compartir{width:44px;padding:0;justify-content:center;}.cabecera-compartir .texto-compartir{display:none;}}
 
+/* Enlace de vuelta al portal del cliente (C2, spec §4): botón icono fijo de
+   44 px, nunca texto — siempre en la cabecera angosta del portal, así que
+   nunca vale la pena reservarle sitio a una etiqueta que se vería recortada
+   en celular. */
+.cabecera-volver{flex-shrink:0;width:44px;height:44px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--linea);background:var(--gris);color:var(--tinta);}
+.cabecera-volver:hover{border-color:var(--rosa);color:var(--rosa);}
+.cabecera-volver svg{width:16px;height:16px;flex-shrink:0;}
+
 .cabecera-progreso{position:absolute;left:0;bottom:0;height:3px;width:0;background:var(--rosa);}
 
 .panel-compartir{position:fixed;z-index:61;right:16px;width:min(380px,calc(100vw - 24px));
@@ -245,6 +254,9 @@ dialog.dialogo-comentarios{width:min(420px,calc(100vw - 32px));max-height:min(64
   position:fixed;inset:16px 16px auto auto;margin:0;}
 dialog.dialogo-comentarios:not([open]){display:none;}
 dialog.dialogo-comentarios::backdrop{background:transparent;}
+/* Texto de ayuda del portal del cliente (C2, spec §4): explica cómo dejar
+   una observación, antes de los filtros. */
+.panel-ayuda{margin:0;}
 .comentarios-filtros{display:flex;gap:8px;flex-wrap:wrap;}
 .filtro-comentarios{min-height:44px;padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--linea);background:transparent;color:var(--texto);font:var(--t-small);cursor:pointer;}
 .filtro-comentarios[aria-pressed="true"]{background:var(--tinta);border-color:var(--tinta);color:var(--fondo);font-weight:700;}

@@ -25,6 +25,8 @@ export function renderizarInvestigacion(
   editable = false,
   flujo?: FlujoDatos,
   anclas = false,
+  /** Enlace «← Mi portal» — solo en el portal del cliente (C2, spec §4). */
+  volver?: { href: string; texto: string },
 ): string {
   // No basta con `estado === 'ok'`: los datos guardados pudieron venir de un
   // esquema anterior (v1, sin `cifras`) o llegar corruptos. Si no cumplen el
@@ -67,5 +69,6 @@ export function renderizarInvestigacion(
     cuerpo,
     operador,
     flujo,
+    volver,
   });
 }

@@ -50,6 +50,17 @@ body{padding-top:64px; overflow-y:auto; overflow-x:hidden; min-height:100vh;}
   font-size:0.75rem;font-weight:700;font-family:inherit;font-variant-numeric:tabular-nums;
 }
 .gbtn-txt.on{background:rgba(212,104,138,.2);border-color:rgba(212,104,138,.5);color:#f0a2bd;}
+/* Botones del portal del cliente (C2, spec §4): el enlace de vuelta y el
+   panel de observaciones son iconos de 44 px (objetivo táctil, y contenido
+   fijo que nunca cambia); Comentar es una píldora de ancho automático
+   porque SCRIPT_FLUJO le cambia el texto al entrar al modo — un círculo
+   fijo se lo comería. Ninguno de los tres se oculta en celular (a
+   diferencia de '.gbtn-txt', que es solo la comodidad de escala de texto):
+   dejar observaciones es la función central del portal, no un extra de
+   videollamada.
+*/
+.gbtn-44{width:44px;height:44px;}
+.gbtn-pill{width:auto;height:44px;padding:0 16px;border-radius:100px;font-size:0.75rem;font-weight:700;font-family:inherit;white-space:nowrap;}
 .nav-ctr{display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:auto;}
 
 .nav{position:fixed;top:0;left:0;right:0;height:62px;z-index:300;background:rgba(8,8,11,.9);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:16px;padding:0 clamp(14px,3vw,32px);box-shadow:0 4px 24px rgba(0,0,0,.5);}
@@ -368,6 +379,8 @@ dialog.dialogo-comentarios{width:min(420px,calc(100vw - 32px));max-height:min(64
   position:fixed;inset:16px 16px auto auto;margin:0;}
 dialog.dialogo-comentarios:not([open]){display:none;}
 dialog.dialogo-comentarios::backdrop{background:transparent;}
+/* Texto de ayuda del portal del cliente (C2, spec §4). */
+.panel-ayuda{margin:0;color:var(--dim);font-size:.82rem;}
 .comentarios-filtros{display:flex;gap:8px;flex-wrap:wrap;}
 .filtro-comentarios{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--line-2);background:transparent;color:var(--mid);font-size:.78rem;cursor:pointer;}
 .filtro-comentarios[aria-pressed="true"]{background:var(--pink);border-color:var(--pink);color:#fff;font-weight:700;}

@@ -17,6 +17,17 @@ import { seccionSeguimiento } from './secciones/seguimiento';
 
 export type { MetaManual };
 
+// Iconos del portal del cliente (C2, spec §4): mismo trazo 14×14 que
+// `pantalla` más abajo. Nunca texto en estos tres botones — «Comentar» sí
+// lleva su propia etiqueta (SCRIPT_FLUJO se la cambia a «Salir de
+// comentar», por eso usa la píldora de ancho automático, no estos iconos),
+// pero «← Mi portal» y «Observaciones» son contenido fijo, y un botón
+// circular de 31 px con la palabra completa adentro es justo lo que se veía
+// roto en la verificación en vivo a 375 px: el texto se salía del círculo y
+// atropellaba al botón vecino.
+const ICONO_VOLVER = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2 3 7l6 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const ICONO_OBSERVACIONES = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1.5 2.5h11v7h-6l-3 3v-3h-2v-7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 const ANCLAS: [string, string][] = [
   ['setup', 'Setup'],
   ['meta', 'Meta'],
@@ -37,12 +48,21 @@ const ANCLAS: [string, string][] = [
  * razón, porque media campaña bien documentada sirve y una campaña inventada
  * sobre datos que no existen, no.
  */
+/**
+ * Datos exclusivos del portal del cliente (C2, spec §4): sin `barraOperador`
+ * (nunca hay Compartir ahí), el manual no tiene otro sitio de dónde sacar el
+ * enlace «← Mi portal» ni el botón para entrar al modo Comentar — en la
+ * vista interna esos dos viven dentro de `barraOperador`.
+ */
+export type OpcionesPortalManual = { volverHref: string; volverTexto: string; ayudaComentarios?: string };
+
 export function renderizarManual(
   datos: Partial<Growth> & { _huecos?: Record<string, string> },
   meta: MetaManual & { destino?: string; ciudad?: string; creadoEn?: Date },
   barraOperador = '',
   editable = false,
   flujo?: FlujoDatos,
+  portal?: OpcionesPortalManual,
 ): string {
   const huecos = datos._huecos ?? {};
 
@@ -93,8 +113,11 @@ export function renderizarManual(
 ${barraOperador}
 <nav class="nav">
   <img src="${LOGO_WOZIAL_SRC}" alt="Wozial" class="nav-logo">
+  ${portal ? `<a class="gbtn gbtn-44" href="${escapar(portal.volverHref)}" aria-label="${escapar(portal.volverTexto)}" title="${escapar(portal.volverTexto)}">${ICONO_VOLVER}</a>` : ''}
   <div class="nav-links">${enlaces}</div>
   <div class="nav-ctr">
+    ${portal && flujo?.puedeComentar ? `<button type="button" class="gbtn gbtn-pill" id="btn-flujo-comentar" aria-pressed="false">Comentar</button>
+    <button type="button" class="gbtn gbtn-44" id="btn-flujo-comentarios" aria-haspopup="dialog" aria-controls="dialog-comentarios" aria-label="Observaciones" title="Observaciones">${ICONO_OBSERVACIONES}</button>` : ''}
     <button class="gbtn gbtn-txt" id="escala" aria-label="Tamaño del texto">1x</button>
     <button class="gbtn" id="pantalla" aria-label="Pantalla completa" title="Pantalla completa (F)">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 5V1h4M13 5V1H9M1 9v4h4M13 9v4H9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -104,7 +127,7 @@ ${barraOperador}
 <div class="prog"><div class="prog-fill" id="pf"></div></div>
 <main>${secciones}</main>
 ${flujo?.puedeEditar ? panelVersiones() + barraEdicion() : ''}
-${flujo?.puedeComentar ? panelComentarios() : ''}
+${flujo?.puedeComentar ? panelComentarios(portal?.ayudaComentarios) : ''}
 <script>${NAVEGACION_GROWTH}</script>
 ${flujo ? `<script>${SCRIPT_FLUJO}</script>` : ''}
 </body></html>`;

@@ -2,7 +2,7 @@ import { escapar } from '@/render/escapar';
 import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
 import { LOGO_WOZIAL_SRC } from '@/render/marca';
 import type { OpcionesBarra } from '@/render/barra-operador';
-import { cabeceraDocumento, SCRIPT_CABECERA } from './cabecera';
+import { cabeceraDocumento, SCRIPT_CABECERA_BASE, SCRIPT_CABECERA_COMPARTIR } from './cabecera';
 import { SCRIPT_EDITORIAL } from './interaccion';
 import { atributoFlujo, panelComentarios, SCRIPT_FLUJO, type FlujoDatos } from './flujo-cliente';
 
@@ -41,6 +41,10 @@ export function envolverDocumento(o: {
   scriptsExtra?: string;
   /** Solo en la vista interna: activa `data-flujo` en `<body>` y `SCRIPT_FLUJO` (edición y versiones — B6). */
   flujo?: FlujoDatos;
+  /** Enlace «← Mi portal» — solo en el portal del cliente (C2, spec §4). */
+  volver?: { href: string; texto: string };
+  /** Texto de ayuda sobre el panel de comentarios — solo en el portal (C2, spec §4). */
+  ayudaComentarios?: string;
 }): string {
   return `<!DOCTYPE html>
 <html lang="es-MX"><head>
@@ -57,7 +61,11 @@ export function envolverDocumento(o: {
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>${o.estilos}</style>
 </head><body${o.flujo ? atributoFlujo(o.flujo) : ''}>
-${cabeceraDocumento({ etiqueta: o.etiqueta, cliente: o.cliente, operador: o.operador, puedeEditar: o.flujo?.puedeEditar, puedeComentar: o.flujo?.puedeComentar })}
+${cabeceraDocumento({
+  etiqueta: o.etiqueta, cliente: o.cliente, operador: o.operador,
+  puedeEditar: o.flujo?.puedeEditar, puedeComentar: o.flujo?.puedeComentar,
+  volver: o.volver, ayudaComentarios: o.ayudaComentarios,
+})}
 <div class="pagina"><div class="marco">
   <nav class="indice-lateral" aria-label="Secciones">
     <ol>${o.indice.map(([num, id, nombre]) => `<li><a href="#${id}"><span>${num}</span>${nombre}</a></li>`).join('')}</ol>
@@ -71,7 +79,8 @@ ${o.cuerpo}
   <span>Preparado por Wozial · ${escapar(o.fecha)}</span>
 </footer>
 <script>${SCRIPT_EDITORIAL}</script>
-<script>${SCRIPT_CABECERA}</script>
+<script>${SCRIPT_CABECERA_BASE}</script>
+${o.operador ? `<script>${SCRIPT_CABECERA_COMPARTIR}</script>` : ''}
 ${o.flujo ? `<script>${SCRIPT_FLUJO}</script>` : ''}
 ${o.scriptsExtra ? `<script>${o.scriptsExtra}</script>` : ''}
 </body></html>`;

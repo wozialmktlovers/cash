@@ -1,0 +1,150 @@
+---
+// Documento aprobado en el portal del cliente, con observaciones (spec §4,
+// C2). Rinde SIEMPRE la versión aprobada (`documento_versiones`), nunca el
+// resultado vigente — que puede traer ediciones en curso todavía sin
+// aprobar (ruling C2 #2).
+//
+// Sin controles internos (Compartir, Editar, Versiones, estados/notas/CSV de
+// pilares): se logra igual que en el link público `/p/...`, simplemente sin
+// pasarle `operador` ni `editable` a los renders (ver
+// src/lib/documento-publico.ts). El documento sale como página autónoma
+// completa (su propio <html>/<head>), igual que `/p/...` y que las vistas
+// internas (/resultados, /growth, /pilares) — ruling C2 #5: se prefirió esa
+// consistencia sobre incrustarlo dentro de PortalBase, que además chocaría
+// con la cabecera flotante propia de cada documento. Solo cuando el
+// documento no está listo para el cliente (o no se pudo rendir) se usa
+// PortalBase, con una página amigable y el enlace «← Mi portal» explícito.
+import { and, eq } from 'drizzle-orm';
+import PortalBase from '@/layouts/PortalBase.astro';
+import Icono from '@/components/Icono.astro';
+import { db, clienteEtapas, documentoVersiones, clientLinks } from '@/db';
+import { esUuid } from '@/lib/visibilidad';
+import { clientePortal } from '@/lib/portal';
+import { puedeComentar } from '@/flujo/reglas';
+import { renderizarInvestigacion } from '@/render/investigacion/documento';
+import { renderizarPilares } from '@/render/pilares/documento';
+import { renderizarManual } from '@/render/growth/manual';
+import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
+
+const VOLVER_TEXTO = '← Mi portal';
+const AYUDA_OBSERVACIONES = 'Selecciona una parte del documento para dejar una observación a tu equipo';
+
+const usuario = Astro.locals.usuario;
+const { etapaId } = Astro.params;
+
+// Sin forma de UUID, nunca va a existir — 404 en blanco sin tocar la base
+// (mismo criterio que esUuid en el resto del Studio).
+if (!etapaId || !esUuid(etapaId)) return new Response(null, { status: 404 });
+
+const [fila] = await db.select().from(clienteEtapas).where(eq(clienteEtapas.id, etapaId)).limit(1);
+if (!fila) return new Response(null, { status: 404 });
+
+// Acceso: el mismo criterio que /portal (C1) — el cliente ve el suyo; admin
+// o el operador asignado, en vista previa con `?cliente=`. Si el cliente
+// resuelto no es el dueño de esta etapa (cliente ajeno, o un `?cliente=`
+// interno que no calza con la etapa pedida), 404 en blanco: no se confirma
+// ni la existencia de la etapa ni la del cliente ajeno.
+const resultado = await clientePortal(usuario, Astro.url.searchParams);
+if (!resultado || resultado.cliente.id !== fila.clientId) return new Response(null, { status: 404 });
+
+const { cliente, vistaPrevia } = resultado;
+const volverHref = `/portal${vistaPrevia ? `?cliente=${cliente.id}` : ''}`;
+
+// Etapa no lista para el cliente (spec §4: «si la etapa no tiene versión
+// aprobada, 404»). A diferencia del acceso de arriba, este es un estado
+// normal — el equipo sigue trabajando — así que en vez de un 404 en blanco
+// se responde con una página amable dentro de PortalBase (mismo criterio que
+// /portal cuando la cuenta del cliente no tiene clientId, C1 ruling #1), con
+// el código de estado en 404 igual.
+const listaParaCliente = fila.contratada && !fila.interna && Boolean(fila.versionAprobadaId);
+
+let html: string | null = null;
+let motivoSinHtml: 'no_listo' | 'error' | null = listaParaCliente ? null : 'no_listo';
+
+if (listaParaCliente) {
+  const [version] = await db.select().from(documentoVersiones).where(eq(documentoVersiones.id, fila.versionAprobadaId!)).limit(1);
+
+  if (!version) {
+    // Dato inconsistente (la versión aprobada ya no existe): mismo trato que «no listo».
+    motivoSinHtml = 'no_listo';
+  } else {
+    const fecha = version.creadoEn.toISOString().slice(0, 10);
+    const volver = { href: volverHref, texto: VOLVER_TEXTO };
+
+    // Anclas y observaciones solo en las etapas que las permiten (ruling C2
+    // #3/#4) — hoy `manual_campana`; `desarrollo_mensual` todavía no genera
+    // documentos, así que en la práctica nunca llega listo. Para quien está
+    // en vista previa interna, `puedeComentar` se fuerza a `false`: comenta
+    // desde la vista interna, no simulando ser el cliente en el portal.
+    const permiteObservaciones = puedeComentar('cliente', false, fila.etapa);
+    const anclas = permiteObservaciones;
+    let flujo: FlujoDatos | undefined;
+    if (permiteObservaciones) {
+      flujo = {
+        tipo: version.documentoTipo, id: version.documentoId, etapaId: fila.id,
+        puedeEditar: false, puedeComentar: permiteObservaciones && !vistaPrevia,
+        rol: 'cliente', esOperadorAsignado: false,
+      };
+    }
+
+    // Los datos de la versión aprobada son un snapshot congelado (spec §4);
+    // pueden venir de un esquema anterior o corruptos. Cada render ya trae su
+    // propio respaldo (investigación: `lectura`/`sintesis` con safeParse;
+    // growth: huecos declarados) — igual que las vistas internas. El
+    // try/catch de aquí es la última red: si algo revienta de todos modos,
+    // nunca cae a un 500, cae a la página amable de abajo.
+    try {
+      if (version.documentoTipo === 'research') {
+        html = renderizarInvestigacion(
+          version.datos as any,
+          { cliente: cliente.nombre, giro: cliente.giro, fecha },
+          undefined, false, flujo, anclas, volver,
+        );
+      } else if (version.documentoTipo === 'pilares') {
+        html = renderizarPilares(version.datos as any, { cliente: cliente.nombre, fecha }, {
+          editable: false, anclas, flujo, volver,
+        });
+      } else {
+        const [sitio] = await db.select().from(clientLinks)
+          .where(and(eq(clientLinks.clientId, cliente.id), eq(clientLinks.tipo, 'sitio'))).limit(1);
+        html = renderizarManual(
+          version.datos as any,
+          {
+            cliente: cliente.nombre, producto: cliente.producto, fecha,
+            ciudad: cliente.ciudad ?? undefined, destino: sitio?.url, creadoEn: version.creadoEn,
+          },
+          '', false, flujo,
+          { volverHref, volverTexto: VOLVER_TEXTO, ayudaComentarios: permiteObservaciones ? AYUDA_OBSERVACIONES : undefined },
+        );
+      }
+    } catch (e) {
+      console.error('[portal/documentos] no se pudo rendir la versión aprobada:', e);
+      motivoSinHtml = 'error';
+    }
+  }
+}
+
+if (motivoSinHtml === 'no_listo') Astro.response.status = 404;
+---
+
+{html ? (
+  <Fragment set:html={html} />
+) : (
+  <PortalBase titulo={cliente.nombre} nombreEmpresa={cliente.nombre} vistaPrevia={vistaPrevia ? { clienteId: cliente.id } : undefined}>
+    <div class="tarjeta vacio">
+      <Icono nombre={motivoSinHtml === 'error' ? 'alerta' : 'reloj'} />
+      {motivoSinHtml === 'error' ? (
+        <>
+          <strong>No pudimos mostrar este documento</strong>
+          <p>Intenta de nuevo en unos minutos. Si el problema sigue, escríbenos.</p>
+        </>
+      ) : (
+        <>
+          <strong>Este documento todavía no está listo</strong>
+          <p>En cuanto tu equipo lo apruebe, lo vas a ver aquí.</p>
+        </>
+      )}
+      <a class="btn suave chico" href="/portal">{VOLVER_TEXTO}</a>
+    </div>
+  </PortalBase>
+)}

@@ -83,10 +83,15 @@ export function panelVersiones(): string {
  * recuadro flotante de «nuevo comentario» que abre un clic sobre `[data-ancla]`
  * en modo Comentar: vive fuera del `<dialog>` a propósito, porque se abre
  * sobre el propio documento, no dentro del panel.
+ *
+ * `ayuda`: párrafo opcional antes de los filtros — el portal del cliente lo
+ * usa para explicar cómo dejar una observación (C2, spec §4); la vista
+ * interna no lo pasa y el panel queda igual que antes.
  */
-export function panelComentarios(): string {
+export function panelComentarios(ayuda?: string): string {
   return `<dialog class="dialogo-comentarios" id="dialog-comentarios" aria-label="Comentarios">
     <div class="dialogo-cabecera"><h3>Comentarios</h3><button type="button" class="panel-boton" id="dialog-comentarios-cerrar">Cerrar</button></div>
+    ${ayuda ? `<p class="panel-ayuda suave">${escapar(ayuda)}</p>` : ''}
     <div class="comentarios-filtros" role="radiogroup" aria-label="Filtrar comentarios">
       <button type="button" class="filtro-comentarios" data-filtro-comentarios="abierto" aria-pressed="true">Abiertos</button>
       <button type="button" class="filtro-comentarios" data-filtro-comentarios="resueltos" aria-pressed="false">Resueltos</button>
@@ -875,4 +880,11 @@ export const SCRIPT_FLUJO = `(function () {
   // página, no solo al abrir el panel: spec §3, «los elementos con
   // comentarios abiertos llevan un marcador», sin condicionarlo al modo.
   if (flujo.puedeComentar) cargarComentarios();
+
+  // El portal del cliente enlaza a «Dejar observaciones» con #observaciones
+  // en la URL (C2, spec §4): si el panel existe y el hash llega así, se abre
+  // solo, sin que el cliente tenga que encontrar el botón primero.
+  if (flujo.puedeComentar && window.location.hash === '#observaciones' && btnComentarios) {
+    btnComentarios.click();
+  }
 })();`;
