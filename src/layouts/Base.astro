@@ -5,6 +5,7 @@ import TemaSwitch from '@/components/TemaSwitch.astro';
 import Paleta from '@/components/Paleta';
 import Campana from '@/components/Campana';
 import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
+import { navegacionCompleta, itemsMenuMas } from '@/lib/ui/navegacion';
 import { contarPendientes } from '@/lib/pendientes';
 
 type Seccion = 'inicio' | 'clientes' | 'entregables' | 'pendientes' | 'usuarios' | 'desempeno';
@@ -27,18 +28,18 @@ const ETIQUETA_ROL: Record<typeof usuario.rol, string> = { admin: 'Admin', opera
 const pendientes = usuario.rol === 'cliente' ? 0 : await contarPendientes(usuario);
 
 // La navegación lateral gana «Pendientes» (admin y operador), «Usuarios»
-// (solo admin) y «Desempeño» (admin y operador); la barra inferior de móvil
-// no cambia (sigue con 4 pestañas).
-const NAV: Array<{ clave: Seccion; href: string; texto: string; icono: 'inicio' | 'clientes' | 'entregables' | 'bandeja' | 'usuarios' | 'grafica'; contador?: number }> = [
-  { clave: 'inicio', href: '/', texto: 'Inicio', icono: 'inicio' },
-  { clave: 'clientes', href: '/clientes', texto: 'Clientes', icono: 'clientes' },
-  { clave: 'entregables', href: '/entregables', texto: 'Entregables', icono: 'entregables' },
-];
-if (usuario.rol === 'admin' || usuario.rol === 'operador') {
-  NAV.push({ clave: 'pendientes', href: '/pendientes', texto: 'Pendientes', icono: 'bandeja', contador: pendientes });
-}
-if (usuario.rol === 'admin') NAV.push({ clave: 'usuarios', href: '/admin/usuarios', texto: 'Usuarios', icono: 'usuarios' });
-if (usuario.rol === 'admin' || usuario.rol === 'operador') NAV.push({ clave: 'desempeno', href: '/desempeno', texto: 'Desempeño', icono: 'grafica' });
+// (solo admin) y «Desempeño» (admin y operador). El armado por rol vive en
+// `navegacionCompleta` (lib/ui/navegacion.ts), probado aparte por rol sin
+// tener que renderizar el layout completo.
+const NAV = navegacionCompleta(usuario.rol, pendientes);
+
+// Bajo 900px la barra inferior solo tenía Inicio, Clientes, Nuevo y
+// Entregables: Pendientes, Desempeño y Usuarios (los tres que `NAV` agrega
+// arriba, ya filtrados por rol con la misma regla que `rutaPermitida`) no
+// tenían ningún acceso en el celular. Van al menú «Más», junto con «Salir»
+// (que en escritorio vive en la cabecera, fuera de la barra de pestañas).
+const masItems = itemsMenuMas(NAV);
+const masActivo = masItems.some((n) => n.clave === activo);
 ---
 
 <html lang="es-MX">
@@ -109,9 +110,61 @@ if (usuario.rol === 'admin' || usuario.rol === 'operador') NAV.push({ clave: 'de
       <a href="/clientes" class:list={[{ activo: activo === 'clientes' }]} aria-current={activo === 'clientes' ? 'page' : undefined}><Icono nombre="clientes" />Clientes</a>
       <a href="/clientes/nuevo" class="nuevo" aria-label="Nuevo cliente"><Icono nombre="mas" /></a>
       <a href="/entregables" class:list={[{ activo: activo === 'entregables' }]} aria-current={activo === 'entregables' ? 'page' : undefined}><Icono nombre="entregables" />Entregables</a>
+      <button
+        type="button"
+        id="mas-disparador"
+        class:list={['mas-boton', { activo: masActivo }]}
+        aria-haspopup="dialog"
+        aria-controls="mas-menu"
+        aria-expanded="false"
+      >
+        <Icono nombre="puntos" />Más
+      </button>
     </nav>
+
+    <dialog id="mas-menu" class="mas-menu" aria-labelledby="mas-menu-titulo">
+      <h2 id="mas-menu-titulo" class="sr-solo">Más</h2>
+      <ul>
+        {masItems.map((n) => (
+          <li>
+            <a href={n.href} class:list={['nav-item', { activo: activo === n.clave }]} aria-current={activo === n.clave ? 'page' : undefined}>
+              <Icono nombre={n.icono} />{n.texto}
+              {Boolean(n.contador) && <span class="contador">{n.contador}</span>}
+            </a>
+          </li>
+        ))}
+        <li>
+          <form method="POST" action="/api/logout">
+            <button type="submit" class="nav-item">Salir</button>
+          </form>
+        </li>
+      </ul>
+    </dialog>
 
     <Paleta client:load />
     <div class="toasts" id="toasts"></div>
   </body>
 </html>
+
+<script>
+  // Menú «Más» del celular: un <dialog> nativo da foco atrapado y cierre con
+  // Escape sin escribirlo a mano. Solo hace falta abrir/cerrar y devolver el
+  // foco al botón que lo abrió (el navegador no lo hace solo).
+  const disparadorMas = document.getElementById('mas-disparador');
+  const menuMas = document.getElementById('mas-menu');
+  if (disparadorMas && menuMas instanceof HTMLDialogElement) {
+    disparadorMas.addEventListener('click', () => {
+      menuMas.showModal();
+      disparadorMas.setAttribute('aria-expanded', 'true');
+    });
+    menuMas.addEventListener('click', (e) => {
+      // Clic en el respaldo (fuera de la tarjeta del diálogo) cierra, igual
+      // que Escape: el <dialog> no lo hace solo.
+      if (e.target === menuMas) menuMas.close();
+    });
+    menuMas.addEventListener('close', () => {
+      disparadorMas.setAttribute('aria-expanded', 'false');
+      disparadorMas.focus();
+    });
+  }
+</script>
