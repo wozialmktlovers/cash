@@ -78,6 +78,9 @@ const { titulo, nombreEmpresa, vistaPrevia } = Astro.props;
   .portal-vista-previa a { color: var(--fondo); text-decoration: underline; text-underline-offset: 3px; }
 
   .portal-app { min-height: 100dvh; }
+  /* El portal lo usa el cliente final, también en celular: los botones
+     chicos del Studio (36 px) suben al objetivo táctil de 44 px. */
+  .portal-app :global(.btn.chico) { min-height: 44px; }
 
   /* Cabecera flotante tipo píldora, a juego con la de los documentos
      editoriales (src/render/editorial/cabecera.ts), pero sticky en vez de
