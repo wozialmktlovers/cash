@@ -58,11 +58,27 @@ function numerosDe(texto: string): number[] {
 }
 
 /**
- * Cifras de la portada que no salen de la investigación. Se compara número
- * contra número, en cualquiera de sus dos lecturas (con o sin el
+ * La única lectura válida de una cifra de la PORTADA: si trae multiplicador
+ * pegado («300 mil», «$180K», «2.5 mil»), vale el valor ya multiplicado, no
+ * el crudo — el crudo de una cifra con multiplicador no es la cifra, es una
+ * coincidencia de dígitos («300» de «300 mil» contra un «300 seguidores» de
+ * la fuente no respalda nada). La fuente sigue conservando sus dos lecturas
+ * en `numerosDe`/`expandir`, porque ella sí puede escribir el mismo número
+ * con o sin la abreviatura.
+ */
+function valorPortada(texto: string, match: RegExpMatchArray): number {
+  const valores = expandir(texto, match);
+  return valores[valores.length - 1]; // último = multiplicado si lo hay; si no, el único valor.
+}
+
+/**
+ * Cifras de la portada que no salen de la investigación. Del lado de la
+ * fuente se acepta cualquiera de sus dos lecturas (con o sin el
  * multiplicador de «mil»/«K»/«millones»/«M»): «18 mil», «16.4K» y
- * «$18,000.00» valen como «18,000» (mismo número, otro formato), pero
- * «$180» no vale como prefijo de «18,000» aunque comparta dígitos.
+ * «$18,000.00» valen como «18,000» (mismo número, otro formato). Del lado de
+ * la portada solo cuenta el valor multiplicado cuando lo trae: «$180» no
+ * vale como prefijo de «18,000» aunque comparta dígitos, y «300 mil» no se
+ * respalda con un «300 seguidores» de la fuente aunque el crudo coincida.
  */
 export function cifrasSinRespaldo(lectura: { cifras: { valor: string }[] }, fuente: unknown): string[] {
   const disponibles = new Set(recogerTextos(fuente).flatMap(numerosDe));
@@ -71,7 +87,7 @@ export function cifrasSinRespaldo(lectura: { cifras: { valor: string }[] }, fuen
     .filter((c) => {
       const [primero] = [...c.valor.matchAll(NUMERO)];
       if (!primero) return true; // sin ningún dígito: no hay nada que verificar contra la fuente.
-      return !expandir(c.valor, primero).some((n) => disponibles.has(n));
+      return !disponibles.has(valorPortada(c.valor, primero));
     })
     .map((c) => c.valor);
 }

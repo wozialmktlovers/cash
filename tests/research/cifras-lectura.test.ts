@@ -43,4 +43,25 @@ describe('cifrasSinRespaldo', () => {
     // «$18,000.00 MXN» sigue valiendo 18,000, no 18,000,000,000 por leer la «M» de MXN.
     expect(cifrasSinRespaldo(con('$18,000'), { t: 'Cuesta $18,000.00 MXN' })).toEqual([]);
   });
+
+  // Punto 4 de la corrección: una cifra de la portada con multiplicador solo
+  // vale por su valor ya multiplicado. El crudo («300» de «300 mil») no debe
+  // respaldarse con un número suelto de la fuente que solo coincide en
+  // dígitos por casualidad.
+  it('rechaza el valor crudo de una cifra con multiplicador, aunque ese crudo sí aparezca suelto en la fuente', () => {
+    expect(cifrasSinRespaldo(con('300 mil'), { t: 'tiene 300 seguidores' })).toEqual(['300 mil']);
+    expect(cifrasSinRespaldo(con('$180K'), { t: 'en 180 días' })).toEqual(['$180K']);
+    expect(cifrasSinRespaldo(con('2.5 mil'), { t: 'son 3 cursos' })).toEqual(['2.5 mil']);
+  });
+
+  it('sigue aceptando el valor multiplicado cuando la fuente lo escribe igual', () => {
+    expect(cifrasSinRespaldo(con('16.4K'), { t: 'tiene 16.4K seguidores' })).toEqual([]);
+    expect(cifrasSinRespaldo(con('18 mil'), { t: 'ganan 18 mil al mes' })).toEqual([]);
+    expect(cifrasSinRespaldo(con('93.5 millones'), { t: 'un mercado de 93.5 millones de personas' })).toEqual([]);
+    expect(cifrasSinRespaldo(con('$18,000'), { t: 'el precio es de $18,000.00' })).toEqual([]);
+  });
+
+  it('sigue rechazando un valor sin multiplicador que solo coincide como prefijo de un rango', () => {
+    expect(cifrasSinRespaldo(con('$180'), { t: 'de $10,000 a $18,000' })).toEqual(['$180']);
+  });
 });
