@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { detectarJerga } from './jerga';
 
 export const fuenteSchema = z.object({
   url: z.url(),
@@ -106,6 +107,45 @@ export const sintesisSchema = z.object({
   pendientes: z.array(z.string()),
 });
 
+const texto = (max: number) => z.string().min(1).max(max);
+
+/**
+ * Lo que lee el cliente final. Los límites son holgados a propósito: fuerzan a
+ * sintetizar sin rechazar una respuesta buena por unas palabras de más.
+ */
+export const lecturaSchema = z.object({
+  portada: z.object({ titular: texto(160), resumen: texto(500) }),
+  descubrimos: z.array(z.object({
+    tipo: z.enum(['a_favor', 'cuidar', 'oportunidad']),
+    titulo: texto(100),
+    explicacion: texto(500),
+  })).min(3).max(4),
+  clienteIdeal: z.object({
+    quienEs: texto(700),
+    lePreocupa: z.array(texto(200)).length(3),
+    quiereLograr: z.array(texto(200)).length(3),
+    perfiles: z.array(z.object({
+      nombre: texto(50),
+      descripcion: texto(320),
+      comoHablarle: texto(320),
+    })).length(2),
+  }),
+  recomendamos: z.object({
+    pasos: z.array(z.object({ titulo: texto(100), queHacer: texto(420), porQue: texto(360) })).min(3).max(5),
+    dondeAnunciarte: z.array(z.object({ canal: texto(50), porQue: texto(280) })).min(1).max(4),
+    precio: texto(500).nullable(),
+  }),
+  faltaConfirmar: z.array(texto(240)).max(5),
+}).superRefine((lectura, ctx) => {
+  const halladas = detectarJerga(lectura);
+  if (halladas.length) {
+    ctx.addIssue({
+      code: 'custom',
+      message: `Hay jerga que el cliente no entiende: ${halladas.join(', ')}. Explícalo con palabras de todos los días.`,
+    });
+  }
+});
+
 const etapa = <T extends z.ZodTypeAny>(datos: T) =>
   z.discriminatedUnion('estado', [
     z.object({ estado: z.literal('ok'), datos }),
@@ -118,6 +158,8 @@ export const investigacionSchema = z.object({
   canales: etapa(canalesSchema),
   mercado: etapa(mercadoSchema),
   sintesis: etapa(sintesisSchema),
+  // Opcional: las investigaciones anteriores a esta etapa no la traen.
+  lectura: etapa(lecturaSchema).optional(),
 });
 
 export type Investigacion = z.infer<typeof investigacionSchema>;
@@ -131,3 +173,4 @@ export type Persona = z.infer<typeof personaSchema>;
 export type Cita = z.infer<typeof citaSchema>;
 export type Competidor = z.infer<typeof competidorSchema>;
 export type Referente = z.infer<typeof referenteSchema>;
+export type Lectura = z.infer<typeof lecturaSchema>;
