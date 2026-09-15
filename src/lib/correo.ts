@@ -53,16 +53,81 @@ export type EnvioCorreo = {
 
 export type ResultadoEnvio = { enviado: boolean; motivo?: 'sin-configurar' | 'error' };
 
-/**
- * Envía por la API HTTP de Resend. Sin llaves configuradas no falla: solo
- * avisa por consola y sigue. Un error de red o una respuesta no-2xx tampoco
- * se propaga, para que nunca rompa la acción que originó el correo.
- */
-export async function enviarCorreo(o: EnvioCorreo, fetchImpl: typeof fetch = fetch): Promise<ResultadoEnvio> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const remitente = process.env.CORREO_REMITENTE;
+export type MensajeSmtp = { from: string; to: string | string[]; subject: string; html: string; text: string };
+export type EnviarSmtp = (mensaje: MensajeSmtp) => Promise<unknown>;
 
-  if (!apiKey || !remitente) {
+export type ConfiguracionSmtp = {
+  host: string;
+  puerto: number;
+  seguro: boolean;
+  usuario: string;
+  password: string;
+  remitente: string;
+};
+
+/** Puerto de TLS directo. En 587 se empieza en claro y se sube con STARTTLS. */
+const PUERTO_TLS = 465;
+
+/**
+ * Lee la configuración del servidor de correo del entorno. Devuelve `null` si
+ * falta lo imprescindible, que es la señal de «no hay correo configurado».
+ *
+ * `CORREO_SMTP_HOST` y `CORREO_SMTP_PUERTO` traen los valores de Google
+ * Workspace por omisión, que es donde viven los buzones hoy; cambiarlos basta
+ * para mudar de proveedor sin tocar código.
+ */
+export function configuracionSmtp(entorno: NodeJS.ProcessEnv = process.env): ConfiguracionSmtp | null {
+  const usuario = entorno.CORREO_SMTP_USUARIO?.trim();
+  const password = entorno.CORREO_SMTP_PASSWORD;
+  const remitente = entorno.CORREO_REMITENTE?.trim();
+  if (!usuario || !password || !remitente) return null;
+
+  const puerto = Number(entorno.CORREO_SMTP_PUERTO ?? PUERTO_TLS);
+  return {
+    host: entorno.CORREO_SMTP_HOST?.trim() || 'smtp.gmail.com',
+    puerto: Number.isFinite(puerto) && puerto > 0 ? puerto : PUERTO_TLS,
+    seguro: (Number.isFinite(puerto) ? puerto : PUERTO_TLS) === PUERTO_TLS,
+    usuario,
+    password,
+    remitente,
+  };
+}
+
+/** Se guarda entre envíos: nodemailer reaprovecha la conexión con el servidor. */
+let transporteGuardado: { clave: string; enviar: EnviarSmtp } | null = null;
+
+async function transporteDe(c: ConfiguracionSmtp): Promise<EnviarSmtp> {
+  const clave = `${c.host}:${c.puerto}:${c.usuario}`;
+  if (transporteGuardado?.clave === clave) return transporteGuardado.enviar;
+
+  // Import diferido: así nodemailer no se carga en los arranques y las pruebas
+  // donde no se manda ningún correo.
+  const { createTransport } = await import('nodemailer');
+  const transporte = createTransport({
+    host: c.host,
+    port: c.puerto,
+    secure: c.seguro,
+    auth: { user: c.usuario, pass: c.password },
+  });
+  const enviar: EnviarSmtp = (mensaje) => transporte.sendMail(mensaje);
+  transporteGuardado = { clave, enviar };
+  return enviar;
+}
+
+/**
+ * Envía por SMTP con los buzones del propio dominio. Sin configurar no falla:
+ * solo avisa por consola y sigue, y quien invitó copia el enlace a mano. Un
+ * fallo del servidor tampoco se propaga, para que nunca rompa la acción que
+ * originó el correo.
+ *
+ * Ojo con Google Workspace: la dirección de `CORREO_REMITENTE` tiene que ser
+ * la misma de `CORREO_SMTP_USUARIO` (o un alias dado de alta en esa cuenta).
+ * Si no, Google reescribe el remitente y el correo sale a nombre de otra
+ * dirección.
+ */
+export async function enviarCorreo(o: EnvioCorreo, enviarImpl?: EnviarSmtp): Promise<ResultadoEnvio> {
+  const config = configuracionSmtp();
+  if (!config) {
     console.info('[correo] omitido: sin configurar');
     return { enviado: false, motivo: 'sin-configurar' };
   }
@@ -70,21 +135,13 @@ export async function enviarCorreo(o: EnvioCorreo, fetchImpl: typeof fetch = fet
   const { html, texto } = plantillaCorreo(o);
 
   try {
-    const respuesta = await fetchImpl('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({ from: remitente, to: o.para, subject: o.asunto, html, text: texto }),
-    });
-    if (!respuesta.ok) {
-      console.info('[correo] error al enviar:', respuesta.status);
-      return { enviado: false, motivo: 'error' };
-    }
+    const enviar = enviarImpl ?? (await transporteDe(config));
+    await enviar({ from: config.remitente, to: o.para, subject: o.asunto, html, text: texto });
     return { enviado: true };
   } catch (e) {
-    console.info('[correo] error al enviar:', e);
+    // Sin detalles del mensaje ni de las credenciales: esto va a los registros
+    // de Railway, que no son privados.
+    console.info('[correo] error al enviar:', e instanceof Error ? e.message : e);
     return { enviado: false, motivo: 'error' };
   }
 }
