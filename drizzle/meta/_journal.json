@@ -36,6 +36,13 @@
       "when": 1789463864275,
       "tag": "0004_flujo",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789496096871,
+      "tag": "0005_usuarios_client_id_rol",
+      "breakpoints": true
     }
   ]
 }

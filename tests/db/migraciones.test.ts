@@ -128,3 +128,27 @@ describe('leerMigraciones con la carpeta real', () => {
     for (let i = 1; i < whens.length; i++) expect(whens[i]).toBeGreaterThan(whens[i - 1]);
   });
 });
+
+describe('0005: CHECK de client_id según el rol (M2 punto 6)', () => {
+  const carpeta = path.resolve(__dirname, '../../drizzle');
+  const m0005 = () => leerMigraciones(carpeta).find((x: { tag: string }) => x.tag === '0005_usuarios_client_id_rol')!;
+
+  it('sanea las filas existentes ANTES de añadir el CHECK', () => {
+    const trozos: string[] = m0005().sql.map((t: string) => t.trim()).filter(Boolean);
+    const indice = (fragmento: string) => trozos.findIndex((t) => t.includes(fragmento));
+    const limpiaInternos = indice(`SET "client_id" = NULL WHERE "rol" <> 'cliente'`);
+    const cierraSesiones = indice('DELETE FROM "sessions"');
+    const desactiva = indice(`SET "activo" = false WHERE "rol" = 'cliente' AND "client_id" IS NULL`);
+    const check = indice('ADD CONSTRAINT "users_client_id_por_rol" CHECK');
+    for (const i of [limpiaInternos, cierraSesiones, desactiva, check]) expect(i).toBeGreaterThanOrEqual(0);
+    expect(cierraSesiones).toBeLessThan(desactiva);
+    expect(Math.max(limpiaInternos, desactiva)).toBeLessThan(check);
+  });
+
+  it('el CHECK de la migración es el mismo que declara el esquema (sin deriva con drizzle-kit)', async () => {
+    const snapshot = JSON.parse(fs.readFileSync(path.join(carpeta, 'meta', '0005_snapshot.json'), 'utf8'));
+    const valor = snapshot.tables['public.users'].checkConstraints.users_client_id_por_rol.value;
+    const sqlCheck = m0005().sql.find((t: string) => t.includes('ADD CONSTRAINT'))!;
+    expect(sqlCheck).toContain(`CHECK (${valor})`);
+  });
+});

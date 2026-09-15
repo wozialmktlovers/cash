@@ -48,3 +48,17 @@ describe('validarCambioUsuario', () => {
     expect(validarCambioUsuario(admin, operador, { activo: false }, 2)).toEqual({ ok: true });
   });
 });
+
+describe('validarCambioUsuario: cliente sin cliente (M2 punto 6)', () => {
+  const admin = u('admin', { id: 'a1' });
+
+  it('no se reactiva un usuario cliente que quedó sin client_id (lo desactivó el saneo de 0005)', () => {
+    const huerfano = { id: 'c1', rol: 'cliente' as const, activo: false, clientId: null };
+    expect(validarCambioUsuario(admin, huerfano, { activo: true }, 2)).toEqual({ ok: false, error: 'cliente-sin-cliente' });
+  });
+
+  it('un usuario cliente con cliente sí se reactiva, y el huérfano se puede dejar inactivo', () => {
+    expect(validarCambioUsuario(admin, { id: 'c1', rol: 'cliente', activo: false, clientId: 'cl1' }, { activo: true }, 2)).toEqual({ ok: true });
+    expect(validarCambioUsuario(admin, { id: 'c1', rol: 'cliente', activo: false, clientId: null }, { activo: false }, 2)).toEqual({ ok: true });
+  });
+});

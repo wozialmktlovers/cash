@@ -41,7 +41,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   if (activoCrudo !== undefined) cambio.activo = activoCrudo;
   if (cambio.rol === undefined && cambio.activo === undefined) return json({ ok: false, error: 'sin-cambios' }, 400);
 
-  const [objetivo] = await db.select({ id: users.id, rol: users.rol, activo: users.activo }).from(users).where(eq(users.id, id)).limit(1);
+  const [objetivo] = await db.select({ id: users.id, rol: users.rol, activo: users.activo, clientId: users.clientId }).from(users).where(eq(users.id, id)).limit(1);
   if (!objetivo) return json({ ok: false, error: 'no-existe' }, 404);
 
   // Se cuenta dentro de la misma petición, justo antes de validar: aceptable

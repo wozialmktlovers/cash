@@ -1,6 +1,7 @@
 import type { Rol, UsuarioSesion } from '@/lib/permisos';
 
-export type ObjetivoUsuario = { id: string; rol: Rol; activo: boolean };
+/** `clientId` es opcional para no obligar a quien solo cambia rol/activo de un interno; si falta, no se revisa la regla de cliente sin cliente. */
+export type ObjetivoUsuario = { id: string; rol: Rol; activo: boolean; clientId?: string | null };
 export type CambioUsuario = { rol?: Rol; activo?: boolean };
 
 /**
@@ -20,6 +21,13 @@ export function validarCambioUsuario(
   // desactivarlo o reactivarlo sí está permitido.
   if (cambio.rol !== undefined && (objetivo.rol === 'cliente' || cambio.rol === 'cliente')) {
     return { ok: false, error: 'rol-cliente-fijo' };
+  }
+
+  // Un usuario cliente sin `client_id` solo puede existir inactivo (CHECK de
+  // la migración 0005, M2 punto 6): reactivarlo violaría la restricción y
+  // además no tendría portal que ver. Hay que invitarlo de nuevo a un cliente.
+  if (cambio.activo === true && objetivo.rol === 'cliente' && objetivo.clientId === null) {
+    return { ok: false, error: 'cliente-sin-cliente' };
   }
 
   const seDesactiva = cambio.activo === false;

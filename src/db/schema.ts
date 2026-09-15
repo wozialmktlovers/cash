@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, numeric, pgEnum, primaryKey, unique, index, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, numeric, pgEnum, primaryKey, unique, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
 
 export const jobEstado = pgEnum('job_estado', ['encolado','corriendo','completado','fallido','cancelado']);
 export const linkTipo = pgEnum('link_tipo', ['sitio','instagram','facebook','tiktok','youtube','ventas','otro']);
@@ -29,7 +30,17 @@ export const users = pgTable('users', {
   clientId: uuid('client_id'),
   activo: boolean('activo').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, () => [
+  // Spec §2: `client_id` obligatorio si rol = cliente y nulo si no (fix
+  // menores M2, punto 6). Antes solo lo cuidaba el código, y un script que
+  // promovía a admin sin limpiar `client_id` dejaba un admin «atado» a un
+  // cliente. La migración 0005 corrige las filas existentes antes de añadirlo.
+  // Única excepción: un usuario cliente DESACTIVADO puede quedar sin cliente.
+  // Es lo que deja el saneo de 0005 (ruling: un cliente sin `client_id` se
+  // desactiva, no se borra ni cambia de rol — cambiarle el rol le daría acceso
+  // interno si alguien lo reactiva). `validarCambioUsuario` impide reactivarlo.
+  check('users_client_id_por_rol', sql`(rol <> 'cliente' AND client_id IS NULL) OR (rol = 'cliente' AND (client_id IS NOT NULL OR activo = false))`),
+]);
 
 export const sessions = pgTable('sessions', {
   id: text('id').primaryKey(),
