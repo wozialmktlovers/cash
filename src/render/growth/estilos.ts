@@ -64,6 +64,25 @@ body{padding-top:64px; overflow-y:auto; overflow-x:hidden; min-height:100vh;}
 .nav-ctr{display:flex;align-items:center;gap:8px;flex-shrink:0;margin-left:auto;}
 
 .nav{position:fixed;top:0;left:0;right:0;height:62px;z-index:300;background:rgba(8,8,11,.9);backdrop-filter:blur(24px) saturate(160%);-webkit-backdrop-filter:blur(24px) saturate(160%);border-bottom:1px solid var(--line-2);display:flex;align-items:center;gap:16px;padding:0 clamp(14px,3vw,32px);box-shadow:0 4px 24px rgba(0,0,0,.5);}
+
+/* Banda «Vista previa del portal» (fix menores, punto 3), mismo criterio que
+   la base editorial (investigación/pilares): fija arriba de todo (por
+   encima de .nav, que usa z-index:300) y empuja .nav/.prog/body hacia
+   abajo con el selector por atributo body[data-vista-previa]. */
+.banda-vista-previa{position:fixed;top:0;left:0;right:0;height:40px;z-index:301;
+  display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;
+  padding:6px 16px;background:var(--s4);color:var(--hi);
+  font-size:0.75rem;font-weight:700;text-align:center;border-bottom:1px solid var(--line-2);}
+.banda-vista-previa span,.banda-vista-previa a{display:inline-flex;align-items:center;gap:6px;}
+.banda-vista-previa a{color:var(--hi);text-decoration:underline;text-underline-offset:3px;}
+body[data-vista-previa]{padding-top:104px;}
+body[data-vista-previa] .nav{top:40px;}
+body[data-vista-previa] .prog{top:94px;}
+@media (max-width:768px){
+  body[data-vista-previa]{padding-top:96px;}
+  body[data-vista-previa] .nav{top:40px;}
+  body[data-vista-previa] .prog{top:96px;}
+}
 .nav-links{display:flex;gap:3px;overflow-x:auto;scrollbar-width:none;flex:1;}
 .nav-links::-webkit-scrollbar{display:none;}
 .nav-links a{font-size:0.75rem;font-weight:600;color:var(--dim);text-decoration:none;padding:7px 12px;border-radius:var(--r-xs);white-space:nowrap;transition:.2s;border:1px solid transparent;}

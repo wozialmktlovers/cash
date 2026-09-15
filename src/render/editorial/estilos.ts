@@ -76,6 +76,20 @@ p{max-width:68ch;}
 
 .cabecera-progreso{position:absolute;left:0;bottom:0;height:3px;width:0;background:var(--rosa);}
 
+/* Banda «Vista previa del portal» (fix menores, punto 3): fija arriba de
+   todo (por encima de la cápsula, z-index 60), empuja la cabecera flotante
+   hacia abajo con el selector por atributo body[data-vista-previa],
+   igual que el aviso equivalente de PortalBase.astro. */
+.banda-vista-previa{position:fixed;top:0;left:0;right:0;z-index:65;
+  display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap;
+  min-height:40px;padding:8px 16px;background:var(--tinta);color:var(--fondo);
+  font:var(--t-small);font-weight:600;text-align:center;}
+.banda-vista-previa span,.banda-vista-previa a{display:inline-flex;align-items:center;gap:6px;}
+.banda-vista-previa svg{width:16px;height:16px;flex-shrink:0;}
+.banda-vista-previa a{color:var(--fondo);text-decoration:underline;text-underline-offset:3px;}
+body[data-vista-previa]{padding-top:136px;}
+body[data-vista-previa] .cabecera{top:54px;}
+
 .panel-compartir{position:fixed;z-index:61;right:16px;width:min(380px,calc(100vw - 24px));
   background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--r);box-shadow:var(--sombra);
   padding:20px;display:grid;gap:14px;}
@@ -187,7 +201,7 @@ html.js .aparece.visible{opacity:1;translate:0 0;}
   html.js .aparece{opacity:1;translate:none;transition:none;}
 }
 @media print{
-  .cabecera,.panel-compartir,.indice-lateral,.pestanas,.accesos{display:none!important;}
+  .cabecera,.panel-compartir,.indice-lateral,.pestanas,.accesos,.banda-vista-previa{display:none!important;}
   body{padding-top:0!important;}
   .pagina,.pie{width:auto;margin:0;}
   .marco{display:block;}

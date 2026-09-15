@@ -2,7 +2,7 @@ import { escapar } from '@/render/escapar';
 import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
 import { LOGO_WOZIAL_SRC } from '@/render/marca';
 import type { OpcionesBarra } from '@/render/barra-operador';
-import { cabeceraDocumento, SCRIPT_CABECERA_BASE, SCRIPT_CABECERA_COMPARTIR } from './cabecera';
+import { cabeceraDocumento, bandaVistaPrevia, SCRIPT_CABECERA_BASE, SCRIPT_CABECERA_COMPARTIR } from './cabecera';
 import { SCRIPT_EDITORIAL } from './interaccion';
 import { atributoFlujo, panelComentarios, SCRIPT_FLUJO, type FlujoDatos } from './flujo-cliente';
 
@@ -41,8 +41,12 @@ export function envolverDocumento(o: {
   scriptsExtra?: string;
   /** Solo en la vista interna: activa `data-flujo` en `<body>` y `SCRIPT_FLUJO` (edición y versiones — B6). */
   flujo?: FlujoDatos;
-  /** Enlace «← Mi portal» — solo en el portal del cliente (C2, spec §4). */
-  volver?: { href: string; texto: string };
+  /**
+   * Enlace «← Mi portal» — solo en el portal del cliente (C2, spec §4).
+   * `vistaPrevia` (fix menores, punto 3) agrega la banda de aviso cuando
+   * quien mira es admin/operador previsualizando, no el cliente real.
+   */
+  volver?: { href: string; texto: string; vistaPrevia?: boolean };
   /** Texto de ayuda sobre el panel de comentarios — solo en el portal (C2, spec §4). */
   ayudaComentarios?: string;
 }): string {
@@ -60,7 +64,8 @@ export function envolverDocumento(o: {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>${o.estilos}</style>
-</head><body${o.flujo ? atributoFlujo(o.flujo) : ''}>
+</head><body${o.flujo ? atributoFlujo(o.flujo) : ''}${o.volver?.vistaPrevia ? ' data-vista-previa' : ''}>
+${o.volver?.vistaPrevia ? bandaVistaPrevia(o.volver.href) : ''}
 ${cabeceraDocumento({
   etiqueta: o.etiqueta, cliente: o.cliente, operador: o.operador,
   puedeEditar: o.flujo?.puedeEditar, puedeComentar: o.flujo?.puedeComentar,

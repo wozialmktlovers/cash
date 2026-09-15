@@ -104,6 +104,64 @@ describe('portal del cliente: documento aprobado (C2)', () => {
   });
 });
 
+// Fix menores, punto 3: banda «Vista previa del portal» cuando admin/operador
+// abren el documento aprobado desde el portal en modo previsualización
+// (`vistaPrevia: true` en `volver`/`portal`), y su ausencia para el cliente
+// real (`vistaPrevia` ausente o `false`).
+describe('portal del cliente: banda «Vista previa» (fix menores, punto 3)', () => {
+  // La clase `.banda-vista-previa` también vive en la hoja de estilos en
+  // línea (siempre presente): lo que hay que comprobar es el `<div>` en el
+  // marcado, no la subcadena suelta del nombre de la clase.
+  const BANDA = '<div class="banda-vista-previa"';
+
+  it('investigación: con vistaPrevia trae la banda; sin ella (cliente real), no', () => {
+    const conPrevia = renderizarInvestigacion(
+      investigacionCompleta as any,
+      { cliente: 'Ana Villa', giro: 'Cosmetología', fecha: '2026-09-15' },
+      undefined, false, undefined, false, { ...volver, vistaPrevia: true },
+    );
+    expect(conPrevia).toContain(BANDA);
+    expect(conPrevia).toContain('<body data-vista-previa>');
+
+    const sinPrevia = renderizarInvestigacion(
+      investigacionCompleta as any,
+      { cliente: 'Ana Villa', giro: 'Cosmetología', fecha: '2026-09-15' },
+      undefined, false, undefined, false, volver,
+    );
+    expect(sinPrevia).not.toContain(BANDA);
+    expect(sinPrevia).not.toContain('<body data-vista-previa>');
+  });
+
+  it('mapa de pilares: con vistaPrevia trae la banda; sin ella, no', () => {
+    const mapa = mapaFalso();
+    const conPrevia = renderizarPilares(mapa, { cliente: 'Ana Villa', fecha: '2026-09-15' }, { editable: false, anclas: false, volver: { ...volver, vistaPrevia: true } });
+    expect(conPrevia).toContain(BANDA);
+
+    const sinPrevia = renderizarPilares(mapa, { cliente: 'Ana Villa', fecha: '2026-09-15' }, { editable: false, anclas: false, volver });
+    expect(sinPrevia).not.toContain(BANDA);
+  });
+
+  it('manual de campaña: con vistaPrevia trae la banda; sin ella, no', () => {
+    const conPrevia = renderizarManual(
+      growthCompleto as any,
+      { cliente: 'Ana Villa', producto: 'Diplomado', fecha: '2026-09-15' },
+      '', false, undefined,
+      { volverHref: '/portal', volverTexto: '← Mi portal', vistaPrevia: true },
+    );
+    expect(conPrevia).toContain(BANDA);
+    expect(conPrevia).toContain('<body data-vista-previa>');
+
+    const sinPrevia = renderizarManual(
+      growthCompleto as any,
+      { cliente: 'Ana Villa', producto: 'Diplomado', fecha: '2026-09-15' },
+      '', false, undefined,
+      { volverHref: '/portal', volverTexto: '← Mi portal' },
+    );
+    expect(sinPrevia).not.toContain(BANDA);
+    expect(sinPrevia).not.toContain('<body data-vista-previa>');
+  });
+});
+
 describe('panel de comentarios: texto de ayuda del portal (C2)', () => {
   it('sin ayuda (vista interna) no cambia', () => {
     expect(panelComentarios()).not.toContain('panel-ayuda');

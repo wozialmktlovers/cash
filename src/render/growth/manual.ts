@@ -27,6 +27,9 @@ export type { MetaManual };
 // atropellaba al botón vecino.
 const ICONO_VOLVER = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2 3 7l6 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ICONO_OBSERVACIONES = '<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1.5 2.5h11v7h-6l-3 3v-3h-2v-7z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+// Mismo trazo que `ojo` en src/components/Icono.astro, adaptado al viewBox
+// 14×14 de los demás iconos de este archivo (fix menores, punto 3).
+const ICONO_OJO = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 const ANCLAS: [string, string][] = [
   ['setup', 'Setup'],
@@ -54,7 +57,13 @@ const ANCLAS: [string, string][] = [
  * enlace «← Mi portal» ni el botón para entrar al modo Comentar — en la
  * vista interna esos dos viven dentro de `barraOperador`.
  */
-export type OpcionesPortalManual = { volverHref: string; volverTexto: string; ayudaComentarios?: string };
+export type OpcionesPortalManual = {
+  volverHref: string;
+  volverTexto: string;
+  ayudaComentarios?: string;
+  /** Admin/operador previsualizando el manual del cliente (fix menores, punto 3): agrega la banda de aviso. */
+  vistaPrevia?: boolean;
+};
 
 export function renderizarManual(
   datos: Partial<Growth> & { _huecos?: Record<string, string> },
@@ -109,8 +118,12 @@ export function renderizarManual(
 <meta name="theme-color" content="#0a0a0a">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>${ESTILOS_GROWTH}</style>
-</head><body${flujo ? atributoFlujo(flujo) : ''}>
+</head><body${flujo ? atributoFlujo(flujo) : ''}${portal?.vistaPrevia ? ' data-vista-previa' : ''}>
 ${barraOperador}
+${portal?.vistaPrevia ? `<div class="banda-vista-previa">
+  <span>${ICONO_OJO}Vista previa del portal</span>
+  <a href="${escapar(portal.volverHref)}">${ICONO_VOLVER}Volver a la ficha</a>
+</div>` : ''}
 <nav class="nav">
   <img src="${LOGO_WOZIAL_SRC}" alt="Wozial" class="nav-logo">
   ${portal ? `<a class="gbtn gbtn-44" href="${escapar(portal.volverHref)}" aria-label="${escapar(portal.volverTexto)}" title="${escapar(portal.volverTexto)}">${ICONO_VOLVER}</a>` : ''}

@@ -69,7 +69,11 @@ if (listaParaCliente) {
     motivoSinHtml = 'no_listo';
   } else {
     const fecha = version.creadoEn.toISOString().slice(0, 10);
-    const volver = { href: volverHref, texto: VOLVER_TEXTO };
+    // `vistaPrevia` agrega la banda «Vista previa del portal» al documento
+    // (fix menores, punto 3): sin ella, admin/operador veían exactamente el
+    // mismo HTML que el cliente, sin ninguna marca de que están mirando una
+    // previsualización y no la vista interna normal del documento.
+    const volver = { href: volverHref, texto: VOLVER_TEXTO, vistaPrevia };
 
     // Anclas y observaciones solo en las etapas que las permiten (ruling C2
     // #3/#4) — hoy `manual_campana`; `desarrollo_mensual` todavía no genera
@@ -124,7 +128,7 @@ if (listaParaCliente) {
             ciudad: cliente.ciudad ?? undefined, destino: sitio?.url, creadoEn: creadoEnGrowth,
           },
           '', false, flujo,
-          { volverHref, volverTexto: VOLVER_TEXTO, ayudaComentarios: permiteObservaciones ? AYUDA_OBSERVACIONES : undefined },
+          { volverHref, volverTexto: VOLVER_TEXTO, ayudaComentarios: permiteObservaciones ? AYUDA_OBSERVACIONES : undefined, vistaPrevia },
         );
       }
     } catch (e) {

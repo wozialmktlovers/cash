@@ -25,8 +25,12 @@ export function renderizarInvestigacion(
   editable = false,
   flujo?: FlujoDatos,
   anclas = false,
-  /** Enlace «← Mi portal» — solo en el portal del cliente (C2, spec §4). */
-  volver?: { href: string; texto: string },
+  /**
+   * Enlace «← Mi portal» — solo en el portal del cliente (C2, spec §4).
+   * `vistaPrevia` (fix menores, punto 3) agrega la banda de aviso para
+   * admin/operador previsualizando el documento del cliente.
+   */
+  volver?: { href: string; texto: string; vistaPrevia?: boolean },
 ): string {
   // No basta con `estado === 'ok'`: los datos guardados pudieron venir de un
   // esquema anterior (v1, sin `cifras`) o llegar corruptos. Si no cumplen el

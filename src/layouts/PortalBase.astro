@@ -17,6 +17,13 @@ interface Props {
 }
 
 const { titulo, nombreEmpresa, vistaPrevia } = Astro.props;
+
+// Fix menores, punto 3: en vista previa (admin/operador) el logo debe volver
+// a `/portal` conservando `?cliente=`, igual que el resto de los enlaces del
+// portal en vista previa (ver `hrefDocumento` en portal/index.astro) — sin
+// esto, un clic en el logo perdía a quién se estaba previsualizando y caía
+// en la página «Elige un cliente desde su ficha».
+const hrefLogo = vistaPrevia ? `/portal?cliente=${vistaPrevia.clienteId}` : '/portal';
 ---
 
 <html lang="es-MX">
@@ -46,7 +53,7 @@ const { titulo, nombreEmpresa, vistaPrevia } = Astro.props;
     <div class="portal-app">
       <div class="portal-cabecera-envoltura">
         <header class="portal-cabecera">
-          <a href="/portal" class="marca" aria-label="Portal · inicio">
+          <a href={hrefLogo} class="marca" aria-label="Portal · inicio">
             <img class="logo" src="/logo-wozial.png" alt="Wozial" width="545" height="194" />
           </a>
           <span class="portal-empresa">{nombreEmpresa}</span>

@@ -21,8 +21,12 @@ export type OpcionesPilares = {
   /** Solo en la vista interna: marca `data-ancla` en secciones, tarjetas y temas (B7, spec §3). Nunca en `/p/...`. */
   anclas?: boolean;
   flujo?: FlujoDatos;
-  /** Enlace «← Mi portal» — solo en el portal del cliente (C2, spec §4). */
-  volver?: { href: string; texto: string };
+  /**
+   * Enlace «← Mi portal» — solo en el portal del cliente (C2, spec §4).
+   * `vistaPrevia` (fix menores, punto 3) agrega la banda de aviso para
+   * admin/operador previsualizando el documento del cliente.
+   */
+  volver?: { href: string; texto: string; vistaPrevia?: boolean };
 };
 
 const INDICE: [string, string, string][] = [

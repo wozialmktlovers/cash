@@ -11,6 +11,23 @@ const ICONO_COMPARTIR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentCol
 // («← Mi portal») envolvía a dos líneas y desbordaba la cabecera fija
 // (visto en la verificación en vivo de C2). `aria-label` lleva la palabra.
 const ICONO_VOLVER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
+// Mismo trazo que `ojo` en src/components/Icono.astro: este archivo no es
+// .astro, así que no puede usar ese componente y repite el path a mano.
+const ICONO_OJO = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+/**
+ * Banda «Vista previa del portal» cuando admin/operador abren el documento
+ * aprobado desde `/portal/documentos/...` en modo previsualización (fix
+ * menores, punto 3): mismo aviso que ya ve quien previsualiza la portada del
+ * portal (`PortalBase.astro`), para que no confunda esta copia congelada
+ * (la versión aprobada) con la vista interna normal del documento.
+ */
+export function bandaVistaPrevia(hrefVolver: string): string {
+  return `<div class="banda-vista-previa">
+    <span>${ICONO_OJO}Vista previa del portal</span>
+    <a href="${escapar(hrefVolver)}">${ICONO_VOLVER}Volver a la ficha</a>
+  </div>`;
+}
 
 function botonCompartir(): string {
   return `<button type="button" class="cabecera-compartir" id="btn-compartir" aria-haspopup="dialog" aria-expanded="false" aria-controls="panel-compartir" aria-label="Compartir">

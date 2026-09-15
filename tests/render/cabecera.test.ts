@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cabeceraDocumento, SCRIPT_CABECERA } from '@/render/investigacion/cabecera';
+import { bandaVistaPrevia } from '@/render/editorial/cabecera';
 import type { OpcionesBarra } from '@/render/barra-operador';
 
 const meta = { cliente: 'Ana Villa', giro: 'Cosmetología', fecha: '2026-08-12' };
@@ -54,5 +55,22 @@ describe('cabecera del documento', () => {
   it('el panel de compartir se alinea con el borde derecho de la cápsula, no con el del viewport', () => {
     expect(SCRIPT_CABECERA).toContain('window.innerWidth - r.right');
     expect(SCRIPT_CABECERA).toContain("panel.style.right = Math.max(16, margenDerecho) + 'px'");
+  });
+});
+
+// Fix menores, punto 3: banda «Vista previa del portal» cuando admin/operador
+// abren el documento aprobado del cliente en modo previsualización.
+describe('bandaVistaPrevia', () => {
+  it('trae el aviso y el enlace de vuelta escapado', () => {
+    const h = bandaVistaPrevia('/clientes/c1');
+    expect(h).toContain('class="banda-vista-previa"');
+    expect(h).toContain('Vista previa del portal');
+    expect(h).toContain('Volver a la ficha');
+    expect(h).toContain('href="/clientes/c1"');
+  });
+
+  it('escapa el href', () => {
+    const h = bandaVistaPrevia('/clientes/"><script>alert(1)</script>');
+    expect(h).not.toContain('<script>alert(1)</script>');
   });
 });
