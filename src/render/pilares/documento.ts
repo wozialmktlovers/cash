@@ -62,7 +62,10 @@ export function renderizarPilares(mapa: MapaPilares, meta: MetaPilares, opciones
     seccionPartida(mapa.estrategia, editable, anclas),
     seccionPrincipios(mapa.estrategia, editable, anclas),
     seccionPilares(mapa.estrategia, editable, anclas),
-    seccionMix(mapa.estrategia, interna, interna ? mapa.revision.mixReal : null, interna ? mapa.revision.fueraDeMargen : [], editable, anclas),
+    // `mapa.revision` puede faltar en un dato viejo o corrupto: con
+    // encadenamiento opcional se trata como si no hubiera revisión que
+    // mostrar, en vez de tronar con un 500 (fix menores, punto 1).
+    seccionMix(mapa.estrategia, interna, interna ? (mapa.revision?.mixReal ?? null) : null, interna ? (mapa.revision?.fueraDeMargen ?? []) : [], editable, anclas),
     seccionConversion(mapa.estrategia, editable, anclas),
     seccionBanco({ mapa, interna, clienteId: opciones?.operador?.clienteId, avance: opciones?.avance, resultId: opciones?.resultId, editable, anclas }),
     seccionCierre(mapa.estrategia, interna, editable),

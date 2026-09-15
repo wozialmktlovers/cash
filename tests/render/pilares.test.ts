@@ -147,13 +147,20 @@ describe('mapa de pilares · vista pública', () => {
 });
 
 describe('bordes', () => {
-  it('pilar vacío declara su razón y ofrece regenerar solo en la interna', () => {
+  it('pilar vacío declara su razón y ofrece regenerar solo en la interna; público y portal solo ven el texto neutro (fix menores, punto 1)', () => {
     const m = mapaFalso();
-    m.pilares[1] = { numero: 2, estado: 'vacio', razon: 'Se alcanzó el tope de costo antes de ejecutar este pilar.' };
-    expect(renderizarPilares(m, meta, { operador, resultId: 'r1' })).toContain('Regenerar el mapa');
+    const razon = 'Se alcanzó el tope de costo antes de ejecutar este pilar.';
+    m.pilares[1] = { numero: 2, estado: 'vacio', razon };
+    const interna = renderizarPilares(m, meta, { operador, resultId: 'r1' });
+    expect(interna).toContain('Regenerar el mapa');
+    expect(interna).toContain(razon);
+
     const pub = renderizarPilares(m, meta);
-    expect(pub).toContain('Este pilar no se generó');
+    expect(pub).toContain('Este pilar no está disponible por ahora');
     expect(marcado(pub)).not.toContain('Regenerar el mapa');
+    // La razón técnica (habla de «tope de costo», propia de quien opera) no
+    // debe llegar al link público ni al portal del cliente.
+    expect(pub).not.toContain(razon);
   });
   it('aviso de revisión solo en la interna', () => {
     const m = mapaFalso();
@@ -172,5 +179,18 @@ describe('bordes', () => {
   it('el script del mapa es JavaScript válido y guarda por PATCH', () => {
     expect(() => new Function(SCRIPT_PILARES)).not.toThrow();
     for (const s of ['PATCH', '/api/pilares/', 'text/csv', 'Escape']) expect(SCRIPT_PILARES).toContain(s);
+  });
+
+  // Fix menores, punto 1: `mapa.revision` puede faltar en un dato viejo o
+  // corrupto (guardado antes de que ese campo existiera). Sin encadenamiento
+  // opcional, tanto el aviso de revisión como el mix real de la interna
+  // tronaban con un TypeError al desestructurar `undefined`.
+  it('sin mapa.revision (dato viejo) no truena: aviso de revisión y mix real quedan vacíos', () => {
+    const m = mapaFalso();
+    delete (m as any).revision;
+    expect(() => renderizarPilares(m, meta, { operador, resultId: 'r1' })).not.toThrow();
+    const h = renderizarPilares(m, meta, { operador, resultId: 'r1' });
+    expect(marcado(h)).not.toContain('aviso-revision');
+    expect(() => renderizarPilares(m, meta)).not.toThrow();
   });
 });

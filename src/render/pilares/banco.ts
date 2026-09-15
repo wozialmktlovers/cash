@@ -126,6 +126,11 @@ function bloquePilarOk(p: Extract<PilarMapa, { estado: 'ok' }>, indicePilar: num
 }
 
 function bloquePilarVacio(p: Extract<PilarMapa, { estado: 'vacio' }>, ep: Estrategia['pilares'][number], interna: boolean, clienteId?: string): string {
+  // La razón real (p.razon) sale de pipeline.ts::razon() y habla en términos
+  // internos («el agente no devolvió datos», «se alcanzó el tope de costo»):
+  // útil para quien opera, pero no algo que el cliente deba leer en `/p/...`
+  // ni en el portal (fix menores, punto 1). Solo la interna la muestra; la
+  // pública y el portal se quedan con el texto neutro de siempre.
   return `<details class="pilar-bloque vacio" open data-pilar="${p.numero}" style="--color-pilar:${COLOR_PILAR[p.numero - 1]};--color-pilar-s:${COLOR_PILAR_SUAVE[p.numero - 1]}">
     <summary class="pilar-cabecera">
       <span class="pilar-num">${p.numero}</span>
@@ -135,15 +140,19 @@ function bloquePilarVacio(p: Extract<PilarMapa, { estado: 'vacio' }>, ep: Estrat
       </div>
     </summary>
     <div class="pilar-vacio-cuerpo">
-      <p>Este pilar no se generó.</p>
-      <p class="suave">${escapar(p.razon)}</p>
+      <p>Este pilar no está disponible por ahora.</p>
+      ${interna ? `<p class="suave">${escapar(p.razon)}</p>` : ''}
       ${interna && clienteId ? `<a class="panel-boton" href="/clientes/${escapar(clienteId)}/pilares">Regenerar el mapa</a>` : ''}
     </div>
   </details>`;
 }
 
 function avisoRevision(mapa: MapaPilares): string {
-  const { duplicadosRestantes, fueraDeMargen } = mapa.revision;
+  // `mapa.revision` puede faltar en un dato viejo o corrupto (guardado antes
+  // de que este campo existiera, o llegado a medias): sin encadenamiento
+  // opcional, esto tronaba con un 500 en vez de tratar la revisión como
+  // vacía (fix menores, punto 1).
+  const { duplicadosRestantes = [], fueraDeMargen = [] } = mapa.revision ?? {};
   if (!duplicadosRestantes.length && !fueraDeMargen.length) return '';
   return `<div class="aviso-revision" role="status">
     <p class="suave">Revisión automática: hay puntos a vigilar en este banco.</p>

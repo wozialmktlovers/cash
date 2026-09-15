@@ -34,7 +34,10 @@ export function renderizarInvestigacion(
   const lecturaCruda = inv.lectura?.estado === 'ok' ? inv.lectura.datos : null;
   const parseoLectura = lecturaCruda ? lecturaSchema.safeParse(lecturaCruda) : null;
   const lectura = parseoLectura?.success ? parseoLectura.data : null;
-  const sintesis: Sintesis | null = inv.sintesis.estado === 'ok' ? inv.sintesis.datos : null;
+  // `inv.sintesis` puede faltar del todo en un dato viejo o corrupto (mismo
+  // caso que `inv.lectura` arriba): con encadenamiento opcional se trata como
+  // etapa vacía en vez de tronar con un 500 (fix menores, punto 1).
+  const sintesis: Sintesis | null = inv.sintesis?.estado === 'ok' ? inv.sintesis.datos : null;
   const eyebrow = `Investigación de mercado · ${meta.fecha}`;
 
   // Sin lectura, el detalle numera según lo que de verdad hay antes: 01 si

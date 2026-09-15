@@ -89,6 +89,20 @@ describe('respaldo sin lectura', () => {
   });
 });
 
+describe('inv.sintesis ausente (fix menores, punto 1)', () => {
+  // Un dato viejo o corrupto puede no traer `sintesis` en absoluto (no solo
+  // en estado "vacio", sino sin la llave): antes de encadenar con `?.` esto
+  // tronaba con un TypeError al leer `.estado` de `undefined`, y por lo
+  // tanto el link público y el portal respondían 500 en vez de mostrar el
+  // documento con esa etapa vacía.
+  it('sin inv.sintesis no truena y trata la etapa como vacía', () => {
+    const { sintesis, ...sinSintesis } = completa as any;
+    expect(() => renderizarInvestigacion(sinSintesis, meta)).not.toThrow();
+    const h = renderizarInvestigacion(sinSintesis, meta);
+    expect(h).not.toContain('id="sintesis"');
+  });
+});
+
 describe('lectura guardada que no cumple el esquema actual', () => {
   it('una lectura v1 (sin cifras, con un campo viejo "explicacion") usa el respaldo sin tronar', () => {
     const v1 = {
