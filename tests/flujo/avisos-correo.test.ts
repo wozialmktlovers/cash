@@ -17,7 +17,7 @@ vi.mock('@/db', () => ({
 
 import { notificar } from '@/flujo/avisos';
 
-const operador = { id: 'op1', email: 'op@x.mx', nombre: 'Op', rol: 'operador' as const, activo: true };
+const operador = { id: 'op1', email: 'op@x.mx', nombre: 'Op', apellido: null, rol: 'operador' as const, activo: true };
 const ctx = { admins: [], operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false, datos: { cliente: 'Ana', etapa: 'Investigación' } };
 
 const entorno = { ...process.env };

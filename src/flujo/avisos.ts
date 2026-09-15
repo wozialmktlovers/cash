@@ -10,7 +10,7 @@ import { enviarCorreo } from '@/lib/correo';
 import { enlaceCorreo } from '@/lib/base-url';
 import type { Rol } from './reglas';
 
-export type Usuario = { id: string; email: string; nombre: string | null; rol: Rol; activo: boolean };
+export type Usuario = { id: string; email: string; nombre: string | null; apellido: string | null; rol: Rol; activo: boolean };
 
 export type EventoAviso =
   | 'solicitud'
@@ -178,7 +178,7 @@ export function textoAviso(evento: EventoAviso, datos: DatosAviso): { titulo: st
   throw new Error(`Evento de aviso desconocido: ${evento}`);
 }
 
-const CAMPOS_USUARIO = { id: users.id, email: users.email, nombre: users.nombre, rol: users.rol, activo: users.activo };
+const CAMPOS_USUARIO = { id: users.id, email: users.email, nombre: users.nombre, apellido: users.apellido, rol: users.rol, activo: users.activo };
 
 /** Todos los admins activos (evento `solicitud`). */
 export async function adminsActivos(): Promise<Usuario[]> {

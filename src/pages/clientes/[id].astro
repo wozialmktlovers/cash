@@ -10,6 +10,7 @@ import { iniciales, tinte } from '@/lib/ui/cliente-visual';
 import { ETIQUETA_ESTADO } from '@/lib/ui/progreso';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { clienteVisible } from '@/lib/visibilidad';
+import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
 import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults, clienteEtapas, etapaEventos, users, invitaciones } from '@/db';
 import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, tipoDocumentoDe, dependenciasCumplidas, type Etapa } from '@/flujo/reglas';
 import { botonesEtapa, marcaEtapa, COLOR_ESTADO } from '@/flujo/ui';
@@ -26,10 +27,12 @@ const esAdmin = usuario.rol === 'admin';
 
 // ── Responsable ────────────────────────────────────
 const [responsable] = cliente.operadorId
-  ? await db.select({ id: users.id, nombre: users.nombre, email: users.email }).from(users).where(eq(users.id, cliente.operadorId)).limit(1)
+  ? await db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email }).from(users).where(eq(users.id, cliente.operadorId)).limit(1)
   : [];
+// Las listas de personas se ordenan en memoria con `ordenUsuarios` (apellido,
+// nombre, y al final quien aún no tenga ninguno), no por una sola columna.
 const operadoresActivos = esAdmin
-  ? await db.select({ id: users.id, nombre: users.nombre, email: users.email }).from(users).where(and(ne(users.rol, 'cliente'), eq(users.activo, true))).orderBy(users.nombre)
+  ? (await db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email }).from(users).where(and(ne(users.rol, 'cliente'), eq(users.activo, true)))).sort(ordenUsuarios)
   : [];
 // El responsable guardado puede ya no estar entre los operadores activos (lo
 // desactivaron, o nunca hubo uno asignado): el <select> no debe insinuar que
@@ -38,7 +41,7 @@ const operadorAsignadoValido = !!cliente.operadorId && operadoresActivos.some((o
 
 // ── Usuarios del cliente ───────────────────────────
 const usuariosCliente = operable
-  ? await db.select({ id: users.id, nombre: users.nombre, email: users.email, activo: users.activo }).from(users).where(and(eq(users.rol, 'cliente'), eq(users.clientId, cliente.id))).orderBy(users.nombre)
+  ? (await db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email, activo: users.activo }).from(users).where(and(eq(users.rol, 'cliente'), eq(users.clientId, cliente.id)))).sort(ordenUsuarios)
   : [];
 
 // ── Invitaciones pendientes (M2 punto 4) ──────────
@@ -129,7 +132,7 @@ const eventosEtapa = await db
   .select({
     id: etapaEventos.id, accion: etapaEventos.accion, de: etapaEventos.de, a: etapaEventos.a,
     comentario: etapaEventos.comentario, creadoEn: etapaEventos.creadoEn, etapa: clienteEtapas.etapa,
-    usuarioNombre: users.nombre, usuarioEmail: users.email,
+    usuarioNombre: users.nombre, usuarioApellido: users.apellido, usuarioEmail: users.email,
   })
   .from(etapaEventos)
   .innerJoin(clienteEtapas, eq(clienteEtapas.id, etapaEventos.etapaId))
@@ -186,16 +189,16 @@ const historial: ItemHistorial[] = [
           <select id="responsable-select">
             {!operadorAsignadoValido && (
               <option value="" disabled selected>
-                {responsable ? `${responsable.nombre ?? responsable.email} (inactivo)` : 'Sin asignar'}
+                {responsable ? `${nombreVisible(responsable)} (inactivo)` : 'Sin asignar'}
               </option>
             )}
             {operadoresActivos.map((o) => (
-              <option value={o.id} selected={o.id === cliente.operadorId}>{o.nombre ?? o.email}</option>
+              <option value={o.id} selected={o.id === cliente.operadorId}>{nombreVisible(o)}</option>
             ))}
           </select>
         </div>
       ) : (
-        <p class="secundario" style="margin-top:12px">{responsable ? (responsable.nombre ?? responsable.email) : 'Sin responsable asignado'}</p>
+        <p class="secundario" style="margin-top:12px">{responsable ? nombreVisible(responsable) : 'Sin responsable asignado'}</p>
       )}
     </section>
 
@@ -212,7 +215,7 @@ const historial: ItemHistorial[] = [
             {usuariosCliente.map((u) => (
               <li class="renglon">
                 <div class="cuerpo">
-                  <strong>{u.nombre ?? u.email}</strong>
+                  <strong>{nombreVisible(u)}</strong>
                   <p class="secundario">{u.email}</p>
                 </div>
                 <span class={`etiqueta ${u.activo ? 'completado' : 'cancelado'}`}>{u.activo ? 'Activo' : 'Inactivo'}</span>
@@ -314,7 +317,7 @@ const historial: ItemHistorial[] = [
             <div class="cuerpo">
               <strong>{NOMBRE_ETAPA[item.ev.etapa]} · {ETIQUETA_ACCION[item.ev.accion] ?? item.ev.accion}</strong>
               <p class="secundario">
-                {fechaHora(item.ev.creadoEn)} · {item.ev.usuarioNombre ?? item.ev.usuarioEmail ?? 'Sistema'}
+                {fechaHora(item.ev.creadoEn)} · {item.ev.usuarioEmail === null ? 'Sistema' : nombreVisible({ nombre: item.ev.usuarioNombre, apellido: item.ev.usuarioApellido, email: item.ev.usuarioEmail })}
                 {item.ev.de && ` · ${ETIQUETA_ESTADO_ETAPA[item.ev.de]} → ${ETIQUETA_ESTADO_ETAPA[item.ev.a]}`}
               </p>
               {item.ev.comentario && <p class="secundario">«{item.ev.comentario}»</p>}

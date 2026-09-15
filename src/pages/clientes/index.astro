@@ -5,6 +5,7 @@ import Icono from '@/components/Icono.astro';
 import TarjetaCliente from '@/components/TarjetaCliente.astro';
 import { db, clients, researchJobs, users } from '@/db';
 import { condicionClientes, esUuid } from '@/lib/visibilidad';
+import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
 import { resumirPorCliente, resumenDe } from '@/lib/ui/estado-cliente';
 
 const usuario = Astro.locals.usuario;
@@ -27,9 +28,11 @@ const resumen = resumirPorCliente(jobs);
 // solo los activos (tarea I4, punto 3): uno inactivo ya no puede tener
 // clientes propios, y listarlo aquí solo confundiría el filtro (mismo
 // criterio que ya usa el select de /desempeno).
+// El orden es de personas, no de una columna: se hace en memoria con
+// `ordenUsuarios` (apellido, nombre, y al final quien aún no tenga ninguno).
 const operadores = esAdmin
-  ? await db.select({ id: users.id, nombre: users.nombre, email: users.email })
-      .from(users).where(and(ne(users.rol, 'cliente'), eq(users.activo, true))).orderBy(users.nombre)
+  ? (await db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email })
+      .from(users).where(and(ne(users.rol, 'cliente'), eq(users.activo, true)))).sort(ordenUsuarios)
   : [];
 
 const FILTROS = [
@@ -55,7 +58,7 @@ const FILTROS = [
       <select id="operador-filtro" name="operador">
         <option value="">Todos</option>
         {operadores.map((o) => (
-          <option value={o.id} selected={o.id === operadorFiltro}>{o.nombre ?? o.email}</option>
+          <option value={o.id} selected={o.id === operadorFiltro}>{nombreVisible(o)}</option>
         ))}
       </select>
     </form>

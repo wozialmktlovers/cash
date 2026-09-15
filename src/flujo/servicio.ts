@@ -17,6 +17,7 @@ import { puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, abi
 import { investigacionUtil } from '@/lib/precheck';
 import { clienteOperable, clienteVisible, esUuid } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
+import { nombreVisible } from '@/lib/usuarios';
 import { avisarJob, avisarTransicion, avisarComentarioCliente, avisarRespuestaCliente, avisarRespuestaDelCliente, type EventoAviso } from './avisos';
 
 /** Ruta interna para ver el documento vigente de una etapa (spec §3, Avisos: «enlace»). Exportada: la ficha (B5) la usa para el botón «Ver documento». */
@@ -516,7 +517,7 @@ export async function ejecutarTransicion(o: {
         etapaVisibleCliente: fila.contratada && !fila.interna,
         cliente: cliente.nombre,
         etapa: NOMBRE_ETAPA[fila.etapa],
-        autor: usuario.nombre ?? usuario.email,
+        autor: nombreVisible(usuario),
         enlace: `/clientes/${cliente.id}`,
       }).catch((e) => console.error('[avisos] transicion:', e));
     }
@@ -825,15 +826,21 @@ export type ComentarioSalida = {
   deOtraVersion: boolean;
 };
 
-function nombreInterno(nombre: string | null, email: string): string {
-  return nombre ?? email;
+/**
+ * El nombre del autor tal como sale hacia el navegador: ya resuelto aquí con
+ * `nombreVisible`, para no repetir en el cliente la regla de «nombre apellido,
+ * o el correo». `respaldo` es lo que se muestra cuando la fila del autor ya no
+ * existe (un usuario borrado): «Wozial» para el personal, «Tú» para el cliente.
+ */
+function nombreInterno(f: { autorNombre: string | null; autorApellido: string | null; autorEmail: string | null }, respaldo: string): string {
+  return nombreVisible({ nombre: f.autorNombre, apellido: f.autorApellido, email: f.autorEmail ?? respaldo });
 }
 
 type FilaComentarioConAutor = {
   id: string; ancla: string; texto: string; estado: EstadoComentario; respuestaDe: string | null;
   autorId: string | null; autorRol: Rol; versionNumero: number; creadoEn: Date;
   documentoTipo: TipoDocumento; documentoId: string;
-  autorNombre: string | null; autorEmail: string | null;
+  autorNombre: string | null; autorApellido: string | null; autorEmail: string | null;
 };
 
 const CAMPOS_COMENTARIO = {
@@ -841,13 +848,13 @@ const CAMPOS_COMENTARIO = {
   respuestaDe: comentarios.respuestaDe, autorId: comentarios.autorId, autorRol: comentarios.autorRol,
   versionNumero: comentarios.versionNumero, creadoEn: comentarios.creadoEn,
   documentoTipo: comentarios.documentoTipo, documentoId: comentarios.documentoId,
-  autorNombre: users.nombre, autorEmail: users.email,
+  autorNombre: users.nombre, autorApellido: users.apellido, autorEmail: users.email,
 };
 
 function paraSalidaInterna(f: FilaComentarioConAutor, doc: { tipo: TipoDocumento; id: string } | null): ComentarioSalida {
   return {
     id: f.id, ancla: f.ancla, texto: f.texto, estado: f.estado, respuestaDe: f.respuestaDe,
-    autorRol: f.autorRol, autor: nombreInterno(f.autorNombre, f.autorEmail ?? 'Wozial'),
+    autorRol: f.autorRol, autor: nombreInterno(f, 'Wozial'),
     versionNumero: f.versionNumero, creadoEn: f.creadoEn,
     deOtraVersion: esDeOtraVersion({ documentoTipo: f.documentoTipo, documentoId: f.documentoId }, doc),
   };
@@ -900,7 +907,7 @@ export async function listarComentarios(o: {
         // Mismo criterio que `autor`: el cliente nunca ve el rol real de un
         // autor del equipo, solo el suyo propio (fix wave, punto 7).
         autorRol: f.autorRol === 'cliente' ? f.autorRol : null,
-        autor: f.autorRol === 'cliente' ? nombreInterno(f.autorNombre, f.autorEmail ?? 'Tú') : 'Equipo Wozial',
+        autor: f.autorRol === 'cliente' ? nombreInterno(f, 'Tú') : 'Equipo Wozial',
         versionNumero: f.versionNumero, creadoEn: f.creadoEn, deOtraVersion: false,
       })),
     };

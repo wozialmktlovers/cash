@@ -46,6 +46,30 @@ describe('bootstrapAdmin', () => {
     expect(insert).toContain('client_id');
     expect(insert).toContain('NULL');
   });
+
+  it('guarda ADMIN_NOMBRE y ADMIN_APELLIDO al crear el admin', async () => {
+    process.env.ADMIN_EMAIL = 'dueno@wozial.mx';
+    process.env.ADMIN_PASSWORD = 'una-clave-larga-123';
+    process.env.ADMIN_NOMBRE = 'Ana';
+    process.env.ADMIN_APELLIDO = 'Pau';
+    const f = sqlFalso([[], []]);
+    await bootstrapAdmin({ sql: f.sql });
+    const insert = f.consultas.find((c) => c.startsWith('INSERT INTO users'))!;
+    expect(insert).toContain('nombre');
+    expect(insert).toContain('apellido');
+  });
+
+  it('al recuperar el acceso sin ADMIN_NOMBRE, conserva el nombre que ya había', async () => {
+    process.env.ADMIN_EMAIL = 'dueno@wozial.mx';
+    process.env.ADMIN_PASSWORD = 'una-clave-larga-123';
+    delete process.env.ADMIN_NOMBRE;
+    delete process.env.ADMIN_APELLIDO;
+    const f = sqlFalso([[{ id: 'u1' }], [{ hayAdminActivo: false }], []]);
+    await bootstrapAdmin({ sql: f.sql });
+    const update = f.consultas.find((c) => c.startsWith('UPDATE users'))!;
+    expect(update).toContain('nombre = COALESCE(');
+    expect(update).toContain('apellido = COALESCE(');
+  });
 });
 
 describe('crear-usuario: argumentos', () => {
@@ -63,7 +87,12 @@ describe('crear-usuario: argumentos', () => {
 
   it('el rol solo puede ser admin u operador', () => {
     expect(validarArgumentos(['a@b.mx', '123456789012', 'cliente']).ok).toBe(false);
-    expect(validarArgumentos(['a@b.mx', '123456789012', 'operador'])).toEqual({ ok: true, email: 'a@b.mx', password: '123456789012', rol: 'operador' });
+    expect(validarArgumentos(['a@b.mx', '123456789012', 'operador'])).toEqual({ ok: true, email: 'a@b.mx', password: '123456789012', rol: 'operador', nombre: null, apellido: null });
+  });
+
+  it('acepta nombre y apellido opcionales', () => {
+    const r = validarArgumentos(['a@x.mx', 'x'.repeat(12), 'admin', ' Ana ', 'Pau']);
+    expect(r).toMatchObject({ ok: true, nombre: 'Ana', apellido: 'Pau' });
   });
 });
 
@@ -76,5 +105,10 @@ describe('crear-usuario: sentencia', () => {
   it('sin rol explícito solo cambia la contraseña: no promueve a nadie', () => {
     const s = sentenciaCrearUsuario(false);
     expect(s).not.toMatch(/DO UPDATE SET[^;]*rol/);
+  });
+
+  it('sin nombre, no pisa el que ya tenía', () => {
+    expect(sentenciaCrearUsuario(true)).toContain('COALESCE');
+    expect(sentenciaCrearUsuario(false)).toContain('COALESCE');
   });
 });

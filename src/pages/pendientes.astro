@@ -5,6 +5,7 @@ import Icono from '@/components/Icono.astro';
 import { db, clienteEtapas, clients, users, comentarios } from '@/db';
 import { NOMBRE_ETAPA, type TipoDocumento } from '@/flujo/reglas';
 import { condicionClientes } from '@/lib/visibilidad';
+import { nombreVisible } from '@/lib/usuarios';
 import { comentariosAbiertosPorEtapa } from '@/flujo/servicio';
 import { fechaCorta } from '@/lib/ui/fecha';
 
@@ -54,17 +55,25 @@ let totalComentariosPendientes = 0;
 let conteoPorEtapa = new Map<string, number>();
 
 if (usuario.rol === 'admin') {
-  enRevision = await db
+  const filasEnRevision = await db
     .select({
       id: clienteEtapas.id, etapa: clienteEtapas.etapa, actualizadoEn: clienteEtapas.actualizadoEn,
       documentoTipo: clienteEtapas.documentoTipo, documentoId: clienteEtapas.documentoId,
-      clientId: clients.id, cliente: clients.nombre, operador: users.nombre,
+      clientId: clients.id, cliente: clients.nombre,
+      operadorNombre: users.nombre, operadorApellido: users.apellido, operadorEmail: users.email,
     })
     .from(clienteEtapas)
     .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
     .leftJoin(users, eq(users.id, clients.operadorId))
     .where(and(eq(clienteEtapas.estado, 'en_revision'), eq(clienteEtapas.contratada, true)))
     .orderBy(asc(clienteEtapas.actualizadoEn));
+
+  // El `leftJoin` deja las tres columnas del operador en NULL cuando el cliente
+  // no tiene responsable: eso es «Sin asignar», no un nombre vacío.
+  enRevision = filasEnRevision.map(({ operadorNombre, operadorApellido, operadorEmail, ...fila }) => ({
+    ...fila,
+    operador: operadorEmail === null ? null : nombreVisible({ nombre: operadorNombre, apellido: operadorApellido, email: operadorEmail }),
+  }));
 } else {
   const cond = condicionClientes(usuario);
   // Una etapa descontratada no cuenta como pendiente de nadie (fix I1, punto

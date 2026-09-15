@@ -4,6 +4,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { db, researchResults, growthResults, pilaresResults, documentoVersiones, etapaEventos, clienteEtapas, users } from '@/db';
 import { documentoVisible, type DocumentoTipo } from '@/lib/visibilidad';
 import { puedeOperarCliente } from '@/lib/permisos';
+import { nombreVisible } from '@/lib/usuarios';
 import { estadoTrasGenerar } from '@/flujo/reglas';
 import { validarDocumento, puedeEditar } from '@/flujo/edicion';
 import { guardarVersion, etapaDelDocumento } from '@/flujo/servicio';
@@ -29,16 +30,19 @@ export const GET: APIRoute = async ({ params, locals }) => {
   }
 
   const filas = await db
-    .select({ numero: documentoVersiones.numero, motivo: documentoVersiones.motivo, creadoEn: documentoVersiones.creadoEn, autorNombre: users.nombre, autorEmail: users.email })
+    .select({ numero: documentoVersiones.numero, motivo: documentoVersiones.motivo, creadoEn: documentoVersiones.creadoEn, autorNombre: users.nombre, autorApellido: users.apellido, autorEmail: users.email })
     .from(documentoVersiones)
     .leftJoin(users, eq(users.id, documentoVersiones.autorId))
     .where(and(eq(documentoVersiones.documentoTipo, tipoParam), eq(documentoVersiones.documentoId, id)))
     .orderBy(desc(documentoVersiones.numero));
 
+  // El texto del autor sale ya resuelto del servidor (`nombreVisible`): el
+  // panel del historial solo lo pinta, y así la regla de «nombre apellido, o
+  // el correo» no se repite en el navegador.
   const versiones = filas.map((f) => ({
     numero: f.numero,
     motivo: f.motivo,
-    autor: f.autorNombre ?? f.autorEmail ?? 'Wozial',
+    autor: nombreVisible({ nombre: f.autorNombre, apellido: f.autorApellido, email: f.autorEmail ?? 'Wozial' }),
     creadoEn: f.creadoEn,
   }));
 

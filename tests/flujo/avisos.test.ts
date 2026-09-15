@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { destinatarios, textoAviso, datosParaDestinatario, type ContextoDestinatarios, type Usuario } from '@/flujo/avisos';
 
 const u = (id: string, overrides: Partial<Usuario> = {}): Usuario => ({
-  id, email: `${id}@wozial.mx`, nombre: id, rol: 'operador', activo: true, ...overrides,
+  id, email: `${id}@wozial.mx`, nombre: id, apellido: null, rol: 'operador', activo: true, ...overrides,
 });
 
 const CTX_VACIO: ContextoDestinatarios = {
