@@ -7,7 +7,8 @@ import { correrCanales } from './agents/canales';
 import { correrMercado } from './agents/mercado';
 import { correrSintesis } from './agents/sintesis';
 import { correrLectura } from './agents/lectura';
-import { calcularCosto } from '@/lib/cost';
+import { calcularCosto, leerTopeUsd } from '@/lib/cost';
+import { esRespuestaInvalida } from './convertir-lecturas';
 
 export const ETAPAS = ['competencia','audiencia','canales','mercado','sintesis','lectura'] as const;
 export type Etapa = typeof ETAPAS[number];
@@ -70,7 +71,7 @@ export async function ejecutarJob(jobId: string): Promise<void> {
   const [job] = await db.select().from(researchJobs).where(eq(researchJobs.id, jobId)).limit(1);
   if (!job) return;
 
-  const tope = Number(process.env.COST_LIMIT_USD || 15);
+  const tope = leerTopeUsd(process.env.COST_LIMIT_USD, 15, 'COST_LIMIT_USD');
   const modeloInv = process.env.MODEL_RESEARCH || 'claude-sonnet-5';
   const modeloSin = process.env.MODEL_SYNTHESIS || 'claude-opus-5';
 
@@ -161,6 +162,7 @@ export async function ejecutarJob(jobId: string): Promise<void> {
   }
 
   // La lectura para el cliente espera a la síntesis y reescribe todo lo anterior.
+  let errorLectura: unknown;
   if (pendientes.includes('lectura') && hayDatosParaLectura(resultados)) {
     if (superaTope(gasto.valor, tope)) {
       estado.lectura = 'omitido_por_costo';
@@ -174,18 +176,22 @@ export async function ejecutarJob(jobId: string): Promise<void> {
         estado.lectura = 'ok';
       } catch (e) {
         estado.lectura = 'fallo';
+        errorLectura = e;
         console.error(`[${jobId}] lectura:`, e);
       }
     }
   }
 
-  // Se arma el resultado marcando como vacías las etapas sin datos
-  const datos = Object.fromEntries(ETAPAS.map((e) => [
+  // Se arma el resultado marcando como vacías las etapas sin datos. La
+  // lectura es aparte: `entradaLectura` decide si se omite del todo.
+  const datos: Record<string, unknown> = Object.fromEntries(ETAPAS.filter((e) => e !== 'lectura').map((e) => [
     e,
     resultados[e]
       ? { estado: 'ok', datos: resultados[e] }
       : { estado: 'vacio', razon: razonDeVacio(estado[e]) },
   ]));
+  const entrada = entradaLectura(estado.lectura, resultados.lectura, errorLectura);
+  if (entrada) datos.lectura = entrada;
 
   const previas = await db.select().from(researchResults).where(eq(researchResults.clientId, job.clientId));
   await db.insert(researchResults).values({
@@ -205,4 +211,25 @@ function razonDeVacio(estado: string | undefined): string {
   if (estado === 'fallo') return 'El agente no devolvió datos válidos tras dos intentos.';
   if (estado === 'omitido_por_costo') return 'Se alcanzó el tope de costo antes de ejecutar esta etapa.';
   return 'Esta etapa no se ejecutó.';
+}
+
+export type EntradaLectura = { estado: 'ok'; datos: unknown } | { estado: 'vacio'; razon: string } | undefined;
+
+/**
+ * Qué guardar en `datos.lectura`, a diferencia de las demás etapas. Un
+ * fallo transitorio (saldo, red, 5xx) no se guarda como «vacío»: se omite
+ * la clave para que `necesitaLectura` la reintente en el siguiente arranque
+ * en vez de darla por perdida. Un fallo por respuesta inválida (jerga,
+ * cifra inventada, JSON roto) sí es definitivo y se guarda como vacío, igual
+ * que `omitido_por_costo` en las demás etapas no lo es aquí: correr al
+ * cliente le puede tocar el tope de un job ajeno, así que también se omite.
+ */
+export function entradaLectura(estadoLectura: string | undefined, datosLectura: unknown, error: unknown): EntradaLectura {
+  if (datosLectura) return { estado: 'ok', datos: datosLectura };
+  if (estadoLectura === 'omitido_por_costo') return undefined;
+  if (estadoLectura === 'fallo') {
+    return esRespuestaInvalida(error) ? { estado: 'vacio', razon: razonDeVacio(estadoLectura) } : undefined;
+  }
+  // No se intentó (sin datos previos que leer, o ni siquiera era la etapa pendiente): igual que antes.
+  return { estado: 'vacio', razon: razonDeVacio(estadoLectura) };
 }

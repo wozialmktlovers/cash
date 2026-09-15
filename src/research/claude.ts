@@ -24,6 +24,16 @@ export function extraerJson(texto: string): unknown {
 /** Cuántas veces se reanuda un turno pausado por la búsqueda web antes de rendirse. */
 const MAX_PAUSAS = 6;
 
+/**
+ * Prefijos exactos de los dos errores que significan «esta respuesta no
+ * sirve, no tiene caso reintentarla mañana» (a diferencia de un error de
+ * saldo o de red, que sí puede resolverse solo). Se exportan para que
+ * `esRespuestaInvalida` en `convertir-lecturas.ts` los reconozca por el
+ * mismo texto que lanza esta función, en vez de duplicar la cadena a mano.
+ */
+export const MENSAJE_JSON_INVALIDO = 'El modelo no devolvió JSON válido tras dos intentos.';
+export const MENSAJE_DECLINO = 'El modelo declinó la petición';
+
 export async function pedirJson<T>(opts: {
   modelo: string;
   sistema: string;
@@ -102,7 +112,7 @@ export async function pedirJson<T>(opts: {
 
     if (res.stop_reason === 'refusal') {
       throw new Error(
-        `El modelo declinó la petición (${res.stop_details?.category ?? 'sin categoría'}).`,
+        `${MENSAJE_DECLINO} (${res.stop_details?.category ?? 'sin categoría'}).`,
       );
     }
 
@@ -123,5 +133,5 @@ export async function pedirJson<T>(opts: {
     }
   }
 
-  throw new Error(`El modelo no devolvió JSON válido tras dos intentos. Último error: ${ultimoError}`);
+  throw new Error(`${MENSAJE_JSON_INVALIDO} Último error: ${ultimoError}`);
 }

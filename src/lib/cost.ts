@@ -20,3 +20,20 @@ export function calcularCosto(modelo: string, entrada: number, salida: number): 
   const usd = (entrada / 1_000_000) * t.entrada + (salida / 1_000_000) * t.salida;
   return Math.round(usd * 10_000) / 10_000;
 }
+
+/**
+ * Lee un tope de costo (en USD) de una variable de entorno. Si no está
+ * definida, no es un número o no es positiva, se usa el valor por defecto y
+ * se avisa: un tope inválido no debe tumbar el job (NaN nunca supera nada,
+ * así que sin esta guarda un typo deja el gasto sin límite) ni impedir que
+ * arranque (por eso no se lanza un error).
+ */
+export function leerTopeUsd(valor: string | undefined, porDefecto: number, nombre: string): number {
+  if (valor === undefined || valor === '') return porDefecto;
+  const n = Number(valor);
+  if (!Number.isFinite(n) || n <= 0) {
+    console.warn(`[costo] ${nombre}="${valor}" no es un número positivo; se usa ${porDefecto}.`);
+    return porDefecto;
+  }
+  return n;
+}

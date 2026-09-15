@@ -2,7 +2,8 @@ import { eq } from 'drizzle-orm';
 import { db, researchResults, clients, clientLinks, clientFiles } from '@/db';
 import { armarContexto } from './contexto';
 import { correrLectura, type PreviosLectura } from './agents/lectura';
-import { calcularCosto } from '@/lib/cost';
+import { calcularCosto, leerTopeUsd } from '@/lib/cost';
+import { MENSAJE_JSON_INVALIDO, MENSAJE_DECLINO } from './claude';
 
 const ORIGINALES = ['competencia', 'audiencia', 'canales', 'mercado', 'sintesis'] as const;
 
@@ -20,10 +21,12 @@ export function necesitaLectura(datos: unknown): boolean {
 /**
  * La respuesta llegó pero no sirve: no mejora reintentándola mañana. Cualquier
  * otro error (saldo, red, 5xx) sí puede resolverse solo, así que se reintenta.
+ * Los dos prefijos vienen de `claude.ts`, que es quien de verdad lanza estos
+ * errores: así el texto nunca se desalinea entre las dos partes.
  */
 export function esRespuestaInvalida(error: unknown): boolean {
   const m = error instanceof Error ? error.message : '';
-  return m.includes('no devolvió JSON válido') || m.includes('declinó');
+  return m.includes(MENSAJE_JSON_INVALIDO) || m.includes(MENSAJE_DECLINO);
 }
 
 export function previosDesde(datos: unknown): PreviosLectura {
@@ -40,7 +43,7 @@ export async function convertirLecturasPendientes(opciones: {
   log?: (m: string) => void;
 } = {}) {
   const correr = opciones.correr ?? correrLectura;
-  const tope = opciones.tope ?? Number(process.env.COST_LIMIT_CONVERSION_USD || 10);
+  const tope = opciones.tope ?? leerTopeUsd(process.env.COST_LIMIT_CONVERSION_USD, 10, 'COST_LIMIT_CONVERSION_USD');
   const modelo = opciones.modelo ?? (process.env.MODEL_SYNTHESIS || 'claude-opus-5');
   const log = opciones.log ?? ((m: string) => console.log(m));
 

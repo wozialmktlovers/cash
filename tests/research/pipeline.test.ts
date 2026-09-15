@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { decidirEtapasPendientes, superaTope, repartirPorTope, ETAPAS, hayDatosParaLectura } from '@/research/pipeline';
+import { decidirEtapasPendientes, superaTope, repartirPorTope, ETAPAS, hayDatosParaLectura, entradaLectura } from '@/research/pipeline';
+import { MENSAJE_JSON_INVALIDO, MENSAJE_DECLINO } from '@/research/claude';
 
 describe('reanudación', () => {
   it('omite las etapas ya completadas', () => {
@@ -93,5 +94,37 @@ describe('lectura para cliente', () => {
   it('no corre sin datos previos', () => {
     expect(hayDatosParaLectura({})).toBe(false);
     expect(hayDatosParaLectura({ lectura: {} })).toBe(false);
+  });
+});
+
+describe('entradaLectura: qué se guarda en datos.lectura', () => {
+  it('con datos, se guarda ok sin importar el estado', () => {
+    expect(entradaLectura('ok', { portada: {} }, undefined)).toEqual({ estado: 'ok', datos: { portada: {} } });
+  });
+
+  it('omitido_por_costo: se omite la clave para reintentar en el próximo job', () => {
+    expect(entradaLectura('omitido_por_costo', undefined, undefined)).toBeUndefined();
+  });
+
+  it('fallo por respuesta inválida (jerga, JSON roto, rechazo): se guarda vacío, es definitivo', () => {
+    const jsonInvalido = new Error(`${MENSAJE_JSON_INVALIDO} Último error: jerga`);
+    const declino = new Error(`${MENSAJE_DECLINO} (x).`);
+    expect(entradaLectura('fallo', undefined, jsonInvalido)).toEqual({
+      estado: 'vacio', razon: 'El agente no devolvió datos válidos tras dos intentos.',
+    });
+    expect(entradaLectura('fallo', undefined, declino)).toEqual({
+      estado: 'vacio', razon: 'El agente no devolvió datos válidos tras dos intentos.',
+    });
+  });
+
+  it('fallo transitorio (saldo, red, 5xx): se omite la clave para reintentar', () => {
+    expect(entradaLectura('fallo', undefined, new Error('400 credit balance is too low'))).toBeUndefined();
+    expect(entradaLectura('fallo', undefined, new Error('fetch failed'))).toBeUndefined();
+  });
+
+  it('no se intentó (sin estado): se guarda vacío, igual que antes', () => {
+    expect(entradaLectura(undefined, undefined, undefined)).toEqual({
+      estado: 'vacio', razon: 'Esta etapa no se ejecutó.',
+    });
   });
 });
