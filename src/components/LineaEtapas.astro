@@ -89,9 +89,15 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'manual_campan
                 if (b.id === 'generar-growth') return <button type="button" class="btn chico" data-generar-growth data-etapa-id={t.etapaId}>{ETIQUETA_BOTON['generar-growth']}</button>;
                 if (b.id === 'iniciar') return <button type="button" class="btn chico" data-accion="iniciar" data-etapa-id={t.etapaId}>{ETIQUETA_BOTON.iniciar}</button>;
                 if (b.id === 'solicitar') return (
-                  <button type="button" class="btn chico" data-accion="solicitar" data-etapa-id={t.etapaId} disabled={b.disabled} title={b.disabled ? b.razon : undefined}>
-                    {ETIQUETA_BOTON.solicitar}
-                  </button>
+                  <>
+                    <button type="button" class="btn chico" data-accion="solicitar" data-etapa-id={t.etapaId} disabled={b.disabled} title={b.disabled ? b.razon : undefined}>
+                      {ETIQUETA_BOTON.solicitar}
+                    </button>
+                    {/* Fix menores, punto 4: la razón de un botón deshabilitado no puede
+                        depender solo de `title` (invisible en celular, sin hover) — se
+                        repite como texto secundario visible bajo el botón. */}
+                    {b.disabled && <p class="secundario etapa-razon-deshabilitado">{b.razon}</p>}
+                  </>
                 );
                 if (b.id === 'aprobar') return (
                   <button type="button" class="btn chico" data-abrir="aprobar" data-etapa-id={t.etapaId} data-etapa-nombre={NOMBRE_ETAPA[t.etapa]}>
@@ -202,4 +208,8 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'manual_campan
   .etiqueta.verde { background: var(--verde-s); color: var(--verde); }
   .etapa-proximamente { margin-top: 2px; }
   .etapa-botones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  /* La razón de un botón deshabilitado (fix menores, punto 4) va en su
+     propio renglón dentro de la fila de botones, sin repartirse el ancho
+     con el resto. */
+  .etapa-razon-deshabilitado { flex-basis: 100%; margin: 0; }
 </style>

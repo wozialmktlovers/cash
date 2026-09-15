@@ -549,6 +549,11 @@ dialog::backdrop { background: rgba(17, 16, 23, 0.45); backdrop-filter: blur(3px
 }
 .campana-item:hover { background: var(--gris); }
 .campana-item[data-leida="false"] { background: var(--rosa-s); }
+/* Fix menores, punto 4: sin esta regla, `[data-leida="false"]` y `:hover`
+   empatan en especificidad y gana el orden de la hoja (la de arriba), así
+   que un aviso no leído se veía exactamente igual en reposo que al pasar el
+   mouse — sin ninguna señal de que también responde al hover. */
+.campana-item[data-leida="false"]:hover { background: color-mix(in srgb, var(--rosa-s), var(--gris) 45%); }
 .campana-titulo { font: var(--t-small); font-weight: 600; color: var(--tinta); }
 .campana-texto { font: var(--t-small); color: var(--suave); }
 .campana-panel .nota { padding: 16px 8px; color: var(--suave); font: var(--t-small); text-align: center; }

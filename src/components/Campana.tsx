@@ -58,8 +58,20 @@ export default function Campana() {
 
   useEffect(() => {
     if (!abierto) return;
+    // Un solo GET al abrirse (fix menores, punto 4): la lista se pide aquí,
+    // nunca en el mismo efecto que el sondeo de conteo de arriba, así que
+    // abrir el panel no dispara dos peticiones a /api/notificaciones.
     void cargarLista();
   }, [abierto, cargarLista]);
+
+  // Fix menores, punto 4: mueve el foco al panel al abrirse (antes se
+  // quedaba en el botón, así que un lector de pantalla no anunciaba que se
+  // abrió nada). Se enfoca el contenedor del panel, no un elemento de la
+  // lista: los avisos todavía pueden estar cargando en ese instante.
+  useEffect(() => {
+    if (!abierto) return;
+    panel.current?.focus();
+  }, [abierto]);
 
   useEffect(() => {
     if (!abierto) return;
@@ -132,7 +144,7 @@ export default function Campana() {
       </button>
 
       {abierto && (
-        <div ref={panel} id="campana-panel" className="campana-panel" role="dialog" aria-label="Avisos">
+        <div ref={panel} id="campana-panel" className="campana-panel" role="dialog" aria-label="Avisos" tabIndex={-1}>
           <div className="campana-encabezado">
             <strong>Avisos</strong>
             {noLeidas > 0 && (

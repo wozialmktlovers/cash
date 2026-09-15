@@ -1,5 +1,5 @@
 ---
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import { db, clienteEtapas, clients, users, comentarios } from '@/db';
@@ -38,10 +38,19 @@ type FilaEtapa = {
   cliente: string;
 };
 
+// Cuántos comentarios abiertos se listan de entrada (fix menores, punto 4):
+// el contador de la barra lateral (`contarPendientes`, src/lib/pendientes.ts)
+// suma TODOS los comentarios abiertos, sin límite, así que con más de este
+// número la lista de abajo se quedaba corta contra lo que el contador
+// prometía. `?comentarios=todos` levanta el límite para quien pida verlos.
+const LIMITE_COMENTARIOS = 10;
+const verTodosComentarios = Astro.url.searchParams.get('comentarios') === 'todos';
+
 let enRevision: (FilaEtapa & { operador: string | null })[] = [];
 let conCambios: FilaEtapa[] = [];
 let enProceso: FilaEtapa[] = [];
 let comentariosPendientes: { id: string; texto: string; creadoEn: Date; etapa: string; clientId: string; cliente: string }[] = [];
+let totalComentariosPendientes = 0;
 let conteoPorEtapa = new Map<string, number>();
 
 if (usuario.rol === 'admin') {
@@ -86,7 +95,9 @@ if (usuario.rol === 'admin') {
     .where(and(eq(clienteEtapas.estado, 'en_proceso'), contratada, cond))
     .orderBy(asc(clienteEtapas.actualizadoEn));
 
-  comentariosPendientes = await db
+  const condicionComentarios = and(eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe), contratada, cond);
+
+  const comentariosQuery = db
     .select({
       id: comentarios.id, texto: comentarios.texto, creadoEn: comentarios.creadoEn,
       etapa: clienteEtapas.etapa, clientId: clients.id, cliente: clients.nombre,
@@ -94,9 +105,19 @@ if (usuario.rol === 'admin') {
     .from(comentarios)
     .innerJoin(clienteEtapas, eq(clienteEtapas.id, comentarios.etapaId))
     .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
-    .where(and(eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe), contratada, cond))
-    .orderBy(desc(comentarios.creadoEn))
-    .limit(10);
+    .where(condicionComentarios)
+    .orderBy(desc(comentarios.creadoEn));
+  comentariosPendientes = verTodosComentarios ? await comentariosQuery : await comentariosQuery.limit(LIMITE_COMENTARIOS);
+
+  // Cuenta aparte (barata, sin traer filas) para saber si la lista de arriba
+  // se quedó corta y hay que ofrecer «Ver todos».
+  const [{ n: totalN }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(comentarios)
+    .innerJoin(clienteEtapas, eq(clienteEtapas.id, comentarios.etapaId))
+    .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+    .where(condicionComentarios);
+  totalComentariosPendientes = totalN;
 
   // Mismo conteo que usa la ficha del cliente (fix wave, punto 6): una sola
   // consulta agrupada, en vez de reimplementarla aquí con su propio filtro
@@ -195,8 +216,8 @@ if (usuario.rol === 'admin') {
         )}
       </div>
 
-      <div class="seccion">
-        <h2>Comentarios abiertos recientes</h2>
+      <div class="seccion" id="comentarios-abiertos">
+        <h2>Comentarios abiertos{verTodosComentarios ? '' : ' recientes'} {totalComentariosPendientes > 0 && <span class="secundario">({totalComentariosPendientes})</span>}</h2>
         {comentariosPendientes.length === 0 ? (
           <p class="vacio">No hay comentarios abiertos.</p>
         ) : (
@@ -213,6 +234,14 @@ if (usuario.rol === 'admin') {
                 </li>
               ))}
             </ul>
+            {/* Fix menores, punto 4: el contador de la barra lateral suma TODOS
+                los comentarios abiertos, pero la lista de arriba se corta en
+                `LIMITE_COMENTARIOS` — sin este enlace, un operador con más de
+                10 veía un número que nunca cuadraba con lo que la página
+                mostraba, sin forma de ver el resto. */}
+            {!verTodosComentarios && totalComentariosPendientes > comentariosPendientes.length && (
+              <a class="btn fantasma chico" href="/pendientes?comentarios=todos#comentarios-abiertos">Ver todos ({totalComentariosPendientes})</a>
+            )}
           </section>
         )}
       </div>
