@@ -29,13 +29,25 @@ describe('detectarJerga', () => {
     expect(detectarJerga(['target', 'TARGET'])).toEqual(['target']);
   });
   it('«CTA» no coincide con la abreviatura «Cta.» (cuenta)', () => {
+    // Fix de revisión (ronda 1 de M3): distinguir por mayúsculas, sobre el
+    // texto ORIGINAL — un lookahead negativo por el punto («no cuenta si
+    // sigue un punto») no servía, porque normalizar() ya había bajado tanto
+    // «CTA.» como «Cta.» al mismo `cta.` antes de que corriera. «Cta.»/«cta»
+    // (no todo en mayúsculas) nunca cuentan como jerga, sin importar lo que
+    // los siga.
     expect(detectarJerga('Revisa el estado de cuenta, Cta. 12345')).toEqual([]);
     expect(detectarJerga('Cta. de ahorro')).toEqual([]);
-    // Pero sigue detectando CTA de verdad, con o sin mayúsculas (detectarJerga
-    // devuelve el término tal como está en JERGA_PROHIBIDA, no el texto que lo
-    // disparó).
+    expect(detectarJerga('Deposita a la Cta. 12345')).toEqual([]);
+    expect(detectarJerga('la cta de ahorro')).toEqual([]);
+    // «CTA» sí cuenta en cuanto está TODO en mayúsculas, sin importar qué
+    // siga — incluido el punto de cierre de una oración («CTA.»), el caso
+    // que antes daba falso negativo por colapsar con «Cta.» al normalizar.
     expect(detectarJerga('Pon un CTA claro')).toEqual(['CTA']);
-    expect(detectarJerga('pon un cta claro')).toEqual(['CTA']);
+    expect(detectarJerga('Agrega un CTA. Que sea claro.')).toEqual(['CTA']);
+    expect(detectarJerga('Necesitas un CTA.')).toEqual(['CTA']);
+    // «cta» en minúsculas (sin ser la abreviatura de cuenta) tampoco cuenta:
+    // solo la forma TODO mayúsculas es la jerga real.
+    expect(detectarJerga('pon un cta claro')).toEqual([]);
   });
   it('la lista tiene los 29 términos del spec', () => {
     expect(JERGA_PROHIBIDA).toHaveLength(29);

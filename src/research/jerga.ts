@@ -21,14 +21,18 @@ const PATRONES = JERGA_PROHIBIDA.map((termino) => {
   // varios espacios seguidos (el modelo no siempre los normaliza) sigan
   // contando como el mismo término.
   const cuerpo = normalizar(termino).split(/\s+/).map(escaparRegex).join('\\s+');
-  // «CTA» no debe confundirse con la abreviatura «Cta.» (cuenta), que
-  // siempre lleva el punto pegado justo después: se excluye ese caso con un
-  // lookahead negativo, sin tocar el resto de los términos.
-  const noAbreviaturaCuenta = termino === 'CTA' ? '(?!\\.)' : '';
-  return {
-    termino,
-    regex: new RegExp(`(^|[^\\p{L}\\p{N}])${cuerpo}${noAbreviaturaCuenta}(?=$|[^\\p{L}\\p{N}])`, 'u'),
-  };
+  const regexNormalizado = new RegExp(`(^|[^\\p{L}\\p{N}])${cuerpo}(?=$|[^\\p{L}\\p{N}])`, 'u');
+  // «CTA» se detecta aparte, sobre el texto ORIGINAL (sin normalizar) y
+  // sensible a mayúsculas — no sobre `todo`, que ya viene en minúsculas.
+  // Fix de revisión (ronda 1 de M3): un lookahead negativo por el punto
+  // («no cuenta si sigue un punto») no distingue «CTA.» (jerga real al
+  // cierre de una oración) de «Cta.» (abreviatura de «cuenta»), porque
+  // normalizar() ya bajó ambas a `cta.` antes de que el lookahead corriera.
+  // La única señal real es la mayúscula: «CTA» escrito TODO en mayúsculas,
+  // como palabra completa, cuenta sin importar qué siga (incluido el punto
+  // de cierre); «Cta.»/«cta» (no todo en mayúsculas) nunca cuentan.
+  const regexOriginal = termino === 'CTA' ? new RegExp('(^|[^\\p{L}\\p{N}])CTA(?=$|[^\\p{L}\\p{N}])', 'u') : null;
+  return { termino, regexNormalizado, regexOriginal };
 });
 
 /** Todos los textos de un valor anidado. Los números cuentan como texto: una cifra también es contenido. */
@@ -41,6 +45,9 @@ export function recogerTextos(valor: unknown, salida: string[] = []): string[] {
 }
 
 export function detectarJerga(valor: unknown): string[] {
-  const todo = normalizar(recogerTextos(valor).join('\n'));
-  return PATRONES.filter((p) => p.regex.test(todo)).map((p) => p.termino);
+  const crudo = recogerTextos(valor).join('\n');
+  const normalizado = normalizar(crudo);
+  return PATRONES
+    .filter((p) => (p.regexOriginal ? p.regexOriginal.test(crudo) : p.regexNormalizado.test(normalizado)))
+    .map((p) => p.termino);
 }
