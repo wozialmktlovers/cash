@@ -56,7 +56,7 @@ function tarjetaTema(t: Tema, pilarNum: number, subNombre: string, interna: bool
   const controles = interna
     ? `<div class="tema-controles">
         <label class="tema-elegir-envoltura">
-          <input type="checkbox" class="tema-elegir" aria-label="Elegir tema ${escapar(t.id)}"${estado !== 'pendiente' ? ' checked' : ''}>
+          <input type="checkbox" class="tema-elegir" title="Elegir tema" aria-label="Elegir tema ${escapar(t.id)}"${estado !== 'pendiente' ? ' checked' : ''}>
         </label>
         <button type="button" class="boton-estado" data-estado-actual="${estado}">${escapar(ETIQUETA_ESTADO[estado])}</button>
         <button type="button" class="boton-nota${av?.nota ? ' con-nota' : ''}" data-nota="${escapar(av?.nota ?? '')}" data-tema-titulo="${escapar(t.texto)}" aria-label="Nota del tema ${escapar(t.id)}" aria-haspopup="dialog">Nota</button>

@@ -299,6 +299,8 @@ export const SCRIPT_PILARES = `(function () {
   for (var e1 = 0; e1 < botonesEstado.length; e1++) {
     (function (boton) {
       boton.addEventListener('click', function () {
+        // En modo edición el clic es para escribir, no para cambiar el estado.
+        if (enModoEdicion() || enModoComentar()) return;
         var tarjeta = boton.closest('.tema-tarjeta');
         if (!tarjeta) return;
         var checkbox = tarjeta.querySelector('.tema-elegir');
@@ -312,9 +314,8 @@ export const SCRIPT_PILARES = `(function () {
   // desmarcarla vuelve a pendiente, con confirmación si el tema ya estaba
   // desarrollado o publicado (para no perder avance por un clic de más). En
   // modo edición o comentar no debe alternar: el modo Comentar ya intercepta
-  // el clic más arriba en la fase de captura (mismo mecanismo que protege al
-  // resto de los controles del banco), pero se guarda aquí también por si
-  // algún día una tarjeta se pinta sin el atributo data-ancla (anclas=false). ─
+  // el clic más arriba en la fase de captura; en modo edición esta guarda es la
+  // única protección. ─
   var casillasElegir = banco.querySelectorAll('.tema-elegir');
   for (var c1 = 0; c1 < casillasElegir.length; c1++) {
     (function (checkbox) {
@@ -370,6 +371,7 @@ export const SCRIPT_PILARES = `(function () {
     for (var n = 0; n < botonesNota.length; n++) {
       (function (boton) {
         boton.addEventListener('click', function () {
+          if (enModoEdicion() || enModoComentar()) return;
           var tarjeta = boton.closest('.tema-tarjeta');
           if (tarjeta) abrirNota(boton, tarjeta);
         });
@@ -401,7 +403,13 @@ export const SCRIPT_PILARES = `(function () {
       });
     });
     if (notaCerrar) notaCerrar.addEventListener('click', cerrarNota);
-    dialogoNota.addEventListener('keydown', function (e) { if (e.key === 'Escape') cerrarNota(); });
+    // Escape cierra solo la nota: no debe llegar al script de edición o
+    // comentarios, que lo leería como «salir del modo».
+    dialogoNota.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (e.stopPropagation) e.stopPropagation();
+      cerrarNota();
+    });
   }
 
   // ── Exportar CSV: mismas tarjetas que cuenta el contador (todas las que
