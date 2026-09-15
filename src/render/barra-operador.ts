@@ -7,7 +7,7 @@ export type OpcionesBarra = {
   clienteSlug: string;
   documentoId: string;
   version: number;
-  tipo: 'research' | 'growth';
+  tipo: 'research' | 'growth' | 'pilares';
   tokenActivo: string | null;
   base: string;
 };
@@ -24,7 +24,9 @@ export function barraOperador(o: OpcionesBarra): string {
   const url = o.tokenActivo ? `${o.base}/p/${o.clienteSlug}/${o.tokenActivo}` : '';
   const regenerar = o.tipo === 'growth'
     ? `/clientes/${escapar(o.clienteId)}`
-    : `/clientes/${escapar(o.clienteId)}/investigar`;
+    : o.tipo === 'pilares'
+      ? `/clientes/${escapar(o.clienteId)}/pilares`
+      : `/clientes/${escapar(o.clienteId)}/investigar`;
 
   // El envase fijo del manual de Growth, que hay que desplazar para que la
   // barra no lo tape.

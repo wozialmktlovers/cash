@@ -1,7 +1,7 @@
 import type { Fuente } from '@/research/schemas';
-import { escapar } from '@/render/escapar';
+import { escapar, lista, encabezadoSeccion } from '@/render/editorial/comunes';
 
-export { escapar };
+export { escapar, lista, encabezadoSeccion };
 
 /** Enlace a la fuente con el dominio visible. El href también viene del modelo. */
 export function fuente(f: Fuente): string {
@@ -13,19 +13,6 @@ export function fuente(f: Fuente): string {
   return `<a class="fuente" href="${escapar(seguro)}" target="_blank" rel="noopener noreferrer">${escapar(dominio)}</a>`;
 }
 
-export function lista(items: string[]): string {
-  if (!items.length) return '';
-  return `<ul class="lista">${items.map((i) => `<li>${escapar(i)}</li>`).join('')}</ul>`;
-}
-
 export function sinDatos(): string {
   return '<p class="sin-datos">No se obtuvo información sobre este tema.</p>';
-}
-
-/** Número grande, título y una línea de entrada: la jerarquía que faltaba entre secciones. */
-export function encabezadoSeccion(num: string, titulo: string, entrada: string): string {
-  return `<header class="seccion-cabeza aparece">
-    <span class="seccion-num">${escapar(num)}</span>
-    <div><h2>${escapar(titulo)}</h2><p class="entrada">${escapar(entrada)}</p></div>
-  </header>`;
 }
