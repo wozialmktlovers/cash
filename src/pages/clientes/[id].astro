@@ -1,9 +1,12 @@
 ---
 import { eq, desc } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
+import Icono from '@/components/Icono.astro';
 import LinksEditor from '@/components/LinksEditor';
 import FilesUploader from '@/components/FilesUploader';
 import { contarEtapasConDatos } from '@/lib/precheck';
+import { iniciales, tinte } from '@/lib/ui/cliente-visual';
+import { ETIQUETA_ESTADO } from '@/lib/ui/progreso';
 import { db, clients, clientLinks, clientFiles, researchJobs, researchResults, growthResults } from '@/db';
 
 const { id } = Astro.params;
@@ -13,338 +16,239 @@ if (!cliente) return new Response('Cliente no encontrado', { status: 404 });
 
 const enlaces = await db.select().from(clientLinks).where(eq(clientLinks.clientId, cliente.id));
 const archivos = await db.select().from(clientFiles).where(eq(clientFiles.clientId, cliente.id));
-const jobs = await db
-  .select()
-  .from(researchJobs)
-  .where(eq(researchJobs.clientId, cliente.id))
-  .orderBy(desc(researchJobs.createdAt));
-const resultados = await db
-  .select()
-  .from(researchResults)
-  .where(eq(researchResults.clientId, cliente.id));
-
-const manuales = await db
-  .select()
-  .from(growthResults)
-  .where(eq(growthResults.clientId, cliente.id))
-  .orderBy(desc(growthResults.version));
+const jobs = await db.select().from(researchJobs).where(eq(researchJobs.clientId, cliente.id)).orderBy(desc(researchJobs.createdAt));
+const resultados = await db.select().from(researchResults).where(eq(researchResults.clientId, cliente.id));
+const manuales = await db.select().from(growthResults).where(eq(growthResults.clientId, cliente.id)).orderBy(desc(growthResults.version));
 
 const resultadoPorJob = new Map(resultados.map((r) => [r.jobId, r.id]));
 const manualPorJob = new Map(manuales.map((m) => [m.jobId, m.id]));
 
-// El manual de campaña parte de la investigación: sin una completada no hay
-// nada sobre lo que razonar, así que el botón se ofrece deshabilitado con su
-// razón en vez de dejar encolar un job que va a fallar.
+// El manual de campaña parte de la investigación: sin una con datos no hay
+// nada sobre lo que razonar, así que la tarjeta explica por qué no se puede.
 const puedeGrowth = resultados.some((r) => contarEtapasConDatos(r.datos) > 0);
 
-const dinero = (n: number) =>
-  n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+const ultimaInvestigacion = jobs.find((j) => j.tipo !== 'growth');
+const ultimoGrowth = jobs.find((j) => j.tipo === 'growth');
 
-const fechaHora = (d: Date) =>
-  d.toLocaleString('es-MX', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-const conTexto = archivos.filter((a) => a.estadoExtraccion === 'ok').length;
+const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 ---
 
-<Base titulo={cliente.nombre} migas={`Clientes › ${cliente.nombre}`}>
-  <div class="encabezado">
-    <div>
+<Base titulo={cliente.nombre} activo="clientes" volver={{ href: '/clientes', texto: 'Clientes' }}>
+  <div class="ficha-cabeza">
+    <span class={`avatar grande ${tinte(cliente.id)}`}>{iniciales(cliente.nombre)}</span>
+    <div class="ficha-titulo">
       <h1>{cliente.nombre}</h1>
-      <p class="sub">{cliente.giro} · {cliente.producto}</p>
+      <p class="sub">{cliente.giro}{cliente.ciudad ? ` · ${cliente.ciudad}` : ''}</p>
     </div>
-    <div class="acciones" style="margin-top:0">
-      <a href={`/clientes/${cliente.id}/investigar`} class="btn">Investigar</a>
-      {puedeGrowth ? (
-        <button type="button" class="btn" id="generar-growth">Generar manual de campaña</button>
-      ) : (
-        <button type="button" class="btn" disabled
-          title="Este cliente aún no tiene una investigación con datos. El manual de campaña parte de ella, y una investigación que falló entera no sirve de base.">
-          Generar manual de campaña
-        </button>
-      )}
-      <button type="button" class="btn peligro" id="borrar">Eliminar</button>
-      <span id="confirmar-borrado" class="confirmar" hidden>
-        <span class="ayuda">Se borran también enlaces, archivos e investigaciones.</span>
-        <button type="button" class="btn peligro chico" id="borrar-de-verdad">
-          Sí, eliminar
-        </button>
-        <button type="button" class="btn fantasma chico" id="cancelar-borrado">Cancelar</button>
-      </span>
+    <div class="menu">
+      <button type="button" class="icono-btn" id="menu-boton" aria-haspopup="true" aria-expanded="false" aria-controls="menu-lista" aria-label="Más acciones">
+        <Icono nombre="puntos" />
+      </button>
+      <ul class="menu-lista" id="menu-lista" hidden>
+        <li><button type="button" id="borrar">Eliminar cliente</button></li>
+      </ul>
     </div>
   </div>
 
-  <!-- 1 · Datos -->
-  <section class="tarjeta">
-    <h2>Datos del cliente</h2>
-    <p class="sub">Se envían íntegros al pipeline de investigación.</p>
+  <div class="rejilla" style="margin-top:24px">
+    <section class="tarjeta accion">
+      <span class="icono-tinte" style="background:var(--rosa-s);color:var(--rosa)"><Icono nombre="investigar" /></span>
+      <h3>Investigar</h3>
+      <p class="secundario">Social Research</p>
+      <p class="secundario">
+        {ultimaInvestigacion
+          ? `Última: ${fecha(ultimaInvestigacion.createdAt)} · ${dinero(Number(ultimaInvestigacion.costoUsd))}`
+          : 'Nunca investigado'}
+      </p>
+      <a href={`/clientes/${cliente.id}/investigar`} class="btn">Investigar</a>
+    </section>
 
+    <section class="tarjeta accion">
+      <span class="icono-tinte" style="background:var(--azul-s);color:var(--azul)"><Icono nombre="megafono" /></span>
+      <h3>Manual de campaña</h3>
+      <p class="secundario">Growth</p>
+      {puedeGrowth ? (
+        <p class="secundario">{ultimoGrowth ? `Último: ${fecha(ultimoGrowth.createdAt)} · ${dinero(Number(ultimoGrowth.costoUsd))}` : 'Listo para generarse'}</p>
+      ) : (
+        <p class="secundario">Requiere una investigación con datos. El manual parte de ella.</p>
+      )}
+      <button type="button" class="btn" id="generar-growth" disabled={!puedeGrowth}>Generar</button>
+    </section>
+  </div>
+
+  <div class="pestanas" role="tablist" aria-label="Secciones del cliente">
+    <button type="button" role="tab" id="tab-datos" aria-controls="panel-datos" data-pestana="datos" aria-selected="true">Datos</button>
+    <button type="button" role="tab" id="tab-enlaces" aria-controls="panel-enlaces" data-pestana="enlaces" aria-selected="false" tabindex="-1">Enlaces<span class="cuenta">{enlaces.length}</span></button>
+    <button type="button" role="tab" id="tab-archivos" aria-controls="panel-archivos" data-pestana="archivos" aria-selected="false" tabindex="-1">Archivos<span class="cuenta">{archivos.length}</span></button>
+    <button type="button" role="tab" id="tab-historial" aria-controls="panel-historial" data-pestana="historial" aria-selected="false" tabindex="-1">Historial<span class="cuenta">{jobs.length}</span></button>
+  </div>
+
+  <section class="tarjeta" role="tabpanel" id="panel-datos" aria-labelledby="tab-datos">
     <form id="forma">
-      <div class="aviso rosa" id="errores" hidden></div>
-
       <div class="campos">
-        <div class="campo">
-          <label for="nombre">Nombre <span class="req">*</span></label>
-          <input id="nombre" name="nombre" value={cliente.nombre} required />
-        </div>
-        <div class="campo">
-          <label for="giro">Giro <span class="req">*</span></label>
-          <input id="giro" name="giro" value={cliente.giro} required />
-        </div>
-        <div class="campo ancho">
-          <label for="producto">Producto o servicio <span class="req">*</span></label>
-          <input id="producto" name="producto" value={cliente.producto} required />
-        </div>
-        <div class="campo">
-          <label for="ciudad">Ciudad</label>
-          <input id="ciudad" name="ciudad" value={cliente.ciudad ?? ''} />
-        </div>
-        <div class="campo">
-          <label for="ticket">Ticket</label>
-          <input id="ticket" name="ticket" value={cliente.ticket ?? ''} />
-        </div>
-        <div class="campo ancho">
-          <label for="contacto">Contacto</label>
-          <input id="contacto" name="contacto" value={cliente.contacto ?? ''} />
-        </div>
-        <div class="campo ancho">
-          <label for="notas">Notas del operador</label>
-          <textarea id="notas" name="notas">{cliente.notas ?? ''}</textarea>
-        </div>
+        <div class="campo"><label for="nombre">Nombre <span class="req">*</span></label><input id="nombre" name="nombre" value={cliente.nombre} required /></div>
+        <div class="campo"><label for="giro">Giro <span class="req">*</span></label><input id="giro" name="giro" value={cliente.giro} required /></div>
+        <div class="campo ancho"><label for="producto">Producto o servicio <span class="req">*</span></label><input id="producto" name="producto" value={cliente.producto} required /></div>
+        <div class="campo"><label for="ciudad">Ciudad</label><input id="ciudad" name="ciudad" value={cliente.ciudad ?? ''} /></div>
+        <div class="campo"><label for="ticket">Ticket</label><input id="ticket" name="ticket" value={cliente.ticket ?? ''} /></div>
+        <div class="campo ancho"><label for="contacto">Contacto</label><input id="contacto" name="contacto" value={cliente.contacto ?? ''} /></div>
+        <div class="campo ancho"><label for="notas">Notas del operador</label><textarea id="notas" name="notas">{cliente.notas ?? ''}</textarea></div>
       </div>
-
-      <div class="acciones">
-        <button type="submit" class="btn" id="guardar">Guardar cambios</button>
-        <span class="ayuda" id="estado"></span>
-      </div>
+      <div class="acciones"><button type="submit" class="btn" id="guardar">Guardar cambios</button></div>
     </form>
   </section>
 
-  <!-- 2 · Enlaces -->
-  <section class="tarjeta">
-    <h2>Enlaces</h2>
-    <p class="sub">Sitio, redes y páginas de venta. La investigación los revisa.</p>
+  <section class="tarjeta" role="tabpanel" id="panel-enlaces" aria-labelledby="tab-enlaces" hidden>
+    <p class="sub" style="margin:0 0 16px">Sitio, redes y páginas de venta. La investigación los revisa.</p>
     <LinksEditor client:load clientId={cliente.id} iniciales={enlaces} />
   </section>
 
-  <!-- 3 · Archivos -->
-  <section class="tarjeta">
-    <h2>Archivos</h2>
-    <p class="sub">
-      PDF, DOCX, TXT e imágenes. Se extrae el texto para alimentar la investigación.
-    </p>
-    <FilesUploader
-      client:load
-      clientId={cliente.id}
-      iniciales={archivos.map((a) => ({
-        id: a.id,
-        nombreOriginal: a.nombreOriginal,
-        mime: a.mime,
-        bytes: a.bytes,
-        estadoExtraccion: a.estadoExtraccion,
-      }))}
-    />
+  <section class="tarjeta" role="tabpanel" id="panel-archivos" aria-labelledby="tab-archivos" hidden>
+    <p class="sub" style="margin:0 0 16px">PDF, DOCX, TXT e imágenes. Se extrae el texto para alimentar la investigación.</p>
+    <FilesUploader client:load clientId={cliente.id}
+      iniciales={archivos.map((a) => ({ id: a.id, nombreOriginal: a.nombreOriginal, mime: a.mime, bytes: a.bytes, estadoExtraccion: a.estadoExtraccion }))} />
   </section>
 
-  <!-- 4 · Investigaciones -->
-  <section class="tarjeta">
-    <h2>Investigaciones</h2>
-    <p class="sub">
-      {
-        jobs.length === 0
-          ? 'Este cliente no tiene investigaciones todavía.'
-          : `${jobs.length} ${jobs.length === 1 ? 'investigación' : 'investigaciones'}. ${conTexto} ${conTexto === 1 ? 'archivo aporta' : 'archivos aportan'} texto.`
-      }
-    </p>
-
-    {
-      jobs.length === 0 ? (
-        <div class="vacio">
-          <strong>Todavía no investigas a este cliente</strong>
-          Revisa que los enlaces y archivos estén completos antes de lanzar.
-        </div>
-      ) : (
-        <div class="tabla-envoltura">
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Estado</th>
-                <th>Costo</th>
-                <th>Tipo</th>
-                <th>Resultado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.map((j) => (
-                <tr>
-                  <td>{fechaHora(j.createdAt)}</td>
-                  <td>{j.tipo === 'growth' ? 'Campaña' : 'Investigación'}</td>
-                  <td>
-                    <span class={`etiqueta ${j.estado}`}>{j.estado}</span>
-                    {j.error && <div class="secundario">{j.error}</div>}
-                  </td>
-                  <td>{dinero(Number(j.costoUsd))}</td>
-                  <td>
-                    {manualPorJob.has(j.id) ? (
-                      <a href={`/growth/${manualPorJob.get(j.id)}`} class="principal">
-                        Ver manual de campaña
-                      </a>
-                    ) : resultadoPorJob.has(j.id) ? (
-                      <a href={`/resultados/${resultadoPorJob.get(j.id)}`} class="principal">
-                        Ver presentación
-                      </a>
-                    ) : (
-                      <a href={`/jobs/${j.id}`} class="secundario">
-                        Ver progreso
-                      </a>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )
-    }
+  <section class="tarjeta" role="tabpanel" id="panel-historial" aria-labelledby="tab-historial" hidden>
+    {jobs.length === 0 ? (
+      <div class="vacio">
+        <Icono nombre="investigar" />
+        <strong>Todavía no investigas a este cliente</strong>
+        Revisa que los enlaces y archivos estén completos antes de lanzar.
+      </div>
+    ) : (
+      <ul class="lista">
+        {jobs.map((j) => (
+          <li class="renglon">
+            <div class="cuerpo">
+              <strong>{j.tipo === 'growth' ? 'Manual de campaña' : 'Investigación'}</strong>
+              <p class="secundario">{fechaHora(j.createdAt)} · <span class="cifra">{dinero(Number(j.costoUsd))}</span></p>
+              {j.error && <p class="secundario" style="color:var(--rojo)">{j.error}</p>}
+            </div>
+            <span class={`etiqueta ${j.estado}`}>{ETIQUETA_ESTADO[j.estado] ?? j.estado}</span>
+            {manualPorJob.has(j.id) ? (
+              <a href={`/growth/${manualPorJob.get(j.id)}`} class="btn fantasma chico">Ver manual</a>
+            ) : resultadoPorJob.has(j.id) ? (
+              <a href={`/resultados/${resultadoPorJob.get(j.id)}`} class="btn fantasma chico">Ver presentación</a>
+            ) : (
+              <a href={`/jobs/${j.id}`} class="btn fantasma chico">Ver progreso</a>
+            )}
+          </li>
+        ))}
+      </ul>
+    )}
   </section>
+
+  <dialog id="dialogo-borrar" aria-labelledby="borrar-titulo">
+    <h2 id="borrar-titulo">¿Eliminar a {cliente.nombre}?</h2>
+    <p class="sub" style="margin:10px 0 0">Se borran también enlaces, archivos e investigaciones. No se puede deshacer.</p>
+    <div class="acciones">
+      <button type="button" class="btn peligro lleno" id="borrar-de-verdad">Sí, eliminar</button>
+      <button type="button" class="btn fantasma" id="cancelar-borrado">Cancelar</button>
+    </div>
+  </dialog>
 </Base>
 
 <script>
-  const forma = document.getElementById('forma') as HTMLFormElement;
-  const errores = document.getElementById('errores') as HTMLElement;
-  const guardar = document.getElementById('guardar') as HTMLButtonElement;
-  const estado = document.getElementById('estado') as HTMLElement;
-  const borrar = document.getElementById('borrar') as HTMLButtonElement;
-  const id = window.location.pathname.split('/').pop();
+  import { toast } from '@/scripts/toast';
 
+  const clientId = window.location.pathname.split('/')[2];
+
+  // ── Pestañas: el hash conserva la pestaña al recargar o compartir el enlace.
+  const tabs = [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+  function mostrar(nombre: string, enfocar = false) {
+    const destino = tabs.find((t) => t.dataset.pestana === nombre) ?? tabs[0];
+    for (const t of tabs) {
+      const activa = t === destino;
+      t.setAttribute('aria-selected', String(activa));
+      t.tabIndex = activa ? 0 : -1;
+      (document.getElementById(t.getAttribute('aria-controls')!) as HTMLElement).hidden = !activa;
+    }
+    if (enfocar) destino.focus();
+  }
+  tabs.forEach((t, i) => {
+    t.addEventListener('click', () => { history.replaceState(null, '', `#${t.dataset.pestana}`); mostrar(t.dataset.pestana!); });
+    t.addEventListener('keydown', (e) => {
+      const paso = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+      if (!paso) return;
+      const siguiente = tabs[(i + paso + tabs.length) % tabs.length];
+      history.replaceState(null, '', `#${siguiente.dataset.pestana}`);
+      mostrar(siguiente.dataset.pestana!, true);
+    });
+  });
+  mostrar(location.hash.slice(1) || 'datos');
+
+  // ── Guardar datos
+  const forma = document.getElementById('forma') as HTMLFormElement;
+  const guardar = document.getElementById('guardar') as HTMLButtonElement;
   forma.addEventListener('submit', async (e) => {
     e.preventDefault();
-    errores.hidden = true;
-    estado.textContent = '';
     guardar.disabled = true;
-
-    const datos = Object.fromEntries(new FormData(forma).entries());
-
     try {
-      const res = await fetch(`/api/clientes/${id}`, {
+      const res = await fetch(`/api/clientes/${clientId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(datos),
+        body: JSON.stringify(Object.fromEntries(new FormData(forma).entries())),
       });
       const cuerpo = await res.json();
-
-      if (cuerpo.ok) {
-        estado.textContent = 'Guardado.';
-      } else {
-        errores.textContent = (cuerpo.errores ?? ['No se pudo guardar.']).join(' · ');
-        errores.hidden = false;
-      }
+      if (cuerpo.ok) toast('Cambios guardados');
+      else toast((cuerpo.errores ?? ['No se pudo guardar.']).join(' · '), 'error');
     } catch {
-      errores.textContent = 'No se pudo contactar al servidor.';
-      errores.hidden = false;
+      toast('No se pudo contactar al servidor.', 'error');
     }
-
     guardar.disabled = false;
   });
 
-  const confirmar = document.getElementById('confirmar-borrado') as HTMLElement;
-
-  borrar.addEventListener('click', () => {
-    confirmar.hidden = false;
-    borrar.hidden = true;
+  // ── Menú ⋯ y borrado en dos pasos
+  const menuBoton = document.getElementById('menu-boton') as HTMLButtonElement;
+  const menuLista = document.getElementById('menu-lista') as HTMLElement;
+  const dialogo = document.getElementById('dialogo-borrar') as HTMLDialogElement;
+  const cerrarMenu = () => { menuLista.hidden = true; menuBoton.setAttribute('aria-expanded', 'false'); };
+  menuBoton.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const abrir = menuLista.hidden;
+    menuLista.hidden = !abrir;
+    menuBoton.setAttribute('aria-expanded', String(abrir));
+  });
+  document.addEventListener('click', cerrarMenu);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarMenu(); });
+  document.getElementById('borrar')!.addEventListener('click', () => { cerrarMenu(); dialogo.showModal(); });
+  document.getElementById('cancelar-borrado')!.addEventListener('click', () => dialogo.close());
+  document.getElementById('borrar-de-verdad')!.addEventListener('click', async () => {
+    const res = await fetch(`/api/clientes/${clientId}`, { method: 'DELETE' });
+    if (res.ok) window.location.href = '/clientes';
+    else toast('No se pudo eliminar el cliente.', 'error');
   });
 
-  document.getElementById('cancelar-borrado')?.addEventListener('click', () => {
-    confirmar.hidden = true;
-    borrar.hidden = false;
-  });
-
-  document.getElementById('borrar-de-verdad')?.addEventListener('click', async () => {
-    const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
-    if (res.ok) window.location.href = '/';
-  });
-</script>
-
-<style>
-  .lista {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .lista li {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--glass);
-    font-size: 14px;
-    overflow-wrap: anywhere;
-  }
-
-  .lista a {
-    color: var(--mid);
-    text-decoration: none;
-  }
-
-  .lista a:hover {
-    color: var(--pink);
-  }
-
-  .encabezado .acciones {
-    margin-top: 0;
-  }
-
-  /* El atributo hidden tiene que ganarle al display propio: sin esto la
-     confirmación de borrado se ve siempre, junto al botón que la dispara. */
-  .confirmar[hidden] { display: none !important; }
-
-  .confirmar {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
-
-  .confirmar .ayuda {
-    margin-top: 0;
-    max-width: 260px;
-  }
-</style>
-
-<script>
-  // Encola el manual de campaña. El botón solo existe si ya hay una
-  // investigación completada, pero el servidor lo vuelve a comprobar: la
-  // interfaz no es una garantía.
-  const boton = document.getElementById('generar-growth');
-  boton?.addEventListener('click', async () => {
-    const b = boton as HTMLButtonElement;
-    b.disabled = true;
-    const original = b.textContent;
-    b.textContent = 'Encolando…';
+  // ── Generar manual. El servidor vuelve a comprobar que haya investigación:
+  // la interfaz no es una garantía.
+  const growth = document.getElementById('generar-growth') as HTMLButtonElement;
+  growth.addEventListener('click', async () => {
+    growth.disabled = true;
+    const original = growth.textContent;
+    growth.textContent = 'Encolando…';
     try {
       const res = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId: location.pathname.split('/')[2], tipo: 'growth' }),
+        body: JSON.stringify({ clientId, tipo: 'growth' }),
       });
       const cuerpo = await res.json();
       if (cuerpo.ok) { location.href = `/jobs/${cuerpo.id}`; return; }
       if (cuerpo.jobId) { location.href = `/jobs/${cuerpo.jobId}`; return; }
-      alert(cuerpo.errores?.join('\n') ?? 'No se pudo encolar.');
+      toast((cuerpo.errores ?? ['No se pudo encolar.']).join(' · '), 'error');
     } catch {
-      alert('Sin conexión con el servidor.');
+      toast('Sin conexión con el servidor.', 'error');
     }
-    b.disabled = false;
-    b.textContent = original;
+    growth.disabled = false;
+    growth.textContent = original;
   });
 </script>
+
+<style>
+  .ficha-cabeza { display: flex; align-items: center; gap: 16px; }
+  .ficha-titulo { flex: 1; min-width: 0; }
+  .ficha-titulo h1 { overflow-wrap: anywhere; }
+</style>
