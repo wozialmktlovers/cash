@@ -216,7 +216,7 @@ a.tarjeta:hover { transform: translateY(-2px); border-color: color-mix(in srgb, 
 .avatar.azul { background: var(--azul-s); color: var(--azul); }
 .avatar.amarillo { background: var(--amarillo-s); color: var(--amarillo); }
 
-.cliente-tarjeta { display: flex; gap: 14px; align-items: flex-start; }
+.cliente-tarjeta { display: flex; gap: 18px; align-items: flex-start; }
 .cliente-tarjeta .cuerpo { min-width: 0; flex: 1; }
 .cliente-tarjeta h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cliente-tarjeta .pie { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; font: var(--t-small); }
