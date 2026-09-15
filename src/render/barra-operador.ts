@@ -1,4 +1,4 @@
-import { escapar } from '@/render/panels/comunes';
+import { escapar } from '@/render/escapar';
 
 export type OpcionesBarra = {
   clienteId: string;

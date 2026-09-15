@@ -1,11 +1,7 @@
 import type { Fuente } from '@/research/schemas';
+import { escapar } from '@/render/escapar';
 
-/** Toda cadena que venga del modelo pasa por aquí antes de tocar el HTML. */
-export function escapar(s: unknown): string {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
+export { escapar };
 
 /** Una etapa que no produjo datos se declara vacía con su razón. Nunca se rellena. */
 export function panelVacio(numero: string, titulo: string, razon: string): string {
