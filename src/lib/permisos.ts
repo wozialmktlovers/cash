@@ -2,8 +2,10 @@ export type Rol = 'admin' | 'operador' | 'cliente';
 export type UsuarioSesion = { id: string; email: string; nombre: string | null; apellido: string | null; rol: Rol; clientId: string | null; activo: boolean };
 
 // `/api/perfil` sirve a los tres roles: cada quien edita su nombre y apellido,
-// así que el cliente también necesita llegar a ella desde el portal.
-const RUTAS_CLIENTE = [/^\/portal(\/|$)/, /^\/api\/portal(\/|$)/, /^\/api\/comentarios(\/|$)/, /^\/api\/notificaciones(\/|$)/, /^\/api\/perfil$/, /^\/api\/logout$/, /^\/p\//];
+// así que el cliente también necesita llegar a ella desde el portal. Y con la
+// API no basta: `/perfil` es la página desde donde se llama, así que va aparte
+// en la lista (la API y la página son dos rutas distintas).
+const RUTAS_CLIENTE = [/^\/portal(\/|$)/, /^\/api\/portal(\/|$)/, /^\/api\/comentarios(\/|$)/, /^\/api\/notificaciones(\/|$)/, /^\/perfil$/, /^\/api\/perfil$/, /^\/api\/logout$/, /^\/p\//];
 const RUTAS_ADMIN = [/^\/admin(\/|$)/, /^\/api\/admin(\/|$)/];
 
 /** Reglas de ruta por rol. La visibilidad por cliente se decide después, en cada página. */

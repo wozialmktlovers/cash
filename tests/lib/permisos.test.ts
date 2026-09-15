@@ -31,6 +31,15 @@ describe('rutaPermitida', () => {
     expect(rutaPermitida('cliente', '/api/perfiles')).toBe('prohibido');
     expect(rutaPermitida('cliente', '/api/perfil/otro')).toBe('prohibido');
   });
+  it('la página /perfil la abren los tres roles', () => {
+    expect(rutaPermitida('admin', '/perfil')).toBe('ok');
+    expect(rutaPermitida('operador', '/perfil')).toBe('ok');
+    expect(rutaPermitida('cliente', '/perfil')).toBe('ok');
+  });
+  it('/perfil solo abre esa página, no lo que empiece igual', () => {
+    expect(rutaPermitida('cliente', '/perfiles')).toBe('redirigir-portal');
+    expect(rutaPermitida('cliente', '/perfil/otro')).toBe('redirigir-portal');
+  });
 });
 
 describe('visibilidad', () => {

@@ -7,6 +7,7 @@ import Icono from '@/components/Icono.astro';
 import TemaSwitch from '@/components/TemaSwitch.astro';
 import Campana from '@/components/Campana';
 import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
+import { nombreVisible } from '@/lib/usuarios';
 
 interface Props {
   titulo: string;
@@ -24,6 +25,13 @@ const { titulo, nombreEmpresa, vistaPrevia } = Astro.props;
 // esto, un clic en el logo perdía a quién se estaba previsualizando y caía
 // en la página «Elige un cliente desde su ficha».
 const hrefLogo = vistaPrevia ? `/portal?cliente=${vistaPrevia.clienteId}` : '/portal';
+
+// El portal no mostraba por ningún lado a quien tiene la sesión, así que un
+// cliente no tenía cómo llegar a /perfil: el nombre va ahora en la cabecera,
+// enlazado, entre la empresa y el resto de los controles. Es el nombre de la
+// sesión, no el del cliente que se está mirando: en vista previa (admin u
+// operador) es el de quien mira, igual que la campana de avisos.
+const usuario = Astro.locals.usuario;
 ---
 
 <html lang="es-MX">
@@ -57,6 +65,7 @@ const hrefLogo = vistaPrevia ? `/portal?cliente=${vistaPrevia.clienteId}` : '/po
             <img class="logo" src="/logo-wozial.png" alt="Wozial" width="545" height="194" />
           </a>
           <span class="portal-empresa">{nombreEmpresa}</span>
+          <a href="/perfil" class="portal-usuario" aria-label={`${nombreVisible(usuario)} · Mi perfil`}>{nombreVisible(usuario)}</a>
           <TemaSwitch />
           <Campana client:load />
           <form method="POST" action="/api/logout">
@@ -109,9 +118,25 @@ const hrefLogo = vistaPrevia ? `/portal?cliente=${vistaPrevia.clienteId}` : '/po
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
 
+  /* Mismo tono que `.usuario-nombre` del Studio: texto chico, sin azul de
+     enlace, subrayado solo al apuntarlo o con el teclado. Los 44 px de alto
+     son los del resto de la cabecera del portal, que se usa en celular. */
+  .portal-usuario {
+    flex-shrink: 0; max-width: 180px; display: inline-flex; align-items: center; min-height: 44px;
+    font: var(--t-small); font-weight: 600; color: var(--tinta); text-decoration: none;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .portal-usuario:hover, .portal-usuario:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+
   @media (max-width: 560px) {
     .portal-cabecera { gap: 6px; padding: 8px; }
+    /* Con la empresa fuera, el nombre toma el hueco y se recorta él: es el
+       único acceso del cliente a su perfil, así que no se esconde. El mínimo
+       de 90 px evita que la cabecera lo apriete hasta dejarlo ilegible; si
+       hace falta, algún control se va al segundo renglón (la cabecera ya
+       venía envolviendo a este ancho). */
     .portal-empresa { display: none; }
+    .portal-usuario { flex: 1; max-width: none; min-width: 90px; }
   }
 
   .portal-contenido {

@@ -1,0 +1,140 @@
+---
+// «Mi perfil»: cada quien edita su nombre y su apellido, con el correo a la
+// vista pero de solo lectura (cambiarlo es cosa de un admin, ver
+// `PATCH /api/perfil`). La abren los tres roles: `rutaPermitida` deja pasar
+// `/perfil` también al cliente.
+import Base from '@/layouts/Base.astro';
+import PortalBase from '@/layouts/PortalBase.astro';
+import { eq } from 'drizzle-orm';
+import { db, clients } from '@/db';
+
+const usuario = Astro.locals.usuario;
+const esCliente = usuario.rol === 'cliente';
+
+// El cliente no debe ver la barra interna del Studio, así que su perfil vive
+// dentro del layout del portal. PortalBase pide `nombreEmpresa` para su
+// cabecera: aquí no hay un cliente «que se esté mirando» como en /portal, así
+// que se busca el de su propia empresa. Si su cuenta no tiene empresa (dato
+// inconsistente que no debería pasar) la cabecera dice «Wozial», igual que
+// hace /portal cuando no encuentra al cliente.
+let nombreEmpresa = 'Wozial';
+if (esCliente && usuario.clientId) {
+  const [empresa] = await db
+    .select({ nombre: clients.nombre })
+    .from(clients)
+    .where(eq(clients.id, usuario.clientId))
+    .limit(1);
+  if (empresa) nombreEmpresa = empresa.nombre;
+}
+
+// El formulario es el mismo para todos; lo único que cambia es el layout que
+// lo envuelve y lo que cada uno pide, así que el componente se elige aquí en
+// vez de repetir la tarjeta dos veces.
+const Layout = esCliente ? PortalBase : Base;
+const propsLayout = esCliente
+  ? { titulo: 'Mi perfil', nombreEmpresa }
+  : { titulo: 'Mi perfil', volver: { href: '/', texto: 'Inicio' } };
+---
+
+<Layout {...propsLayout}>
+  <div class="encabezado">
+    <div>
+      <p class="eyebrow">Tu cuenta</p>
+      <h1>Mi perfil</h1>
+      <p class="sub">Con este nombre te ve el resto del Studio.</p>
+    </div>
+  </div>
+
+  <form class="tarjeta" id="forma">
+    <div class="campos">
+      <div class="campo">
+        <label for="nombre">Nombre</label>
+        <input id="nombre" name="nombre" maxlength="60" autocomplete="given-name" value={usuario.nombre ?? ''} />
+      </div>
+      <div class="campo">
+        <label for="apellido">Apellido</label>
+        <input id="apellido" name="apellido" maxlength="60" autocomplete="family-name" value={usuario.apellido ?? ''} />
+      </div>
+      <div class="campo ancho">
+        <label for="email">Correo</label>
+        <input id="email" value={usuario.email} readonly />
+        <p class="ayuda">Con este correo inicias sesión. Para cambiarlo, pídeselo a un admin.</p>
+      </div>
+    </div>
+
+    <div class="aviso rosa" id="errores" role="alert" hidden></div>
+
+    <div class="acciones">
+      <button type="submit" class="btn" id="guardar">Guardar cambios</button>
+    </div>
+  </form>
+</Layout>
+
+<script>
+  import { toast } from '@/scripts/toast';
+  import { nombreVisible } from '@/lib/usuarios';
+
+  const forma = document.getElementById('forma') as HTMLFormElement;
+  const errores = document.getElementById('errores') as HTMLElement;
+  const guardar = document.getElementById('guardar') as HTMLButtonElement;
+  const email = (document.getElementById('email') as HTMLInputElement).value;
+
+  // Los errores que puede devolver `PATCH /api/perfil` en esta pantalla. Los
+  // de tipo (`nombre-invalido`, `json-invalido`) no deberían salir de aquí,
+  // pero si salen vale más un texto claro que el código crudo.
+  const MENSAJES: Record<string, string> = {
+    'nombre-largo': 'El nombre es demasiado largo (máximo 60 caracteres).',
+    'apellido-largo': 'El apellido es demasiado largo (máximo 60 caracteres).',
+    'nombre-invalido': 'Ese nombre no es válido.',
+    'apellido-invalido': 'Ese apellido no es válido.',
+    'sin-cambios': 'No hay nada que guardar.',
+    'json-invalido': 'No se pudo guardar. Vuelve a intentarlo.',
+    'no-existe': 'Tu cuenta ya no existe. Vuelve a iniciar sesión.',
+  };
+
+  forma.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errores.hidden = true;
+    guardar.disabled = true;
+    guardar.textContent = 'Guardando…';
+
+    const datos = new FormData(forma);
+    try {
+      const res = await fetch('/api/perfil', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        // Se mandan siempre los dos: vacío significa «bórralo», y el servidor
+        // es quien recorta y decide.
+        body: JSON.stringify({
+          nombre: String(datos.get('nombre') ?? ''),
+          apellido: String(datos.get('apellido') ?? ''),
+        }),
+      });
+      const cuerpo = await res.json();
+
+      if (cuerpo.ok) {
+        toast('Datos actualizados');
+        // La cabecera la pintó el servidor con el nombre anterior; se refresca
+        // aquí para no recargar la página solo por eso.
+        const enCabecera = document.querySelector<HTMLElement>('.usuario-nombre, .portal-usuario');
+        if (enCabecera) enCabecera.textContent = nombreVisible({ ...cuerpo.usuario, email });
+      } else {
+        errores.textContent = MENSAJES[cuerpo.error] ?? 'No se pudo guardar.';
+        errores.hidden = false;
+      }
+    } catch {
+      errores.textContent = 'No se pudo contactar al servidor. Revisa tu conexión.';
+      errores.hidden = false;
+    }
+
+    guardar.disabled = false;
+    guardar.textContent = 'Guardar cambios';
+  });
+</script>
+
+<style>
+  /* El correo se muestra pero no se edita: se distingue de los campos vivos
+     por el color del texto, sin quitarle el foco para quien navega con
+     teclado ni el ancho de un campo normal. */
+  #email { color: var(--suave); }
+</style>

@@ -7,6 +7,7 @@ import Campana from '@/components/Campana';
 import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
 import { navegacionCompleta, itemsMenuMas } from '@/lib/ui/navegacion';
 import { contarPendientes } from '@/lib/pendientes';
+import { nombreVisible } from '@/lib/usuarios';
 
 type Seccion = 'inicio' | 'clientes' | 'entregables' | 'pendientes' | 'usuarios' | 'desempeno';
 
@@ -90,7 +91,9 @@ const masActivo = masItems.some((n) => n.clave === activo);
           <TemaSwitch />
           <Campana client:load />
           <div class="usuario-sesion">
-            <span class="usuario-nombre">{usuario.nombre ?? usuario.email}</span>
+            <!-- La etiqueta empieza con el mismo texto que se ve, para que
+                 quien maneja el navegador por voz pueda decir el nombre. -->
+            <a href="/perfil" class="usuario-nombre" aria-label={`${nombreVisible(usuario)} · Mi perfil`}>{nombreVisible(usuario)}</a>
             <span class="usuario-rol">{ETIQUETA_ROL[usuario.rol]}</span>
           </div>
           <form method="POST" action="/api/logout">
@@ -134,6 +137,11 @@ const masActivo = masItems.some((n) => n.clave === activo);
           </li>
         ))}
         <li>
+          <!-- En celular la cabecera esconde `.usuario-sesion`, así que este es
+               el único camino a /perfil para admin y operador. -->
+          <a href="/perfil" class="nav-item"><Icono nombre="usuarios" />Mi perfil</a>
+        </li>
+        <li>
           <form method="POST" action="/api/logout">
             <button type="submit" class="nav-item">Salir</button>
           </form>
@@ -145,6 +153,15 @@ const masActivo = masItems.some((n) => n.clave === activo);
     <div class="toasts" id="toasts"></div>
   </body>
 </html>
+
+<style>
+  /* El nombre de la cabecera ahora lleva a /perfil. Se ve igual que antes
+     (hereda color de `.usuario-nombre`): solo se subraya al apuntarlo o al
+     llegar con el teclado, para que se note que es un enlace sin meter un
+     azul que no es del Studio. */
+  a.usuario-nombre { text-decoration: none; }
+  a.usuario-nombre:hover, a.usuario-nombre:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+</style>
 
 <script>
   // Menú «Más» del celular: un <dialog> nativo da foco atrapado y cierre con
