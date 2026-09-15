@@ -5,17 +5,32 @@
 
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import {
-  db, clienteEtapas, etapaEventos, comentarios, documentoVersiones,
+  db, clients, clienteEtapas, etapaEventos, comentarios, documentoVersiones,
   researchResults, growthResults, pilaresResults,
 } from '@/db';
 import {
-  ETAPAS, aplicarAccion, dependenciasCumplidas, estadoTrasGenerar, tipoDocumentoDe, etapaDeTipo,
+  ETAPAS, NOMBRE_ETAPA, aplicarAccion, dependenciasCumplidas, estadoTrasGenerar, tipoDocumentoDe, etapaDeTipo,
   type Etapa, type Accion, type EtapaCliente, type TipoDocumento,
 } from './reglas';
 import { investigacionUtil } from '@/lib/precheck';
 import { clienteOperable } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
-import { notificar } from './avisos';
+import { avisarJob, avisarTransicion, type EventoAviso } from './avisos';
+
+/** Ruta interna para ver el documento vigente de una etapa (spec §3, Avisos: «enlace»). */
+function enlaceDocumento(tipo: TipoDocumento, documentoId: string): string {
+  if (tipo === 'growth') return `/growth/${documentoId}`;
+  if (tipo === 'pilares') return `/pilares/${documentoId}`;
+  return `/resultados/${documentoId}`;
+}
+
+/** Evento de aviso de cada acción que lo dispara; `iniciar` no avisa a nadie. */
+const EVENTO_POR_ACCION: Partial<Record<Accion, EventoAviso>> = {
+  solicitar: 'solicitud',
+  pedir_cambios: 'cambios_pedidos',
+  reabrir: 'reabierta',
+  aprobar: 'aprobada',
+};
 
 /** Tipo del `tx` que entrega `db.transaction`, reutilizado para pasar el mismo ejecutor a los helpers. */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -175,7 +190,7 @@ export async function registrarEntregable(
 ): Promise<void> {
   const etapa = etapaDeTipo(tipo);
 
-  const { etapaId } = await db.transaction(async (tx) => {
+  await db.transaction(async (tx) => {
     const fila = await obtenerOCrearEtapa(tx, clientId, etapa);
     const nuevoEstado = estadoTrasGenerar(fila.estado);
 
@@ -189,11 +204,20 @@ export async function registrarEntregable(
     await tx.insert(etapaEventos).values({
       etapaId: fila.id, accion: 'generado', de: fila.estado, a: nuevoEstado, usuarioId, comentario: null,
     });
-
-    return { etapaId: fila.id };
   });
 
-  if (usuarioId) await notificar([usuarioId], { tipo: 'entregable_generado', etapaId, clientId, documentoTipo: tipo, documentoId });
+  // El aviso va después de que la transacción cerró, y nunca espera: un
+  // fallo al avisar no debe tumbar el job que acaba de terminar.
+  if (usuarioId) {
+    const [clienteFila] = await db.select({ nombre: clients.nombre }).from(clients).where(eq(clients.id, clientId)).limit(1);
+    void avisarJob({
+      evento: 'entregable_generado',
+      creadoPor: usuarioId,
+      cliente: clienteFila?.nombre ?? 'Cliente',
+      etapa: NOMBRE_ETAPA[etapa],
+      enlace: enlaceDocumento(tipo, documentoId),
+    }).catch((e) => console.error('[avisos] entregable_generado:', e));
+  }
 }
 
 /**
@@ -323,6 +347,23 @@ export async function ejecutarTransicion(o: {
 
       return fresca;
     });
+
+    // El aviso va después de que la transacción cerró (nunca dentro), y sin
+    // esperarlo: un fallo al avisar no debe tumbar la respuesta de la transición.
+    const evento = EVENTO_POR_ACCION[accion];
+    if (evento) {
+      void avisarTransicion({
+        evento,
+        actorId: usuario.id,
+        clientId: cliente.id,
+        operadorId: cliente.operadorId,
+        etapaVisibleCliente: fila.contratada && !fila.interna,
+        cliente: cliente.nombre,
+        etapa: NOMBRE_ETAPA[fila.etapa],
+        autor: usuario.nombre ?? usuario.email,
+        enlace: `/clientes/${cliente.id}`,
+      }).catch((e) => console.error('[avisos] transicion:', e));
+    }
 
     return { ok: true, etapa: actualizada };
   } catch (e) {

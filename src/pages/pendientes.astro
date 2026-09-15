@@ -1,0 +1,217 @@
+---
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import Base from '@/layouts/Base.astro';
+import Icono from '@/components/Icono.astro';
+import { db, clienteEtapas, clients, users, comentarios } from '@/db';
+import { NOMBRE_ETAPA, type TipoDocumento } from '@/flujo/reglas';
+import { condicionClientes } from '@/lib/visibilidad';
+
+const usuario = Astro.locals.usuario;
+
+// El cliente nunca llega aquí: rutaPermitida lo manda a /portal antes de que
+// esta página se renderice (spec §6). Esta guarda es solo por si algún día
+// cambia esa regla y esta página queda huérfana de protección.
+if (usuario.rol === 'cliente') return Astro.redirect('/portal');
+
+function enlaceDocumento(tipo: TipoDocumento | null, documentoId: string | null, clientId: string): string {
+  if (tipo && documentoId) {
+    if (tipo === 'growth') return `/growth/${documentoId}`;
+    if (tipo === 'pilares') return `/pilares/${documentoId}`;
+    return `/resultados/${documentoId}`;
+  }
+  return `/clientes/${clientId}`;
+}
+
+const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
+
+type FilaEtapa = {
+  id: string;
+  etapa: (typeof clienteEtapas.$inferSelect)['etapa'];
+  actualizadoEn: Date;
+  documentoTipo: TipoDocumento | null;
+  documentoId: string | null;
+  clientId: string;
+  cliente: string;
+};
+
+let enRevision: (FilaEtapa & { operador: string | null })[] = [];
+let conCambios: FilaEtapa[] = [];
+let enProceso: FilaEtapa[] = [];
+let comentariosPendientes: { id: string; texto: string; creadoEn: Date; etapa: string; clientId: string; cliente: string }[] = [];
+let conteoPorEtapa = new Map<string, number>();
+
+if (usuario.rol === 'admin') {
+  enRevision = await db
+    .select({
+      id: clienteEtapas.id, etapa: clienteEtapas.etapa, actualizadoEn: clienteEtapas.actualizadoEn,
+      documentoTipo: clienteEtapas.documentoTipo, documentoId: clienteEtapas.documentoId,
+      clientId: clients.id, cliente: clients.nombre, operador: users.nombre,
+    })
+    .from(clienteEtapas)
+    .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+    .leftJoin(users, eq(users.id, clients.operadorId))
+    .where(eq(clienteEtapas.estado, 'en_revision'))
+    .orderBy(asc(clienteEtapas.actualizadoEn));
+} else {
+  const cond = condicionClientes(usuario);
+
+  conCambios = await db
+    .select({
+      id: clienteEtapas.id, etapa: clienteEtapas.etapa, actualizadoEn: clienteEtapas.actualizadoEn,
+      documentoTipo: clienteEtapas.documentoTipo, documentoId: clienteEtapas.documentoId,
+      clientId: clients.id, cliente: clients.nombre,
+    })
+    .from(clienteEtapas)
+    .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+    .where(and(eq(clienteEtapas.estado, 'con_cambios'), cond))
+    .orderBy(asc(clienteEtapas.actualizadoEn));
+
+  enProceso = await db
+    .select({
+      id: clienteEtapas.id, etapa: clienteEtapas.etapa, actualizadoEn: clienteEtapas.actualizadoEn,
+      documentoTipo: clienteEtapas.documentoTipo, documentoId: clienteEtapas.documentoId,
+      clientId: clients.id, cliente: clients.nombre,
+    })
+    .from(clienteEtapas)
+    .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+    .where(and(eq(clienteEtapas.estado, 'en_proceso'), cond))
+    .orderBy(asc(clienteEtapas.actualizadoEn));
+
+  comentariosPendientes = await db
+    .select({
+      id: comentarios.id, texto: comentarios.texto, creadoEn: comentarios.creadoEn,
+      etapa: clienteEtapas.etapa, clientId: clients.id, cliente: clients.nombre,
+    })
+    .from(comentarios)
+    .innerJoin(clienteEtapas, eq(clienteEtapas.id, comentarios.etapaId))
+    .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+    .where(and(eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe), cond))
+    .orderBy(desc(comentarios.creadoEn))
+    .limit(10);
+
+  const idsConCambios = conCambios.map((e) => e.id);
+  if (idsConCambios.length > 0) {
+    const conteos = await db
+      .select({ etapaId: comentarios.etapaId, n: sql<number>`count(*)::int` })
+      .from(comentarios)
+      .where(and(inArray(comentarios.etapaId, idsConCambios), eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe)))
+      .groupBy(comentarios.etapaId);
+    conteoPorEtapa = new Map(conteos.map((c) => [c.etapaId, c.n]));
+  }
+}
+---
+
+<Base titulo="Pendientes" activo="pendientes">
+  <div class="encabezado">
+    <div>
+      <h1>Pendientes</h1>
+      <p class="sub">
+        {usuario.rol === 'admin'
+          ? 'Etapas que esperan tu autorización.'
+          : 'Tus etapas con cambios pedidos, en preparación y comentarios abiertos.'}
+      </p>
+    </div>
+  </div>
+
+  {usuario.rol === 'admin' && (
+    enRevision.length === 0 ? (
+      <div class="tarjeta vacio">
+        <Icono nombre="vacio" />
+        <strong>No hay nada en revisión</strong>
+        Aparece aquí en cuanto alguien solicite autorización.
+      </div>
+    ) : (
+      <section class="tarjeta">
+        <div class="tabla-envoltura">
+          <table>
+            <thead>
+              <tr><th>Cliente</th><th>Etapa</th><th>Desde</th><th>Operador</th><th></th></tr>
+            </thead>
+            <tbody>
+              {enRevision.map((e) => (
+                <tr>
+                  <td>{e.cliente}</td>
+                  <td>{NOMBRE_ETAPA[e.etapa]}</td>
+                  <td>{fecha(e.actualizadoEn)}</td>
+                  <td>{e.operador ?? 'Sin asignar'}</td>
+                  <td><a class="btn fantasma chico" href={enlaceDocumento(e.documentoTipo, e.documentoId, e.clientId)}><Icono nombre="abrir" />Ver</a></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    )
+  )}
+
+  {usuario.rol === 'operador' && (
+    <>
+      <div class="seccion">
+        <h2>Con cambios pedidos</h2>
+        {conCambios.length === 0 ? (
+          <p class="vacio">No tienes etapas con cambios pedidos.</p>
+        ) : (
+          <section class="tarjeta">
+            <ul class="lista">
+              {conCambios.map((e) => {
+                const n = conteoPorEtapa.get(e.id) ?? 0;
+                return (
+                  <li class="renglon">
+                    <div class="cuerpo">
+                      <strong>{e.cliente}</strong>
+                      <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · desde {fecha(e.actualizadoEn)}{n > 0 ? ` · ${n} ${n === 1 ? 'comentario abierto' : 'comentarios abiertos'}` : ''}</p>
+                    </div>
+                    <a href={enlaceDocumento(e.documentoTipo, e.documentoId, e.clientId)} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+      </div>
+
+      <div class="seccion">
+        <h2>En preparación</h2>
+        {enProceso.length === 0 ? (
+          <p class="vacio">No tienes etapas en preparación.</p>
+        ) : (
+          <section class="tarjeta">
+            <ul class="lista">
+              {enProceso.map((e) => (
+                <li class="renglon">
+                  <div class="cuerpo">
+                    <strong>{e.cliente}</strong>
+                    <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · desde {fecha(e.actualizadoEn)}</p>
+                  </div>
+                  <a href={`/clientes/${e.clientId}`} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+
+      <div class="seccion">
+        <h2>Comentarios abiertos recientes</h2>
+        {comentariosPendientes.length === 0 ? (
+          <p class="vacio">No hay comentarios abiertos.</p>
+        ) : (
+          <section class="tarjeta">
+            <ul class="lista">
+              {comentariosPendientes.map((c) => (
+                <li class="renglon">
+                  <div class="cuerpo">
+                    <strong>{c.cliente}</strong>
+                    <p class="secundario">{NOMBRE_ETAPA[c.etapa]} · {fecha(c.creadoEn)}</p>
+                    <p class="secundario">{c.texto}</p>
+                  </div>
+                  <a href={`/clientes/${c.clientId}`} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+      </div>
+    </>
+  )}
+</Base>

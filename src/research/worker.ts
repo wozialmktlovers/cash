@@ -1,13 +1,37 @@
 import { eq, or, asc } from 'drizzle-orm';
-import { db, researchJobs } from '@/db';
+import { db, researchJobs, clients } from '@/db';
 import { ejecutarJob } from './pipeline';
 import { ejecutarGrowth } from '@/growth/pipeline';
 import { ejecutarPilares } from '@/pilares/pipeline';
 import { limpiarSesionesVencidas } from '@/lib/auth';
 import { convertirLecturasPendientes } from './convertir-lecturas';
+import { NOMBRE_ETAPA, etapaDeTipo } from '@/flujo/reglas';
+import { avisarJob } from '@/flujo/avisos';
 
 let corriendo = false;
 let arrancado = false;
+
+/**
+ * Job fallido (spec §3, Avisos): avisa a quien lo lanzó. Los pipelines
+ * marcan `fallido` ellos mismos cuando ninguna etapa produjo datos (sin
+ * lanzar), y el `catch` de abajo lo hace para un fallo no capturado; en
+ * ambos casos se revisa aquí el estado final, después de que ya quedó
+ * guardado, para no avisar dos veces ni antes de tiempo.
+ */
+async function avisarSiJobFallido(job: typeof researchJobs.$inferSelect): Promise<void> {
+  if (!job.creadoPor) return;
+  const [fresco] = await db.select({ estado: researchJobs.estado }).from(researchJobs).where(eq(researchJobs.id, job.id)).limit(1);
+  if (fresco?.estado !== 'fallido') return;
+
+  const [cliente] = await db.select({ nombre: clients.nombre }).from(clients).where(eq(clients.id, job.clientId)).limit(1);
+  void avisarJob({
+    evento: 'job_fallido',
+    creadoPor: job.creadoPor,
+    cliente: cliente?.nombre ?? 'Cliente',
+    etapa: NOMBRE_ETAPA[etapaDeTipo(job.tipo)],
+    enlace: `/jobs/${job.id}`,
+  }).catch((e) => console.error('[avisos] job_fallido:', e));
+}
 
 async function tick() {
   if (corriendo) return;
@@ -32,6 +56,8 @@ async function tick() {
   } finally {
     corriendo = false;
   }
+
+  await avisarSiJobFallido(siguiente);
 }
 
 export function arrancarWorker(): void {

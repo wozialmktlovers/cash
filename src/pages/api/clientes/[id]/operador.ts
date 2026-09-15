@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { db, clients, users } from '@/db';
 import { clienteOperable } from '@/lib/visibilidad';
+import { avisarReasignacion } from '@/flujo/avisos';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } });
@@ -38,6 +39,13 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
 
   await db.update(clients).set({ operadorId, updatedAt: new Date() }).where(eq(clients.id, id));
 
-  // El aviso al operador nuevo llegará en el plan B (tabla de notificaciones).
+  // El aviso va después del UPDATE y sin esperarlo: un fallo aquí no debe romper la reasignación.
+  void avisarReasignacion({
+    actorId: usuario.id,
+    nuevoOperadorId: operadorId,
+    cliente: cliente.nombre,
+    enlace: `/clientes/${id}`,
+  }).catch((e) => console.error('[avisos] cliente_reasignado:', e));
+
   return json({ ok: true });
 };
