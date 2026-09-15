@@ -18,8 +18,24 @@ describe('detectarJerga', () => {
   it('detecta frases de varias palabras', () => {
     expect(detectarJerga('Tu buyer persona ideal')).toEqual(['buyer persona']);
   });
+  it('los términos de varias palabras aceptan cualquier espacio en blanco entre palabras', () => {
+    // El modelo no siempre normaliza espacios: un salto de línea, un tab o
+    // varios espacios seguidos entre las palabras del término también cuentan.
+    expect(detectarJerga('Tu buyer\npersona ideal')).toEqual(['buyer persona']);
+    expect(detectarJerga('Tu buyer   persona ideal')).toEqual(['buyer persona']);
+    expect(detectarJerga('Un call\tto   action claro')).toEqual(['call to action']);
+  });
   it('no repite términos', () => {
     expect(detectarJerga(['target', 'TARGET'])).toEqual(['target']);
+  });
+  it('«CTA» no coincide con la abreviatura «Cta.» (cuenta)', () => {
+    expect(detectarJerga('Revisa el estado de cuenta, Cta. 12345')).toEqual([]);
+    expect(detectarJerga('Cta. de ahorro')).toEqual([]);
+    // Pero sigue detectando CTA de verdad, con o sin mayúsculas (detectarJerga
+    // devuelve el término tal como está en JERGA_PROHIBIDA, no el texto que lo
+    // disparó).
+    expect(detectarJerga('Pon un CTA claro')).toEqual(['CTA']);
+    expect(detectarJerga('pon un cta claro')).toEqual(['CTA']);
   });
   it('la lista tiene los 29 términos del spec', () => {
     expect(JERGA_PROHIBIDA).toHaveLength(29);
@@ -39,6 +55,18 @@ describe('lecturaSchema', () => {
     const r = lecturaSchema.safeParse(l);
     expect(r.success).toBe(false);
     expect(JSON.stringify(r.error?.issues)).toContain('funnel');
+  });
+
+  it('el error de jerga trae un path (no queda como mensaje "colgado" con ": " al inicio)', () => {
+    // src/research/claude.ts formatea los issues como `${path.join('.')}: ${message}`;
+    // sin path, un issue de raíz (path []) producía "«: Hay jerga...»".
+    const l = copia();
+    l.recomendamos.pasos[0].queHacer = 'Mejora tu funnel de ventas';
+    const r = lecturaSchema.safeParse(l);
+    const issue = r.error?.issues.find((i) => i.message.includes('jerga'));
+    expect(issue?.path.length).toBeGreaterThan(0);
+    const formateado = `${issue?.path.join('.')}: ${issue?.message}`;
+    expect(formateado.startsWith(': ')).toBe(false);
   });
 
   it('exige exactamente dos perfiles y tres preocupaciones', () => {

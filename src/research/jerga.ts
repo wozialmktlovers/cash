@@ -15,10 +15,21 @@ const normalizar = (t: string) => t.normalize('NFD').replace(/\p{M}/gu, '').toLo
 const escaparRegex = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Palabra completa: ni letra ni dígito a los lados, para que «copyright» no cuente como «copy».
-const PATRONES = JERGA_PROHIBIDA.map((termino) => ({
-  termino,
-  regex: new RegExp(`(^|[^\\p{L}\\p{N}])${escaparRegex(normalizar(termino))}(?=$|[^\\p{L}\\p{N}])`, 'u'),
-}));
+const PATRONES = JERGA_PROHIBIDA.map((termino) => {
+  // Términos de varias palabras («buyer persona», «call to action»): el
+  // espacio literal del término se vuelve `\s+` para que un salto de línea o
+  // varios espacios seguidos (el modelo no siempre los normaliza) sigan
+  // contando como el mismo término.
+  const cuerpo = normalizar(termino).split(/\s+/).map(escaparRegex).join('\\s+');
+  // «CTA» no debe confundirse con la abreviatura «Cta.» (cuenta), que
+  // siempre lleva el punto pegado justo después: se excluye ese caso con un
+  // lookahead negativo, sin tocar el resto de los términos.
+  const noAbreviaturaCuenta = termino === 'CTA' ? '(?!\\.)' : '';
+  return {
+    termino,
+    regex: new RegExp(`(^|[^\\p{L}\\p{N}])${cuerpo}${noAbreviaturaCuenta}(?=$|[^\\p{L}\\p{N}])`, 'u'),
+  };
+});
 
 /** Todos los textos de un valor anidado. Los números cuentan como texto: una cifra también es contenido. */
 export function recogerTextos(valor: unknown, salida: string[] = []): string[] {

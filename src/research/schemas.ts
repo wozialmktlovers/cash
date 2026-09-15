@@ -148,6 +148,11 @@ export const lecturaSchema = z.object({
   if (halladas.length) {
     ctx.addIssue({
       code: 'custom',
+      // `path` explícito (limpieza M3, punto 2): sin él, el issue queda con
+      // path [] (es de la lectura entera, no de un campo), y quien formatea
+      // errores como `${path.join('.')}: ${message}` (src/research/claude.ts)
+      // producía «: Hay jerga...» con dos puntos colgando al inicio.
+      path: ['jerga'],
       message: `Hay jerga que el cliente no entiende: ${halladas.join(', ')}. Explícalo con palabras de todos los días.`,
     });
   }
