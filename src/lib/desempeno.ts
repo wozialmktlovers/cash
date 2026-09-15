@@ -246,6 +246,25 @@ export function tiemposPorEtapa(eventos: Evento[]): {
   return { duracion, esperaRevision, respuestaCambios };
 }
 
+/**
+ * Rondas de cambios (`esRondaDeCambios`) por etapaId con al menos un
+ * `aprobar`, agrupadas por `Etapa` (spec §5, desglose por etapa — tarea I4
+ * punto 2). Extraída de `calidad` para que tanto el resumen global como el
+ * desglose cliente×etapa/operador×etapa usen la misma definición de "ronda",
+ * en vez de reimplementar el filtro en dos lugares.
+ */
+export function rondasPorEtapa(eventos: Evento[]): Record<Etapa, number[]> {
+  const resultado = Object.fromEntries(ETAPAS_VACIAS.map((e) => [e, [] as number[]])) as Record<Etapa, number[]>;
+  const porEtapaId = agruparPorEtapaId(ordenarPorFecha(eventos));
+  for (const evs of porEtapaId.values()) {
+    const tieneAprobacion = evs.some((e) => e.accion === 'aprobar');
+    if (!tieneAprobacion) continue;
+    const rondas = evs.filter(esRondaDeCambios).length;
+    resultado[evs[0].etapa].push(rondas);
+  }
+  return resultado;
+}
+
 export function calidad(
   eventos: Evento[],
   comentarios: ComentarioM[],
@@ -254,14 +273,7 @@ export function calidad(
   comentariosAdminPorEntregable: number;
   comentariosClientePorEntregable: number;
 } {
-  const porEtapaId = agruparPorEtapaId(ordenarPorFecha(eventos));
-  const rondasPorEtapaAprobada: number[] = [];
-  for (const evs of porEtapaId.values()) {
-    const tieneAprobacion = evs.some((e) => e.accion === 'aprobar');
-    if (!tieneAprobacion) continue;
-    const rondas = evs.filter(esRondaDeCambios).length;
-    rondasPorEtapaAprobada.push(rondas);
-  }
+  const rondasPorEtapaAprobada = Object.values(rondasPorEtapa(eventos)).flat();
 
   // Entregables con actividad: etapaIds que tienen al menos un comentario (de
   // cualquier rol). Sobre ese mismo conjunto se promedian los conteos de
@@ -355,4 +367,96 @@ export function costo(
   for (const [k, v] of porOperador) porOperador.set(k, round2(v));
 
   return { total, porCliente, porEtapa, porOperador };
+}
+
+/**
+ * Recorta eventos y comentarios a las etapas "cerradas" en el periodo: las
+ * que tienen un evento `aprobar` dentro del rango (`filtrarPeriodo`). Con
+ * `esTodo` (periodo "todo") no hay nada que recortar — ya es todo el
+ * historial, y no hace falta acotar a lo aprobado dentro de un rango que no
+ * existe.
+ *
+ * Extraída de `src/pages/desempeno.astro` (tarea I4, punto 2): la página
+ * decidía "qué cuenta como cerrado en este periodo" mezclado con el armado
+ * del HTML; ahora es una función pura que se puede probar sola.
+ *
+ * `tiemposPorEtapa` y `calidad` no reciben un `Periodo` (no está en su
+ * firma): necesitan el historial completo de cada etapaId para emparejar
+ * eventos (duracion, esperaRevision, respuestaCambios), así que el recorte
+ * por periodo se hace ANTES, a nivel de qué etapaIds entran — cortar por la
+ * fecha de cada evento suelto rompería esos pares.
+ */
+export function enPeriodoCerrado(
+  eventos: Evento[],
+  comentarios: ComentarioM[],
+  p: Periodo,
+  esTodo: boolean,
+): { eventos: Evento[]; comentarios: ComentarioM[] } {
+  if (esTodo) return { eventos, comentarios };
+  const etapaIdsCerradas = new Set(filtrarPeriodo(eventos.filter((e) => e.accion === 'aprobar'), p).map((e) => e.etapaId));
+  return {
+    eventos: eventos.filter((e) => etapaIdsCerradas.has(e.etapaId)),
+    comentarios: comentarios.filter((c) => etapaIdsCerradas.has(c.etapaId)),
+  };
+}
+
+/**
+ * Agrupa ids de cliente por operador ('sin_asignar' si no tiene uno).
+ * Extraída de `src/pages/desempeno.astro` (tarea I4, punto 2): la tabla «Por
+ * operador» arma sus grupos con esto en vez de reconstruir el Map a mano en
+ * el frontmatter de la página.
+ */
+export function agruparClientesPorOperador(clientes: { id: string; operadorId: string | null }[]): Map<string, string[]> {
+  const grupos = new Map<string, string[]>();
+  for (const c of clientes) {
+    const clave = c.operadorId ?? 'sin_asignar';
+    const lista = grupos.get(clave);
+    if (lista) lista.push(c.id);
+    else grupos.set(clave, [c.id]);
+  }
+  return grupos;
+}
+
+type TipoJob = JobM['tipo'];
+
+/** Tipo de documento (job) de cada etapa; `desarrollo_mensual` no genera jobs todavía (mismo mapa que `tipoDocumentoDe`, src/flujo/reglas.ts, repetido aquí por la misma razón que PESO_ESTADO arriba: no importar esa lógica de negocio). */
+const TIPO_POR_ETAPA: Partial<Record<Etapa, TipoJob>> = {
+  investigacion: 'research',
+  pilares: 'pilares',
+  manual_campana: 'growth',
+};
+
+export type FilaDesgloseEtapa = { etapa: Etapa; dias: number | null; rondas: number | null; costo: number };
+
+/**
+ * Desglose por etapa de un grupo de eventos y jobs — el de un solo cliente
+ * (matriz cliente × etapa) o el de todos los clientes de un operador (matriz
+ * operador × etapa), spec §5 y tarea I4 punto 2. Para cada etapa: mediana de
+ * días hasta aprobar, promedio de rondas de cambios (misma definición que
+ * `calidad`/`rondasPorEtapa`) y costo total de jobs de ese tipo de
+ * documento.
+ *
+ * No filtra por periodo: quien llama ya le pasa `eventosGrupo` recortado con
+ * `enPeriodoCerrado` y `jobsGrupo` ya acotado al periodo (mismo patrón que
+ * usa la página con `costo()`). `desarrollo_mensual` no tiene tipo de
+ * documento todavía, así que su costo siempre es 0.
+ */
+export function desglosePorEtapa(eventosGrupo: Evento[], jobsGrupo: JobM[]): Record<Etapa, FilaDesgloseEtapa> {
+  const { duracion } = tiemposPorEtapa(eventosGrupo);
+  const rondas = rondasPorEtapa(eventosGrupo);
+
+  const costoPorTipo: Record<TipoJob, number> = { research: 0, pilares: 0, growth: 0 };
+  for (const j of jobsGrupo) costoPorTipo[j.tipo] += j.costoUsd;
+
+  const resultado = {} as Record<Etapa, FilaDesgloseEtapa>;
+  for (const etapa of ETAPAS_VACIAS) {
+    const tipo = TIPO_POR_ETAPA[etapa];
+    resultado[etapa] = {
+      etapa,
+      dias: resumenEstadistico(duracion[etapa]).mediana,
+      rondas: resumenEstadistico(rondas[etapa]).promedio,
+      costo: tipo ? round2(costoPorTipo[tipo]) : 0,
+    };
+  }
+  return resultado;
 }

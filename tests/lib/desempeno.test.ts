@@ -5,9 +5,13 @@ import {
   resumenEstadistico,
   filtrarPeriodo,
   tiemposPorEtapa,
+  rondasPorEtapa,
   calidad,
   carga,
   costo,
+  enPeriodoCerrado,
+  agruparClientesPorOperador,
+  desglosePorEtapa,
   type Evento,
   type ComentarioM,
   type JobM,
@@ -346,5 +350,86 @@ describe('costo', () => {
     expect(r.porCliente.size).toBe(0);
     expect(r.porEtapa).toEqual({ research: 0, growth: 0, pilares: 0 });
     expect(r.porOperador.size).toBe(0);
+  });
+});
+
+describe('rondasPorEtapa', () => {
+  it('agrupa las rondas por etapa, solo de etapaIds con al menos un aprobar', () => {
+    const eventos = [
+      ev({ etapaId: 'e1', etapa: 'investigacion', accion: 'pedir_cambios', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
+      ev({ etapaId: 'e1', etapa: 'investigacion', accion: 'aprobar', a: 'aprobada', creadoEn: new Date('2026-01-02T00:00:00Z') }),
+      ev({ etapaId: 'e2', etapa: 'pilares', accion: 'pedir_cambios', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
+      // e2 nunca se aprueba: no cuenta.
+    ];
+    const r = rondasPorEtapa(eventos);
+    expect(r.investigacion).toEqual([1]);
+    expect(r.pilares).toEqual([]);
+  });
+});
+
+describe('enPeriodoCerrado', () => {
+  const p = { desde: new Date('2026-09-01T00:00:00Z'), hasta: new Date('2026-09-30T00:00:00Z') };
+
+  it('con esTodo, regresa eventos y comentarios sin recortar', () => {
+    const eventos = [ev({ etapaId: 'e1', accion: 'aprobar', a: 'aprobada', creadoEn: new Date('2020-01-01T00:00:00Z') })];
+    const comentarios = [com({ etapaId: 'e2' })];
+    expect(enPeriodoCerrado(eventos, comentarios, p, true)).toEqual({ eventos, comentarios });
+  });
+
+  it('sin esTodo, solo deja las etapaIds con un aprobar dentro del periodo (con todo su historial)', () => {
+    const eventos = [
+      ev({ etapaId: 'e1', accion: 'iniciar', a: 'en_proceso', creadoEn: new Date('2026-08-01T00:00:00Z') }),
+      ev({ etapaId: 'e1', accion: 'aprobar', a: 'aprobada', creadoEn: new Date('2026-09-10T00:00:00Z') }),
+      // e2 se aprobó fuera del periodo: se descarta por completo.
+      ev({ etapaId: 'e2', accion: 'aprobar', a: 'aprobada', creadoEn: new Date('2020-01-01T00:00:00Z') }),
+    ];
+    const comentarios = [com({ etapaId: 'e1' }), com({ etapaId: 'e2' })];
+    const r = enPeriodoCerrado(eventos, comentarios, p, false);
+    expect(r.eventos.map((e) => e.etapaId)).toEqual(['e1', 'e1']);
+    expect(r.comentarios.map((c) => c.etapaId)).toEqual(['e1']);
+  });
+});
+
+describe('agruparClientesPorOperador', () => {
+  it('agrupa ids de cliente por operador, "sin_asignar" para los que no tienen', () => {
+    const clientes = [
+      { id: 'c1', operadorId: 'op1' },
+      { id: 'c2', operadorId: 'op1' },
+      { id: 'c3', operadorId: null },
+    ];
+    const r = agruparClientesPorOperador(clientes);
+    expect(r.get('op1')).toEqual(['c1', 'c2']);
+    expect(r.get('sin_asignar')).toEqual(['c3']);
+  });
+
+  it('sin clientes, Map vacío', () => {
+    expect(agruparClientesPorOperador([]).size).toBe(0);
+  });
+});
+
+describe('desglosePorEtapa', () => {
+  it('por cada etapa: mediana de días, promedio de rondas y costo de jobs de su tipo de documento', () => {
+    const eventos = [
+      ev({ etapaId: 'e1', etapa: 'investigacion', accion: 'iniciar', a: 'en_proceso', creadoEn: new Date('2026-01-01T00:00:00Z') }),
+      ev({ etapaId: 'e1', etapa: 'investigacion', accion: 'pedir_cambios', a: 'con_cambios', creadoEn: new Date('2026-01-02T00:00:00Z') }),
+      ev({ etapaId: 'e1', etapa: 'investigacion', accion: 'aprobar', a: 'aprobada', creadoEn: new Date('2026-01-05T00:00:00Z') }),
+    ];
+    const jobs = [
+      job({ tipo: 'research', costoUsd: 3 }),
+      job({ tipo: 'research', costoUsd: 2 }),
+      job({ tipo: 'growth', costoUsd: 9 }),
+    ];
+    const r = desglosePorEtapa(eventos, jobs);
+    expect(r.investigacion).toEqual({ etapa: 'investigacion', dias: 4, rondas: 1, costo: 5 });
+    expect(r.manual_campana).toEqual({ etapa: 'manual_campana', dias: null, rondas: null, costo: 9 });
+    // desarrollo_mensual no tiene tipo de documento: costo siempre 0 aunque hubiera jobs (no debería haberlos).
+    expect(r.desarrollo_mensual).toEqual({ etapa: 'desarrollo_mensual', dias: null, rondas: null, costo: 0 });
+  });
+
+  it('sin eventos ni jobs, todas las etapas en null/0', () => {
+    const r = desglosePorEtapa([], []);
+    for (const etapa of ['investigacion', 'pilares', 'desarrollo_mensual', 'manual_campana'] as const) {
+      expect(r[etapa]).toEqual({ etapa, dias: null, rondas: null, costo: 0 });
+    }
   });
 });

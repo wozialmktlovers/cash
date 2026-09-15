@@ -6,7 +6,8 @@ import { db, clients, clienteEtapas, etapaEventos, comentarios, researchJobs, us
 import { condicionClientes, esUuid } from '@/lib/visibilidad';
 import { ETAPAS, NOMBRE_ETAPA, PESOS, type Etapa, type Estado } from '@/flujo/reglas';
 import {
-  periodo, filtrarPeriodo, resumenEstadistico, tiemposPorEtapa, calidad, carga, costo,
+  periodo, resumenEstadistico, tiemposPorEtapa, calidad, carga, costo,
+  enPeriodoCerrado, agruparClientesPorOperador, desglosePorEtapa,
   type Evento, type ComentarioM, type JobM, type EtapaM, type Periodo,
 } from '@/lib/desempeno';
 import { graficaBarras, type FilaGrafica } from '@/render/investigacion/graficas';
@@ -121,27 +122,19 @@ const jobs: JobM[] = jobsFilas.map((j) => {
 
 // ── Métricas (funciones puras de src/lib/desempeno.ts) ──────────────────
 // tiemposPorEtapa y calidad no reciben periodo (ver su firma en D1: no
-// toman un Periodo), así que el recorte se hace aquí, en la página, sin
-// tocar ese módulo. Con periodo !== 'todo' se calculan solo sobre las
-// etapas "cerradas" en el periodo (con un evento 'aprobar' dentro del
-// rango), pasando el historial completo de esas etapas — así duracion,
+// toman un Periodo), así que el recorte se hace con `enPeriodoCerrado`
+// (tarea I4, punto 2: extraída de esta página a la librería, con pruebas
+// propias). Con periodo !== 'todo' se calculan solo sobre las etapas
+// "cerradas" en el periodo (con un evento 'aprobar' dentro del rango),
+// pasando el historial completo de esas etapas — así duracion,
 // esperaRevision y respuestaCambios siguen emparejando eventos de la misma
 // etapaId como espera tiemposPorEtapa, en vez de cortar por fecha de cada
 // evento suelto. Con 'todo' no hace falta filtrar: ya es todo el historial.
-function enPeriodoCerrado(eventosSubset: Evento[], comentariosSubset: ComentarioM[]): { eventos: Evento[]; comentarios: ComentarioM[] } {
-  if (claveActiva === 'todo') return { eventos: eventosSubset, comentarios: comentariosSubset };
-  const etapaIdsCerradas = new Set(
-    filtrarPeriodo(eventosSubset.filter((e) => e.accion === 'aprobar'), periodoActual).map((e) => e.etapaId),
-  );
-  return {
-    eventos: eventosSubset.filter((e) => etapaIdsCerradas.has(e.etapaId)),
-    comentarios: comentariosSubset.filter((c) => etapaIdsCerradas.has(c.etapaId)),
-  };
-}
+const esTodo = claveActiva === 'todo';
 
 const cargaRes = carga(etapas, eventos, periodoActual);
 const costoRes = costo(jobs, operadorDeCliente, periodoActual);
-const { eventos: eventosCerrados, comentarios: comentariosCerrados } = enPeriodoCerrado(eventos, comentariosM);
+const { eventos: eventosCerrados, comentarios: comentariosCerrados } = enPeriodoCerrado(eventos, comentariosM, periodoActual, esTodo);
 const tiemposRes = tiemposPorEtapa(eventosCerrados);
 const calidadRes = calidad(eventosCerrados, comentariosCerrados);
 
@@ -179,40 +172,48 @@ const filasCosto: FilaGrafica[] = (['research', 'pilares', 'growth'] as const).m
 // decimales), que no coincidía ni con costo_usd ni con las tarjetas de arriba.
 const graficaCostoHtml = costoRes.total > 0 ? graficaBarras(filasCosto, 'Costo por tipo', dinero) : '';
 
-// ── Tabla «Por operador» (admin) ─────────────────────────────────────────
+// ── Tabla «Por operador» y desglose operador × etapa (admin) ─────────────
+// Agrupación por operador movida a la librería (tarea I4, punto 2):
+// `agruparClientesPorOperador` es la misma función pura que usa su propia
+// prueba en tests/lib/desempeno.test.ts, en vez de reconstruir el Map aquí.
 const ORDEN_ETAPA = new Map(ETAPAS.map((e, i) => [e, i]));
 const clientIdDeEtapaId = new Map(etapas.map((e) => [e.id, e.clientId]));
 
-type GrupoOperador = { clave: string; nombre: string; clientIds: Set<string> };
-const grupos = new Map<string, GrupoOperador>();
-for (const c of lista) {
-  const clave = c.operadorId ?? 'sin_asignar';
-  const previo = grupos.get(clave);
-  if (previo) previo.clientIds.add(c.id);
-  else grupos.set(clave, { clave, nombre: c.operadorId ? (nombreOperador.get(c.operadorId) ?? 'Operador') : 'Sin asignar', clientIds: new Set([c.id]) });
-}
+const gruposOperador = agruparClientesPorOperador(lista);
 
-// El costo por operador (costoRes.porOperador) se atribuye por creado_por
-// (con el operador del cliente como respaldo), no por la asignación actual
-// del cliente: si un admin corrió un job de un cliente ajeno, ese costo
-// puede no aparecer bajo ningún operador de esta tabla. Es la misma
-// definición de "por operador" de la spec (§5), aceptada como límite conocido.
-const filasPorOperador = [...grupos.values()]
-  .map((g) => {
-    const etapasG = etapas.filter((e) => g.clientIds.has(e.clientId));
-    const eventosG = eventos.filter((e) => g.clientIds.has(e.clientId));
-    const comentariosG = comentariosM.filter((c) => g.clientIds.has(clientIdDeEtapaId.get(c.etapaId) ?? ''));
+const filasPorOperador = [...gruposOperador.entries()]
+  .map(([clave, clientIds]) => {
+    const idsSet = new Set(clientIds);
+    const nombre = clave === 'sin_asignar' ? 'Sin asignar' : (nombreOperador.get(clave) ?? 'Operador');
+    const etapasG = etapas.filter((e) => idsSet.has(e.clientId));
+    const eventosG = eventos.filter((e) => idsSet.has(e.clientId));
+    const comentariosG = comentariosM.filter((c) => idsSet.has(clientIdDeEtapaId.get(c.etapaId) ?? ''));
     const cargaG = carga(etapasG, eventosG, periodoActual);
-    const { eventos: eventosGCerrados, comentarios: comentariosGCerrados } = enPeriodoCerrado(eventosG, comentariosG);
+    const { eventos: eventosGCerrados, comentarios: comentariosGCerrados } = enPeriodoCerrado(eventosG, comentariosG, periodoActual, esTodo);
     const diasG = resumenEstadistico(Object.values(tiemposPorEtapa(eventosGCerrados).duracion).flat()).promedio;
     const rondasG = resumenEstadistico(calidad(eventosGCerrados, comentariosGCerrados).rondasPorEtapaAprobada).promedio;
     // clientes: el tamaño real del grupo, no el conteo de carga() (distinto de
     // los clientId presentes en etapasG; deberían coincidir siempre que cada
-    // cliente tenga sus 4 filas de cliente_etapas, pero g.clientIds.size es la
+    // cliente tenga sus 4 filas de cliente_etapas, pero idsSet.size es la
     // fuente de verdad — es la misma lista que arma la fila de cada operador).
-    return { nombre: g.nombre, ...cargaG, clientes: g.clientIds.size, dias: diasG, rondas: rondasG, costo: costoRes.porOperador.get(g.clave) ?? 0 };
+    return { clave, nombre, ...cargaG, clientes: idsSet.size, dias: diasG, rondas: rondasG, costo: costoRes.porOperador.get(clave) ?? 0 };
   })
   .sort((a, b) => (a.nombre === 'Sin asignar' ? 1 : b.nombre === 'Sin asignar' ? -1 : a.nombre.localeCompare(b.nombre, 'es')));
+
+// Desglose operador × etapa (tarea I4, punto 2): días (mediana), rondas
+// (promedio) y costo por etapa, para cada operador. El costo usa la misma
+// atribución por creado_por que costoRes.porOperador arriba (con el
+// operador del cliente como respaldo) — no la lista de clientes asignados
+// hoy — para no mostrar dos definiciones distintas de "costo por operador"
+// en la misma página; días y rondas sí usan la asignación actual (mismo
+// criterio que el resto de esta tabla).
+const filasDesgloseOperador = filasPorOperador.map((f) => {
+  const idsSet = new Set(gruposOperador.get(f.clave) ?? []);
+  const operadorIdReal = f.clave === 'sin_asignar' ? null : f.clave;
+  const eventosGCerrados = eventosCerrados.filter((e) => idsSet.has(e.clientId));
+  const jobsAtribuidos = jobs.filter((j) => (j.creadoPor ?? operadorDeCliente.get(j.clientId) ?? null) === operadorIdReal);
+  return { nombre: f.nombre, porEtapa: desglosePorEtapa(eventosGCerrados, jobsAtribuidos) };
+});
 
 // ── Tabla «Por cliente» ──────────────────────────────────────────────────
 function avanceDeCliente(etapasCliente: EtapaM[]): number {
@@ -244,6 +245,27 @@ const filasPorCliente = lista.map((c) => ({
   operador: c.operadorId ? (nombreOperador.get(c.operadorId) ?? 'Operador') : 'Sin asignar',
   costo: costoRes.porCliente.get(c.id) ?? 0,
 }));
+
+// Desglose cliente × etapa (tarea I4, punto 2): días (mediana), rondas
+// (promedio) y costo por etapa, para cada cliente. Aquí el costo sí es por
+// `clientId` sin importar quién corrió el job (a diferencia del desglose por
+// operador arriba): del lado del cliente no hay ambigüedad de atribución.
+const jobsPorCliente = new Map<string, JobM[]>();
+for (const j of jobs) {
+  const l = jobsPorCliente.get(j.clientId);
+  if (l) l.push(j);
+  else jobsPorCliente.set(j.clientId, [j]);
+}
+const filasDesgloseCliente = lista.map((c) => ({
+  nombre: c.nombre,
+  porEtapa: desglosePorEtapa(eventosCerrados.filter((e) => e.clientId === c.id), jobsPorCliente.get(c.id) ?? []),
+}));
+
+// Formato de una celda del desglose por etapa: "días · rondas · costo",
+// reutilizando los formateadores de arriba (`dias`, `dinero`).
+function textoRondas(n: number | null): string {
+  return n === null ? '—' : `${n.toFixed(1)} rondas`;
+}
 ---
 
 <Base titulo="Desempeño" activo="desempeno">
@@ -361,6 +383,37 @@ const filasPorCliente = lista.map((c) => ({
             </div>
           </section>
         </section>
+
+        <section class="seccion">
+          <h2>Operador × etapa</h2>
+          <p class="secundario" style="margin-bottom:10px">Días hasta aprobar (mediana), rondas de cambios (promedio) y costo del periodo, por etapa.</p>
+          <section class="tarjeta">
+            <div class="tabla-envoltura">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Operador</th>
+                    {ETAPAS.map((et) => <th>{NOMBRE_ETAPA[et]}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filasDesgloseOperador.map((f) => (
+                    <tr>
+                      <td>{f.nombre}</td>
+                      {ETAPAS.map((et) => (
+                        <td class="celda-etapa">
+                          <span>{dias(f.porEtapa[et].dias)}</span>
+                          <span>{textoRondas(f.porEtapa[et].rondas)}</span>
+                          <span>{dinero(f.porEtapa[et].costo)}</span>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </section>
       )}
 
       <section class="seccion">
@@ -379,6 +432,37 @@ const filasPorCliente = lista.map((c) => ({
                     <td>{f.etapaActual}</td>
                     <td>{f.operador}</td>
                     <td>{dinero(f.costo)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <section class="seccion">
+        <h2>Cliente × etapa</h2>
+        <p class="secundario" style="margin-bottom:10px">Días hasta aprobar (mediana), rondas de cambios (promedio) y costo del periodo, por etapa.</p>
+        <section class="tarjeta">
+          <div class="tabla-envoltura">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  {ETAPAS.map((et) => <th>{NOMBRE_ETAPA[et]}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {filasDesgloseCliente.map((f) => (
+                  <tr>
+                    <td>{f.nombre}</td>
+                    {ETAPAS.map((et) => (
+                      <td class="celda-etapa">
+                        <span>{dias(f.porEtapa[et].dias)}</span>
+                        <span>{textoRondas(f.porEtapa[et].rondas)}</span>
+                        <span>{dinero(f.porEtapa[et].costo)}</span>
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
@@ -418,4 +502,12 @@ const filasPorCliente = lista.map((c) => ({
   :global(.barra-relleno) { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--azul); }
   :global(.barra-valor) { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--tinta); }
   @media (max-width: 699px) { :global(.barra-fila) { grid-template-columns: 1fr auto; } :global(.barra-pista) { grid-column: 1 / -1; grid-row: 2; } }
+
+  /* Celda de las matrices «cliente × etapa» / «operador × etapa»: días,
+     rondas y costo apilados en una sola celda por etapa, en vez de un
+     encabezado con colspan de 3 columnas por etapa — con 4 etapas eso serían
+     12 columnas de datos más la de nombre, mucho menos legible en celular
+     aun con el desplazamiento horizontal de `.tabla-envoltura`. */
+  .celda-etapa { display: flex; flex-direction: column; gap: 2px; white-space: nowrap; font: var(--t-micro); }
+  .celda-etapa span:first-child { font: var(--t-small); font-weight: 600; color: var(--tinta); }
 </style>
