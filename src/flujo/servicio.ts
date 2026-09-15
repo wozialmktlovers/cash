@@ -3,7 +3,7 @@
 // pipelines. Aquí sí hay acceso a base de datos; las reglas puras viven en
 // ./reglas.ts (B2) y no se tocan.
 
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import {
   db, clients, clienteEtapas, etapaEventos, comentarios, documentoVersiones,
   researchResults, growthResults, pilaresResults,
@@ -17,8 +17,8 @@ import { clienteOperable } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
 import { avisarJob, avisarTransicion, type EventoAviso } from './avisos';
 
-/** Ruta interna para ver el documento vigente de una etapa (spec §3, Avisos: «enlace»). */
-function enlaceDocumento(tipo: TipoDocumento, documentoId: string): string {
+/** Ruta interna para ver el documento vigente de una etapa (spec §3, Avisos: «enlace»). Exportada: la ficha (B5) la usa para el botón «Ver documento». */
+export function enlaceDocumento(tipo: TipoDocumento, documentoId: string): string {
   if (tipo === 'growth') return `/growth/${documentoId}`;
   if (tipo === 'pilares') return `/pilares/${documentoId}`;
   return `/resultados/${documentoId}`;
@@ -221,29 +221,45 @@ export async function registrarEntregable(
 }
 
 /**
- * Comentarios abiertos del documento vigente de la etapa (0 si todavía no hay
- * documento). Cuenta por `documentoTipo`+`documentoId`, sin filtrar por
- * `versionNumero`: un comentario se deja sobre una versión concreta, pero
- * sigue pendiente aunque `guardarVersion` guarde una versión más nueva
- * encima — una versión nueva nunca debe hacer desaparecer en silencio un
- * comentario sin atender. Solo cuenta comentarios de primer nivel
- * (`respuestaDe IS NULL`): una respuesta no es un pendiente aparte, es parte
- * del hilo del comentario al que respondió.
+ * Comentarios abiertos del documento vigente de cada etapa dada, en una sola
+ * consulta agrupada (evita el N+1 de preguntar etapa por etapa al pintar la
+ * línea de etapas completa — spec §3, ficha). Cuenta por `documentoTipo`+
+ * `documentoId`, sin filtrar por `versionNumero`: un comentario se deja sobre
+ * una versión concreta, pero sigue pendiente aunque `guardarVersion` guarde
+ * una versión más nueva encima — una versión nueva nunca debe hacer
+ * desaparecer en silencio un comentario sin atender. Solo cuenta comentarios
+ * de primer nivel (`respuestaDe IS NULL`): una respuesta no es un pendiente
+ * aparte, es parte del hilo del comentario al que respondió.
+ *
+ * El resultado trae una entrada en 0 para cada etapa recibida, aunque no
+ * tenga comentarios (o no tenga documento todavía), para que el llamador
+ * pueda indexar con `.get(etapaId)!` sin comprobar `undefined`.
  */
-async function comentariosAbiertosVigentes(ejecutor: Ejecutor, fila: FilaEtapa): Promise<number> {
-  const tipo = tipoDocumentoDe(fila.etapa);
-  if (!fila.documentoId || !tipo) return 0;
-  const [{ n }] = await ejecutor
-    .select({ n: sql<number>`count(*)::int` })
+export async function comentariosAbiertosPorEtapa(filas: FilaEtapa[], ejecutor: Ejecutor = db): Promise<Map<string, number>> {
+  const resultado = new Map<string, number>(filas.map((f) => [f.id, 0]));
+  const conDocumento = filas.filter((f) => f.documentoId && tipoDocumentoDe(f.etapa));
+  if (conDocumento.length === 0) return resultado;
+
+  // Una condición OR por etapa (a lo más 4): cada una ancla el conteo al
+  // documentoId vigente de esa etapa en concreto, igual que la versión de
+  // una sola etapa que sustituye.
+  const condicion = or(...conDocumento.map((f) =>
+    and(eq(comentarios.etapaId, f.id), eq(comentarios.documentoTipo, tipoDocumentoDe(f.etapa)!), eq(comentarios.documentoId, f.documentoId!)),
+  ))!;
+
+  const filasConteo = await ejecutor
+    .select({ etapaId: comentarios.etapaId, n: sql<number>`count(*)::int` })
     .from(comentarios)
-    .where(and(
-      eq(comentarios.etapaId, fila.id),
-      eq(comentarios.documentoTipo, tipo),
-      eq(comentarios.documentoId, fila.documentoId),
-      eq(comentarios.estado, 'abierto'),
-      isNull(comentarios.respuestaDe),
-    ));
-  return n;
+    .where(and(condicion, eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe)))
+    .groupBy(comentarios.etapaId);
+
+  for (const f of filasConteo) resultado.set(f.etapaId, f.n);
+  return resultado;
+}
+
+/** Comentarios abiertos del documento vigente de una sola etapa (0 si todavía no hay documento). */
+async function comentariosAbiertosVigentes(ejecutor: Ejecutor, fila: FilaEtapa): Promise<number> {
+  return (await comentariosAbiertosPorEtapa([fila], ejecutor)).get(fila.id) ?? 0;
 }
 
 export type ResultadoTransicion =

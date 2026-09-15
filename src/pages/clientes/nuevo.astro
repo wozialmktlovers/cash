@@ -1,5 +1,6 @@
 ---
 import Base from '@/layouts/Base.astro';
+import { NOMBRE_ETAPA } from '@/flujo/reglas';
 ---
 
 <Base titulo="Nuevo cliente" activo="clientes" volver={{ href: '/clientes', texto: 'Clientes' }}>
@@ -45,6 +46,20 @@ import Base from '@/layouts/Base.astro';
       </div>
     </div>
 
+    <fieldset class="campo ancho" style="margin-top:18px">
+      <legend>Etapas contratadas</legend>
+      <div class="contratacion-casillas">
+        <label class="casilla"><input type="checkbox" name="etapas" value="investigacion" checked />{NOMBRE_ETAPA.investigacion}</label>
+        <label class="casilla"><input type="checkbox" name="etapas" value="pilares" checked />{NOMBRE_ETAPA.pilares}</label>
+        <label class="casilla"><input type="checkbox" name="etapas" value="manual_campana" checked />{NOMBRE_ETAPA.manual_campana}</label>
+        <label class="casilla deshabilitada">
+          <input type="checkbox" disabled />{NOMBRE_ETAPA.desarrollo_mensual}
+          <span class="etiqueta marca">Próximamente</span>
+        </label>
+      </div>
+      <p class="ayuda">Si contratas pilares o el manual sin investigación, esta se genera igual, pero como trabajo interno.</p>
+    </fieldset>
+
     <div class="aviso rosa" id="errores" role="alert" style="margin-top:18px" hidden></div>
 
     <div class="acciones">
@@ -65,7 +80,10 @@ import Base from '@/layouts/Base.astro';
     guardar.disabled = true;
     guardar.textContent = 'Guardando…';
 
-    const datos = Object.fromEntries(new FormData(forma).entries());
+    // Las casillas «etapas» comparten name: Object.fromEntries se quedaría
+    // solo con la última marcada, así que se arma la lista aparte.
+    const formData = new FormData(forma);
+    const datos = { ...Object.fromEntries(formData.entries()), etapas: formData.getAll('etapas') };
 
     try {
       const res = await fetch('/api/clientes', {

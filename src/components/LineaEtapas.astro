@@ -1,0 +1,205 @@
+---
+// Línea de etapas de la ficha del cliente (spec §3, B5): sustituye a las
+// tarjetas de acción fijas por las 4 etapas de `ETAPAS`, con su estado,
+// marca de contratación y los botones que el servidor ya decidió que ese
+// usuario puede usar (ver `src/flujo/ui.ts`, `botonesEtapa`). El componente
+// solo pinta: toda la lógica de permisos vive en la página que lo llama.
+import type { Etapa, Estado } from '@/flujo/reglas';
+import type { ColorEstado, MarcaEtapa } from '@/flujo/ui';
+import { NOMBRE_ETAPA } from '@/flujo/reglas';
+
+export type BotonResuelto =
+  | { id: 'generar'; href: string }
+  | { id: 'generar-growth' }
+  | { id: 'ver'; href: string }
+  | { id: 'iniciar' }
+  | { id: 'solicitar'; disabled: boolean; razon: string }
+  | { id: 'aprobar' }
+  | { id: 'pedir_cambios'; requiereComentario: boolean }
+  | { id: 'reabrir' };
+
+export interface TarjetaEtapaVM {
+  etapaId: string;
+  etapa: Etapa;
+  numero: number;
+  estado: Estado;
+  etiquetaEstado: string;
+  colorEstado: ColorEstado;
+  marca: MarcaEtapa;
+  actualizadoTexto: string;
+  comentariosAbiertos: number;
+  proximamente: boolean;
+  razonProximamente?: string;
+  botones: BotonResuelto[];
+}
+
+export interface ContratacionVM {
+  seleccion: Etapa[];
+}
+
+interface Props {
+  clientId: string;
+  tarjetas: TarjetaEtapaVM[];
+  contratacion: ContratacionVM | null;
+}
+
+const { clientId, tarjetas, contratacion } = Astro.props;
+
+const ETIQUETA_BOTON: Record<BotonResuelto['id'], string> = {
+  generar: 'Generar',
+  'generar-growth': 'Generar',
+  ver: 'Ver documento',
+  iniciar: 'Iniciar',
+  solicitar: 'Solicitar autorización',
+  aprobar: 'Aprobar',
+  pedir_cambios: 'Pedir cambios',
+  reabrir: 'Reabrir',
+};
+
+const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'manual_campana'];
+---
+
+<section class="linea-etapas" data-client-id={clientId}>
+  {tarjetas.map((t) => (
+    <article class="etapa-tarjeta" data-etapa-id={t.etapaId}>
+      <header class="etapa-cabeza">
+        <span class="etapa-numero">{t.numero}</span>
+        <h3>{NOMBRE_ETAPA[t.etapa]}</h3>
+      </header>
+      <div class="etapa-chips">
+        <span class={`etiqueta ${t.colorEstado}`}>{t.etiquetaEstado}</span>
+        {t.marca === 'interna' && <span class="etiqueta marca">Interna</span>}
+        {t.marca === 'no_contratada' && <span class="etiqueta marca">No contratada</span>}
+      </div>
+
+      {t.proximamente ? (
+        <p class="secundario etapa-proximamente">{t.razonProximamente}</p>
+      ) : (
+        <>
+          <p class="secundario">Actualizada: {t.actualizadoTexto}</p>
+          <p class="secundario">
+            {t.comentariosAbiertos === 0 ? 'Sin comentarios abiertos' : `${t.comentariosAbiertos} ${t.comentariosAbiertos === 1 ? 'comentario abierto' : 'comentarios abiertos'}`}
+          </p>
+
+          {t.botones.length > 0 && (
+            <div class="etapa-botones">
+              {t.botones.map((b) => {
+                if (b.id === 'generar') return <a href={b.href} class="btn chico">{ETIQUETA_BOTON.generar}</a>;
+                if (b.id === 'ver') return <a href={b.href} class="btn fantasma chico">{ETIQUETA_BOTON.ver}</a>;
+                if (b.id === 'generar-growth') return <button type="button" class="btn chico" data-generar-growth data-etapa-id={t.etapaId}>{ETIQUETA_BOTON['generar-growth']}</button>;
+                if (b.id === 'iniciar') return <button type="button" class="btn chico" data-accion="iniciar" data-etapa-id={t.etapaId}>{ETIQUETA_BOTON.iniciar}</button>;
+                if (b.id === 'solicitar') return (
+                  <button type="button" class="btn chico" data-accion="solicitar" data-etapa-id={t.etapaId} disabled={b.disabled} title={b.disabled ? b.razon : undefined}>
+                    {ETIQUETA_BOTON.solicitar}
+                  </button>
+                );
+                if (b.id === 'aprobar') return (
+                  <button type="button" class="btn chico" data-abrir="aprobar" data-etapa-id={t.etapaId} data-etapa-nombre={NOMBRE_ETAPA[t.etapa]}>
+                    {ETIQUETA_BOTON.aprobar}
+                  </button>
+                );
+                if (b.id === 'pedir_cambios') return (
+                  <button type="button" class="btn fantasma chico" data-abrir="comentario" data-accion="pedir_cambios" data-etapa-id={t.etapaId}
+                    data-etapa-nombre={NOMBRE_ETAPA[t.etapa]} data-requiere={String(b.requiereComentario)}>
+                    {ETIQUETA_BOTON.pedir_cambios}
+                  </button>
+                );
+                if (b.id === 'reabrir') return (
+                  <button type="button" class="btn fantasma chico" data-abrir="comentario" data-accion="reabrir" data-etapa-id={t.etapaId}
+                    data-etapa-nombre={NOMBRE_ETAPA[t.etapa]} data-requiere="true">
+                    {ETIQUETA_BOTON.reabrir}
+                  </button>
+                );
+                return null;
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </article>
+  ))}
+</section>
+
+{contratacion && (
+  <section class="tarjeta" style="margin-top:18px">
+    <h2>Etapas contratadas</h2>
+    <p class="sub" style="margin-bottom:16px">
+      Si contratas pilares o el manual sin investigación, esta se genera igual, pero como trabajo interno: no cuenta en el avance del cliente ni se le muestra.
+    </p>
+    <form id="forma-contratacion">
+      <fieldset>
+        <legend class="sr-solo">Etapas contratadas</legend>
+        <div class="contratacion-casillas">
+          {ETAPAS_CONTRATABLES.map((e) => (
+            <label class="casilla">
+              <input type="checkbox" name="etapas" value={e} checked={contratacion.seleccion.includes(e)} />
+              {NOMBRE_ETAPA[e]}
+            </label>
+          ))}
+          <label class="casilla deshabilitada">
+            <input type="checkbox" disabled />
+            {NOMBRE_ETAPA.desarrollo_mensual}
+            <span class="etiqueta marca">Próximamente</span>
+          </label>
+        </div>
+      </fieldset>
+      <div class="acciones">
+        <button type="submit" class="btn" id="guardar-contratacion">Guardar etapas</button>
+      </div>
+    </form>
+  </section>
+)}
+
+<dialog id="dialogo-aprobar" aria-labelledby="aprobar-titulo">
+  <h2 id="aprobar-titulo">Aprobar etapa</h2>
+  <p class="sub" id="aprobar-texto" style="margin-top:10px"></p>
+  <div class="acciones">
+    <button type="button" class="btn" id="aprobar-confirmar">Sí, aprobar</button>
+    <button type="button" class="btn fantasma" id="aprobar-cancelar">Cancelar</button>
+  </div>
+</dialog>
+
+<dialog id="dialogo-comentario" aria-labelledby="comentario-titulo">
+  <h2 id="comentario-titulo">Pedir cambios</h2>
+  <form id="forma-comentario">
+    <div class="campo" style="margin-top:16px">
+      <label for="comentario-texto" id="comentario-etiqueta">Comentario</label>
+      <textarea id="comentario-texto" name="comentario" rows="4" maxlength="2000"></textarea>
+    </div>
+    <p class="aviso rosa" id="comentario-error" hidden role="alert"></p>
+    <div class="acciones">
+      <button type="submit" class="btn" id="comentario-enviar">Enviar</button>
+      <button type="button" class="btn fantasma" id="comentario-cancelar">Cancelar</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  import '@/scripts/etapas';
+</script>
+
+<style>
+  .linea-etapas { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 600px) { .linea-etapas { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1000px) { .linea-etapas { grid-template-columns: repeat(4, 1fr); } }
+
+  .etapa-tarjeta {
+    display: flex; flex-direction: column; gap: 8px;
+    background: var(--tarjeta); border: 1px solid var(--linea); border-radius: var(--r);
+    padding: 20px; box-shadow: var(--sombra);
+  }
+  .etapa-cabeza { display: flex; align-items: center; gap: 10px; }
+  .etapa-numero {
+    flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--gris); color: var(--suave); font: var(--t-micro);
+  }
+  .etapa-cabeza h3 { flex: 1; min-width: 0; }
+  .etapa-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .etiqueta.gris { background: var(--gris); color: var(--suave); }
+  .etiqueta.azul { background: var(--azul-s); color: var(--azul); }
+  .etiqueta.amarillo { background: var(--amarillo-s); color: var(--amarillo); }
+  .etiqueta.rosa { background: var(--rosa-s); color: var(--rosa); }
+  .etiqueta.verde { background: var(--verde-s); color: var(--verde); }
+  .etapa-proximamente { margin-top: 2px; }
+  .etapa-botones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+</style>

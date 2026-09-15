@@ -38,6 +38,13 @@ h3 { font: var(--t-h3); letter-spacing: -0.01em; }
 .saltar { position: absolute; left: -9999px; top: 8px; z-index: 100; }
 .saltar:focus { left: 16px; background: var(--tarjeta); padding: 8px 14px; border-radius: var(--r-pill); }
 
+/* Oculta visualmente pero deja el texto para lectores de pantalla (p. ej. un
+   <legend> de agrupación cuando el título visible ya está en un <h2> aparte). */
+.sr-solo { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+legend { font: var(--t-small); font-weight: 600; color: var(--tinta); margin-bottom: 7px; padding: 0; }
+
 /* ── Logo ───────────────────────────────────────────────
    El PNG es blanco sobre transparente. En claro se vuelve negro con un filtro;
    el archivo no se toca. */
@@ -277,6 +284,16 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--r
 .con-icono .ojo svg { width: 18px; height: 18px; }
 
 .ayuda { font-size: 12.5px; color: var(--suave); margin-top: 6px; }
+
+/* ── Casillas de contratación (alta y ficha) ──────────
+   .etiqueta.marca reutiliza el chip de etiqueta como marcador neutro
+   («Interna», «No contratada», «Próximamente») fuera de las tarjetas de
+   acción de los jobs (encolado/corriendo/completado/…). */
+.etiqueta.marca { background: var(--gris); color: var(--suave); }
+.contratacion-casillas { display: flex; flex-wrap: wrap; gap: 14px 24px; margin-top: 8px; }
+.casilla { display: inline-flex; align-items: center; gap: 8px; font: var(--t-small); font-weight: 500; color: var(--tinta); min-height: 44px; cursor: pointer; }
+.casilla input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; flex-shrink: 0; accent-color: var(--rosa); }
+.casilla.deshabilitada { color: var(--suave); cursor: not-allowed; }
 
 /* ── Botones ───────────────────────────────────────── */
 
