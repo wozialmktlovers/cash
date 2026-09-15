@@ -1,13 +1,14 @@
 import type { APIRoute } from 'astro';
 import { eq, and, isNull } from 'drizzle-orm';
-import { db, invitaciones, users } from '@/db';
+import { db, invitaciones, users, clients } from '@/db';
 import { hashPassword, crearSesion } from '@/lib/auth';
 import { destinoTrasLogin } from '@/lib/permisos';
-import { hashToken, estadoInvitacion, validarAceptacion } from '@/lib/invitaciones';
+import { hashToken, estadoInvitacion, invitacionVigente, validarAceptacion } from '@/lib/invitaciones';
 
 /** Señales internas para saber, tras el rollback de la transacción, qué pasó. */
 class YaExisteError extends Error {}
 class UsadaError extends Error {}
+class RevocadaError extends Error {}
 
 export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   const form = await request.formData();
@@ -30,6 +31,20 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   let creadoId: string | undefined;
   try {
     await db.transaction(async (tx) => {
+      // Se vuelve a comprobar, ya dentro de la transacción, que quien creó la
+      // invitación conserve la autoridad para haberla emitido: si lo
+      // desactivaron, lo reasignaron de cliente, o al cliente le cambiaron de
+      // operador después de invitar, la invitación queda revocada aunque no
+      // haya vencido ni se haya usado.
+      const [creador] = inv!.creadoPor
+        ? await tx.select().from(users).where(eq(users.id, inv!.creadoPor)).limit(1)
+        : [];
+      const [cliente] = inv!.rol === 'cliente' && inv!.clientId
+        ? await tx.select({ id: clients.id, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, inv!.clientId)).limit(1)
+        : [];
+      const vigencia = invitacionVigente(inv!, creador ?? null, cliente ?? null, new Date());
+      if (vigencia !== 'valida') throw new RevocadaError();
+
       // Nunca se actualiza una cuenta existente (ver ruling de seguridad de la
       // tarea): si el correo ya está tomado, se corta y no se toca nada.
       const [existente] = await tx.select({ id: users.id }).from(users).where(eq(users.email, inv!.email)).limit(1);
@@ -68,6 +83,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
   } catch (e) {
     if (e instanceof YaExisteError) return volver('ya-existe');
     if (e instanceof UsadaError) return volver('usada');
+    if (e instanceof RevocadaError) return volver('revocada');
     throw e;
   }
 

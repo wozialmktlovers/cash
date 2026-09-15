@@ -4,12 +4,15 @@ import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import TarjetaCliente from '@/components/TarjetaCliente.astro';
 import { db, clients, researchJobs, users } from '@/db';
-import { condicionClientes } from '@/lib/visibilidad';
+import { condicionClientes, esUuid } from '@/lib/visibilidad';
 import { resumirPorCliente, resumenDe } from '@/lib/ui/estado-cliente';
 
 const usuario = Astro.locals.usuario;
 const esAdmin = usuario.rol === 'admin';
-const operadorFiltro = esAdmin ? Astro.url.searchParams.get('operador') ?? '' : '';
+const operadorParam = esAdmin ? Astro.url.searchParams.get('operador') ?? '' : '';
+// Un ?operador= que no tiene forma de UUID (typeado a mano, o un enlace
+// viejo) se ignora como si no viniera, en vez de tronar contra la columna.
+const operadorFiltro = esUuid(operadorParam) ? operadorParam : '';
 
 // El admin puede acotar por operador con ?operador=; en ese caso la condición
 // de operador manda sobre `condicionClientes` (que para admin no filtra nada).

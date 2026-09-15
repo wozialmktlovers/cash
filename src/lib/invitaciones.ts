@@ -17,12 +17,31 @@ export function vencimiento(desde: Date): Date {
   return new Date(desde.getTime() + DIAS_VENCIMIENTO * 86400_000);
 }
 
-export type InvitacionEstado = 'valida' | 'vencida' | 'usada' | 'inexistente';
+export type InvitacionEstado = 'valida' | 'vencida' | 'usada' | 'inexistente' | 'revocada';
 
-export function estadoInvitacion(inv: { expiraEn: Date; usadaEn: Date | null } | null, ahora: Date): InvitacionEstado {
+export function estadoInvitacion(inv: { expiraEn: Date; usadaEn: Date | null } | null, ahora: Date): 'valida' | 'vencida' | 'usada' | 'inexistente' {
   if (!inv) return 'inexistente';
   if (inv.usadaEn) return 'usada';
   if (inv.expiraEn < ahora) return 'vencida';
+  return 'valida';
+}
+
+/**
+ * `estadoInvitacion` solo mira fechas. Esta función añade el chequeo de
+ * autoridad: quien creó la invitación pudo perder, desde entonces, el poder
+ * para haberla emitido (lo desactivaron, lo reasignaron de cliente, al
+ * cliente le cambiaron de operador). En ese caso la invitación sigue sin
+ * vencer ni usarse, pero ya no es válida: queda `revocada`.
+ */
+export function invitacionVigente(
+  inv: { expiraEn: Date; usadaEn: Date | null; rol: Rol } | null,
+  creador: UsuarioSesion | null,
+  cliente: { id: string; operadorId: string | null } | null,
+  ahora: Date,
+): InvitacionEstado {
+  const estado = estadoInvitacion(inv, ahora);
+  if (estado !== 'valida') return estado;
+  if (!creador || !creador.activo || !puedeInvitar(creador, inv!.rol, cliente)) return 'revocada';
   return 'valida';
 }
 

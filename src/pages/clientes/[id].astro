@@ -26,6 +26,10 @@ const [responsable] = cliente.operadorId
 const operadoresActivos = esAdmin
   ? await db.select({ id: users.id, nombre: users.nombre, email: users.email }).from(users).where(and(ne(users.rol, 'cliente'), eq(users.activo, true))).orderBy(users.nombre)
   : [];
+// El responsable guardado puede ya no estar entre los operadores activos (lo
+// desactivaron, o nunca hubo uno asignado): el <select> no debe insinuar que
+// hay alguien al mando cuando no es cierto.
+const operadorAsignadoValido = !!cliente.operadorId && operadoresActivos.some((o) => o.id === cliente.operadorId);
 
 // ── Usuarios del cliente ───────────────────────────
 const usuariosCliente = operable
@@ -81,6 +85,11 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
         <div class="campo" style="margin-top:12px">
           <label for="responsable-select">Operador asignado</label>
           <select id="responsable-select">
+            {!operadorAsignadoValido && (
+              <option value="" disabled selected>
+                {responsable ? `${responsable.nombre ?? responsable.email} (inactivo)` : 'Sin asignar'}
+              </option>
+            )}
             {operadoresActivos.map((o) => (
               <option value={o.id} selected={o.id === cliente.operadorId}>{o.nombre ?? o.email}</option>
             ))}

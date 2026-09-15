@@ -3,16 +3,30 @@ import '@/styles/global.css';
 import Icono from '@/components/Icono.astro';
 import TemaSwitch from '@/components/TemaSwitch.astro';
 import { SCRIPT_TEMA, COLOR_BARRA } from '@/lib/ui/tema';
-import { db, invitaciones } from '@/db';
+import { db, invitaciones, users, clients } from '@/db';
 import { eq } from 'drizzle-orm';
-import { hashToken, estadoInvitacion } from '@/lib/invitaciones';
+import { hashToken, estadoInvitacion, invitacionVigente } from '@/lib/invitaciones';
 
 const { token } = Astro.params;
 
 const [inv] = token
   ? await db.select().from(invitaciones).where(eq(invitaciones.tokenHash, hashToken(token))).limit(1)
   : [];
-const estado = estadoInvitacion(inv ?? null, new Date());
+
+const ahora = new Date();
+// Las fechas se comprueban primero (barato, sin consultas extra); solo si la
+// invitación sigue viva por fecha vale la pena ir a ver si quien la creó
+// todavía tiene autoridad para haberla emitido.
+let estado = estadoInvitacion(inv ?? null, ahora);
+if (estado === 'valida') {
+  const [creador] = inv!.creadoPor
+    ? await db.select().from(users).where(eq(users.id, inv!.creadoPor)).limit(1)
+    : [];
+  const [cliente] = inv!.rol === 'cliente' && inv!.clientId
+    ? await db.select({ id: clients.id, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, inv!.clientId)).limit(1)
+    : [];
+  estado = invitacionVigente(inv!, creador ?? null, cliente ?? null, ahora);
+}
 
 const errorParam = Astro.url.searchParams.get('error');
 const MENSAJES_ERROR: Record<string, string> = {
@@ -21,13 +35,15 @@ const MENSAJES_ERROR: Record<string, string> = {
   usada: 'Esta invitación ya se usó.',
   vencida: 'Esta invitación venció.',
   inexistente: 'Esta invitación no existe.',
+  revocada: 'Esta invitación ya no es válida. Pide una nueva a tu equipo.',
 };
 const avisoError = errorParam ? (MENSAJES_ERROR[errorParam] ?? 'No se pudo completar la invitación.') : null;
 
-const MENSAJES_ESTADO: Record<'vencida' | 'usada' | 'inexistente', string> = {
+const MENSAJES_ESTADO: Record<'vencida' | 'usada' | 'inexistente' | 'revocada', string> = {
   vencida: 'Esta invitación venció. Pide que te manden una nueva.',
   usada: 'Esta invitación ya se usó. Si ya tienes cuenta, entra desde la página de acceso.',
   inexistente: 'Esta invitación no existe. Revisa el enlace o pide que te manden uno nuevo.',
+  revocada: 'Esta invitación ya no es válida. Pide una nueva a tu equipo.',
 };
 ---
 
@@ -85,7 +101,7 @@ const MENSAJES_ESTADO: Record<'vencida' | 'usada' | 'inexistente', string> = {
         <div class="invitacion-cerrada">
           <img class="logo" src="/logo-wozial.png" alt="Wozial" width="545" height="194" />
           <p class="eyebrow">Studio · Invitación</p>
-          <h1 class="display">{MENSAJES_ESTADO[estado as 'vencida' | 'usada' | 'inexistente']}</h1>
+          <h1 class="display">{MENSAJES_ESTADO[estado as 'vencida' | 'usada' | 'inexistente' | 'revocada']}</h1>
           <a class="btn ancho-total" href="/login">Ir a la página de acceso</a>
         </div>
       )}

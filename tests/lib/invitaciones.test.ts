@@ -4,6 +4,7 @@ import {
   hashToken,
   vencimiento,
   estadoInvitacion,
+  invitacionVigente,
   validarAceptacion,
   puedeInvitar,
 } from '@/lib/invitaciones';
@@ -70,6 +71,44 @@ describe('validarAceptacion', () => {
   it('acepta datos válidos', () => {
     const r = validarAceptacion({ nombre: 'Ana', password: '123456789012', confirmacion: '123456789012' });
     expect(r.ok).toBe(true);
+  });
+});
+
+describe('invitacionVigente', () => {
+  const ahora = new Date('2026-01-10T00:00:00.000Z');
+  const invValida = { expiraEn: new Date('2026-02-01'), usadaEn: null, rol: 'cliente' as const };
+  const invAdmin = { expiraEn: new Date('2026-02-01'), usadaEn: null, rol: 'operador' as const };
+  const admin = u('admin');
+  const operador = u('operador', { id: 'op1' });
+  const clienteDeOp1 = { id: 'c1', operadorId: 'op1' };
+  const clienteDeOtro = { id: 'c1', operadorId: 'op2' };
+
+  it('respeta primero vencida/usada/inexistente, sin mirar al creador', () => {
+    expect(invitacionVigente(null, admin, null, ahora)).toBe('inexistente');
+    expect(invitacionVigente({ ...invValida, expiraEn: new Date('2026-01-01') }, admin, clienteDeOp1, ahora)).toBe('vencida');
+    expect(invitacionVigente({ ...invValida, usadaEn: new Date('2026-01-05') }, admin, clienteDeOp1, ahora)).toBe('usada');
+  });
+
+  it('revocada si no hay creador (lo borraron)', () => {
+    expect(invitacionVigente(invValida, null, clienteDeOp1, ahora)).toBe('revocada');
+  });
+
+  it('revocada si al creador lo desactivaron', () => {
+    expect(invitacionVigente(invValida, u('operador', { id: 'op1', activo: false }), clienteDeOp1, ahora)).toBe('revocada');
+  });
+
+  it('revocada si al operador que invitó lo reasignaron del cliente', () => {
+    expect(invitacionVigente(invValida, operador, clienteDeOtro, ahora)).toBe('revocada');
+  });
+
+  it('revocada si el operador ya no puede invitar ese rol (p. ej. alguien le degradó de admin a operador)', () => {
+    expect(invitacionVigente(invAdmin, operador, null, ahora)).toBe('revocada');
+  });
+
+  it('válida si el creador conserva la autoridad', () => {
+    expect(invitacionVigente(invValida, admin, clienteDeOp1, ahora)).toBe('valida');
+    expect(invitacionVigente(invValida, operador, clienteDeOp1, ahora)).toBe('valida');
+    expect(invitacionVigente(invAdmin, admin, null, ahora)).toBe('valida');
   });
 });
 
