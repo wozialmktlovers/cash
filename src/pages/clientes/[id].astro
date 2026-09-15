@@ -28,7 +28,6 @@ const manualPorJob = new Map(manuales.map((m) => [m.jobId, m.id]));
 const puedeGrowth = resultados.some((r) => contarEtapasConDatos(r.datos) > 0);
 
 const ultimaInvestigacion = jobs.find((j) => j.tipo !== 'growth');
-const ultimoGrowth = jobs.find((j) => j.tipo === 'growth');
 
 const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -70,7 +69,9 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
       <h3>Manual de campaña</h3>
       <p class="secundario">Growth</p>
       {puedeGrowth ? (
-        <p class="secundario">{ultimoGrowth ? `Último: ${fecha(ultimoGrowth.createdAt)} · ${dinero(Number(ultimoGrowth.costoUsd))}` : 'Listo para generarse'}</p>
+        // El costo vive en el job, no en el manual, y el job puede haber fallado
+        // después de generarlo; se muestra el último manual real (por versión).
+        <p class="secundario">{manuales[0] ? `Último manual: ${fecha(manuales[0].createdAt)}` : 'Listo para generarse'}</p>
       ) : (
         <p class="secundario">Requiere una investigación con datos. El manual parte de ella.</p>
       )}
@@ -216,10 +217,19 @@ const fechaHora = (d: Date) => d.toLocaleString('es-MX', { day: '2-digit', month
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarMenu(); });
   document.getElementById('borrar')!.addEventListener('click', () => { cerrarMenu(); dialogo.showModal(); });
   document.getElementById('cancelar-borrado')!.addEventListener('click', () => dialogo.close());
-  document.getElementById('borrar-de-verdad')!.addEventListener('click', async () => {
-    const res = await fetch(`/api/clientes/${clientId}`, { method: 'DELETE' });
-    if (res.ok) window.location.href = '/clientes';
-    else toast('No se pudo eliminar el cliente.', 'error');
+  const borrarDeVerdad = document.getElementById('borrar-de-verdad') as HTMLButtonElement;
+  borrarDeVerdad.addEventListener('click', async () => {
+    // Se bloquea mientras corre el DELETE para que un doble clic (o un doble
+    // tap en móvil) no dispare dos borrados a la vez.
+    borrarDeVerdad.disabled = true;
+    try {
+      const res = await fetch(`/api/clientes/${clientId}`, { method: 'DELETE' });
+      if (res.ok) { window.location.href = '/clientes'; return; }
+      toast('No se pudo eliminar el cliente.', 'error');
+    } catch {
+      toast('No se pudo contactar al servidor.', 'error');
+    }
+    borrarDeVerdad.disabled = false;
   });
 
   // ── Generar manual. El servidor vuelve a comprobar que haya investigación:

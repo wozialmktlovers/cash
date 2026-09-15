@@ -48,7 +48,7 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
             <a href={`/jobs/${j.id}`} class="tarjeta">
               <p class="eyebrow">{j.tipo === 'growth' ? 'Manual de campaña' : 'Investigación'}</p>
               <h3 style="margin:6px 0 12px">{porId.get(j.clientId)?.nombre ?? 'Cliente'}</h3>
-              <div class="avance" role="progressbar" aria-valuenow={pct} aria-valuemin="0" aria-valuemax="100"><i style={`width:${pct}%`}></i></div>
+              <div class="avance" role="progressbar" aria-label={`Avance de ${porId.get(j.clientId)?.nombre ?? 'cliente'}`} aria-valuenow={pct} aria-valuemin="0" aria-valuemax="100"><i style={`width:${pct}%`}></i></div>
               <p class="secundario" style="margin-top:10px">{actual} · {pct}% · {dinero(Number(j.costoUsd))}</p>
             </a>
           );

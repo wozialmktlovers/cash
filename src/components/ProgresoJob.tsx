@@ -57,8 +57,10 @@ export default function ProgresoJob({ jobId, inicial, tope }: { jobId: string; i
   }, [jobId, terminado]);
 
   const etapas = etapasDe(estado.tipo);
-  // Al terminar la barra se llena aunque haya etapas omitidas: ya no avanzará más.
-  const pct = terminado ? 100 : porcentaje(estado.etapas ?? {}, estado.tipo);
+  // Solo un job completado llena la barra al 100%. Si falló o se canceló a
+  // medio camino, se muestra el avance real (las etapas que sí terminaron
+  // ok) para no aparentar que el trabajo llegó al final.
+  const pct = estado.estado === 'completado' ? 100 : porcentaje(estado.etapas ?? {}, estado.tipo);
   const tiempo = transcurrido(estado.startedAt, estado.finishedAt ? new Date(estado.finishedAt) : ahora);
   const esGrowth = estado.tipo === 'growth';
 
@@ -70,7 +72,7 @@ export default function ProgresoJob({ jobId, inicial, tope }: { jobId: string; i
           <span className="secundario cifra">{tiempo ?? 'En cola'}</span>
         </div>
         <p className="display cifra" style={{ margin: '14px 0 10px' }}>{pct}%</p>
-        <div className="avance" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+        <div className="avance" role="progressbar" aria-label="Avance del trabajo" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
           <i style={{ width: `${pct}%` }} />
         </div>
         <p className="secundario cifra" style={{ marginTop: 10 }}>

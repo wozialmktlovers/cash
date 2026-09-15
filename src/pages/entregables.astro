@@ -75,6 +75,7 @@ const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month
             );
           })}
         </ul>
+        <p class="vacio" id="sin-resultados" hidden>No hay entregables de este tipo.</p>
       </section>
     </>
   )}
@@ -86,10 +87,19 @@ const fecha = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month
 
   const renglones = [...document.querySelectorAll<HTMLElement>('[data-tipo]')];
   const chips = [...document.querySelectorAll<HTMLButtonElement>('[data-filtro]')];
+  const sinResultados = document.getElementById('sin-resultados');
   for (const chip of chips) {
     chip.addEventListener('click', () => {
       for (const c of chips) c.setAttribute('aria-pressed', String(c === chip));
-      for (const r of renglones) r.hidden = chip.dataset.filtro !== 'todos' && r.dataset.tipo !== chip.dataset.filtro;
+      let visibles = 0;
+      for (const r of renglones) {
+        const oculto = chip.dataset.filtro !== 'todos' && r.dataset.tipo !== chip.dataset.filtro;
+        r.hidden = oculto;
+        if (!oculto) visibles++;
+      }
+      // Un chip puede dejar la lista sin renglones visibles; se avisa en vez
+      // de mostrar la tarjeta vacía sin explicación.
+      if (sinResultados) sinResultados.hidden = visibles > 0;
     });
   }
 
