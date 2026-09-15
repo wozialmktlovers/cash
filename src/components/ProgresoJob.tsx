@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { etapasDe, porcentaje, transcurrido, ETIQUETA_ESTADO, ETIQUETA_ETAPA } from '@/lib/ui/progreso';
 
 type Estado = {
   ok: boolean;
@@ -9,94 +10,102 @@ type Estado = {
   error: string | null;
   resultId: string | null;
   tipo?: 'research' | 'growth';
+  startedAt: string | null;
+  finishedAt: string | null;
 };
 
-const ETAPAS = [
-  { clave: 'competencia', titulo: 'Competencia', detalle: 'Precios, competidores directos e indirectos, referentes.' },
-  { clave: 'audiencia', titulo: 'Audiencia', detalle: 'Jerga, dolores, aspiraciones y dos personas contrastantes.' },
-  { clave: 'canales', titulo: 'Canales', detalle: 'Plataformas, formatos, horarios y advertencias regulatorias.' },
-  { clave: 'mercado', titulo: 'Mercado', detalle: 'Datos oficiales, salarios, regulación y crecimiento.' },
-  { clave: 'sintesis', titulo: 'Síntesis', detalle: 'Decisiones estratégicas. Espera a las cuatro anteriores.' },
-];
+const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 
-const ETIQUETA: Record<string, { texto: string; clase: string }> = {
-  ok: { texto: 'Lista', clase: 'completado' },
-  corriendo: { texto: 'Corriendo', clase: 'corriendo' },
-  fallo: { texto: 'Falló', clase: 'fallido' },
-  omitido_por_costo: { texto: 'Omitida por costo', clase: 'cancelado' },
+const TRAZO: Record<string, string> = {
+  ok: 'm5 12.5 4.5 4.5L19 7',
+  fallo: 'M6 6l12 12M18 6 6 18',
+  omitido_por_costo: 'M5 12h14',
+  corriendo: 'M12 7v5l3 2',
 };
 
-const dinero = (n: number) =>
-  n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+function MarcaEtapa({ estado }: { estado?: string }) {
+  const d = estado ? TRAZO[estado] : undefined;
+  return (
+    <span className="marca-etapa" aria-hidden="true">
+      {d && (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>
+      )}
+    </span>
+  );
+}
 
-export default function ProgresoJob({ jobId, inicial }: { jobId: string; inicial: Estado }) {
+export default function ProgresoJob({ jobId, inicial, tope }: { jobId: string; inicial: Estado; tope: number }) {
   const [estado, setEstado] = useState<Estado>(inicial);
-  const [error, setError] = useState<string | null>(null);
+  const [conexion, setConexion] = useState<string | null>(null);
+  const [ahora, setAhora] = useState(() => new Date());
 
-  const terminado = estado.estado === 'completado' || estado.estado === 'fallido' || estado.estado === 'cancelado';
+  const terminado = ['completado', 'fallido', 'cancelado'].includes(estado.estado);
 
   useEffect(() => {
     if (terminado) return;
-
-    const t = setInterval(async () => {
+    const consulta = setInterval(async () => {
       try {
         const res = await fetch(`/api/jobs/${jobId}`);
         const cuerpo = await res.json();
-        if (cuerpo.ok) {
-          setEstado(cuerpo);
-          setError(null);
-        }
+        if (cuerpo.ok) { setEstado(cuerpo); setConexion(null); }
       } catch {
-        setError('Se perdió la conexión con el servidor. Reintentando…');
+        setConexion('Se perdió la conexión con el servidor. Reintentando…');
       }
     }, 3000);
-
-    return () => clearInterval(t);
+    const reloj = setInterval(() => setAhora(new Date()), 1000);
+    return () => { clearInterval(consulta); clearInterval(reloj); };
   }, [jobId, terminado]);
+
+  const etapas = etapasDe(estado.tipo);
+  // Al terminar la barra se llena aunque haya etapas omitidas: ya no avanzará más.
+  const pct = terminado ? 100 : porcentaje(estado.etapas ?? {}, estado.tipo);
+  const tiempo = transcurrido(estado.startedAt, estado.finishedAt ? new Date(estado.finishedAt) : ahora);
+  const esGrowth = estado.tipo === 'growth';
 
   return (
     <div>
-      <div className="resumen">
-        <span className={`etiqueta ${estado.estado}`}>{estado.estado}</span>
-        <span className="secundario">Costo acumulado: {dinero(estado.costoUsd)}</span>
-      </div>
+      <section className="tarjeta">
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <span className={`etiqueta ${estado.estado}`}>{ETIQUETA_ESTADO[estado.estado] ?? estado.estado}</span>
+          <span className="secundario cifra">{tiempo ?? 'En cola'}</span>
+        </div>
+        <p className="display cifra" style={{ margin: '14px 0 10px' }}>{pct}%</p>
+        <div className="avance" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+          <i style={{ width: `${pct}%` }} />
+        </div>
+        <p className="secundario cifra" style={{ marginTop: 10 }}>
+          {dinero(estado.costoUsd)} de {dinero(tope)} de tope
+        </p>
+        {conexion && <p className="aviso amarillo" style={{ marginTop: 14 }}>{conexion}</p>}
+        {estado.error && <p className="aviso rosa" role="alert" style={{ marginTop: 14 }}>{estado.error}</p>}
+      </section>
 
-      {error && <p className="aviso amarillo" style={{ marginTop: 16 }}>{error}</p>}
-
-      {estado.error && (
-        <p className="aviso rosa" style={{ marginTop: 16 }}>{estado.error}</p>
-      )}
-
-      <ul className="etapas">
-        {ETAPAS.map((e) => {
-          const s = estado.etapas?.[e.clave];
-          const et = s ? ETIQUETA[s] : null;
-          return (
-            <li key={e.clave} className={s === 'corriendo' ? 'activa' : ''}>
-              <div className="cabeza">
-                <strong>{e.titulo}</strong>
-                <span className={`etiqueta ${et?.clase ?? ''}`}>
-                  {et?.texto ?? 'En espera'}
-                </span>
-              </div>
-              <p className="ayuda">{e.detalle}</p>
-            </li>
-          );
-        })}
-      </ul>
+      <section className="tarjeta">
+        <h2>Etapas</h2>
+        <ol className="linea-tiempo">
+          {etapas.map((e) => {
+            const s = estado.etapas?.[e.clave];
+            return (
+              <li key={e.clave} className={s ?? ''} aria-current={s === 'corriendo' ? 'step' : undefined}>
+                <MarcaEtapa estado={s} />
+                <div>
+                  <strong>{e.titulo}</strong>
+                  <span className="secundario"> · {s ? ETIQUETA_ETAPA[s] ?? s : 'En espera'}</span>
+                  <p className="ayuda" style={{ marginTop: 2 }}>{e.detalle}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </section>
 
       {terminado && estado.resultId && (
-        <div className="acciones">
-          <a href={estado.tipo === 'growth' ? `/growth/${estado.resultId}` : `/resultados/${estado.resultId}`} className="btn">
-            {estado.tipo === 'growth' ? 'Ver el manual de campaña' : 'Ver la presentación'}
-          </a>
-        </div>
+        <a href={esGrowth ? `/growth/${estado.resultId}` : `/resultados/${estado.resultId}`} className="btn ancho-total" style={{ marginTop: 18 }}>
+          {esGrowth ? 'Ver el manual de campaña' : 'Ver la presentación'}
+        </a>
       )}
-
       {terminado && !estado.resultId && (
-        <p className="aviso amarillo" style={{ marginTop: 22 }}>
-          La investigación terminó sin producir un resultado que mostrar.
-        </p>
+        <p className="aviso amarillo" style={{ marginTop: 18 }}>El trabajo terminó sin producir un resultado que mostrar.</p>
       )}
     </div>
   );

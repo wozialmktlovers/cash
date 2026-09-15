@@ -12,13 +12,10 @@ if (!job) return new Response('Investigación no encontrada', { status: 404 });
 const [cliente] = await db.select().from(clients).where(eq(clients.id, job.clientId)).limit(1);
 // El resultado vive en una tabla u otra según el tipo del job.
 const tabla = job.tipo === 'growth' ? growthResults : researchResults;
-const [resultado] = await db
-  .select({ id: tabla.id })
-  .from(tabla)
-  .where(eq(tabla.jobId, job.id))
-  .limit(1);
+const [resultado] = await db.select({ id: tabla.id }).from(tabla).where(eq(tabla.jobId, job.id)).limit(1);
 
 const esGrowth = job.tipo === 'growth';
+const tope = Number(process.env.COST_LIMIT_USD || 15);
 
 const inicial = {
   ok: true,
@@ -29,65 +26,22 @@ const inicial = {
   error: job.error,
   tipo: job.tipo,
   resultId: resultado?.id ?? null,
+  startedAt: job.startedAt?.toISOString() ?? null,
+  finishedAt: job.finishedAt?.toISOString() ?? null,
 };
 ---
 
 <Base
   titulo={`${esGrowth ? 'Manual de campaña' : 'Investigación'} · ${cliente?.nombre ?? ''}`}
-  migas={`Clientes › ${cliente?.nombre ?? ''} › ${esGrowth ? 'Manual de campaña' : 'Investigación'}`}
+  activo="clientes"
+  volver={{ href: `/clientes/${job.clientId}`, texto: cliente?.nombre ?? 'Cliente' }}
 >
   <div class="encabezado">
     <div>
-      <h1>{esGrowth ? 'Manual de campaña en curso' : 'Investigación en curso'}</h1>
-      <p class="sub">
-        {cliente?.nombre} · {cliente?.giro}. La página se actualiza sola cada tres segundos.
-      </p>
+      <p class="eyebrow">{esGrowth ? 'Manual de campaña' : 'Social Research'}</p>
+      <h1>{cliente?.nombre}</h1>
+      <p class="sub">La página se actualiza sola cada tres segundos.</p>
     </div>
-    <a href={`/clientes/${job.clientId}`} class="btn fantasma">Volver al cliente</a>
   </div>
-
-  <section class="tarjeta">
-    <ProgresoJob client:load jobId={job.id} inicial={inicial} />
-  </section>
+  <ProgresoJob client:load jobId={job.id} inicial={inicial} tope={tope} />
 </Base>
-
-<style is:global>
-  .resumen {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex-wrap: wrap;
-  }
-
-  .etapas {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-top: 24px;
-  }
-
-  .etapas li {
-    padding: 16px 18px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--glass-deep);
-    transition: border-color 0.2s ease;
-  }
-
-  .etapas li.activa {
-    border-color: rgba(90, 110, 204, 0.5);
-    background: rgba(90, 110, 204, 0.08);
-  }
-
-  .etapas .cabeza {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-  }
-
-  .etapas .ayuda {
-    margin-top: 4px;
-  }
-</style>
