@@ -211,7 +211,12 @@ legend { font: var(--t-small); font-weight: 600; color: var(--tinta); margin-bot
 a.tarjeta { display: block; text-decoration: none; transition: transform 0.15s ease, border-color 0.15s ease; }
 a.tarjeta:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--rosa) 30%, var(--linea)); }
 
+/* `min-width: 0` en los hijos: por omisión un elemento de rejilla no se
+   encoge por debajo de su contenido, así que un cliente con nombre largo
+   ensanchaba la columna y sacaba las tarjetas de la pantalla en móvil, pese
+   al recorte con puntos suspensivos del h3. */
 .rejilla { display: grid; gap: 14px; grid-template-columns: 1fr; }
+.rejilla > * { min-width: 0; }
 @media (min-width: 600px) { .rejilla { grid-template-columns: repeat(2, 1fr); } }
 @media (min-width: 1000px) { .rejilla.tres { grid-template-columns: repeat(3, 1fr); } }
 /* .tarjeta + .tarjeta de arriba también entra dentro de una rejilla y empuja
