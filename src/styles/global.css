@@ -253,6 +253,26 @@ a.cliente-tarjeta, .cliente-tarjeta { display: flex; gap: 18px; align-items: fle
 .cliente-tarjeta h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cliente-tarjeta .pie { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; font: var(--t-small); }
 
+/* Avance del cliente dentro de la tarjeta (diseño §3). Solo aparece cuando
+   quien la pinta le pasa `avance`; sin esa prop la tarjeta queda como estaba. */
+.tarjeta-avance { margin-top: 12px; }
+.tarjeta-avance .avance { margin-bottom: 8px; }
+/* El punto lleva el color del estado del paso (`--punto-estado`, que pone la
+   tarjeta). En bloque y no en flex, para que un nombre de etapa largo termine
+   en puntos suspensivos en vez de desbordar la tarjeta en un celular:
+   `text-overflow` no actúa sobre los hijos de un contenedor flex. */
+.tarjeta-avance-paso {
+  font: var(--t-small); color: var(--suave);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tarjeta-avance-paso::before {
+  content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 7px; vertical-align: middle;
+  background: var(--punto-estado, var(--suave));
+}
+.tarjeta-avance-paso .cifra { color: var(--tinta); font-weight: 600; }
+.tarjeta-avance-vacio { margin-top: 12px; }
+
 .punto { display: inline-flex; align-items: center; gap: 6px; font: var(--t-small); }
 .punto::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--suave); }
 .punto.listo::before { background: var(--verde); }

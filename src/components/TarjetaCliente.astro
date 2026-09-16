@@ -2,13 +2,47 @@
 import { iniciales, tinte } from '@/lib/ui/cliente-visual';
 import { normalizar } from '@/lib/ui/buscar';
 import { ETIQUETA_CLIENTE, type ResumenCliente } from '@/lib/ui/estado-cliente';
+import { NOMBRE_ETAPA, ETIQUETA_ESTADO_ETAPA } from '@/flujo/reglas';
+import { COLOR_ESTADO, type ColorEstado } from '@/flujo/ui';
+import type { ResumenAvance } from '@/lib/ui/progreso';
 
 interface Props {
   cliente: { id: string; nombre: string; giro: string; ciudad: string | null };
   resumen: ResumenCliente;
+  /**
+   * Avance de las etapas del cliente (`resumenAvance`). **Opcional**: quien no
+   * lo pasa ve la tarjeta exactamente como antes.
+   *
+   * Un cliente sin filas de etapas no viene en el `Map` de `etapasDeClientes`;
+   * la página llama igual a `resumenAvance([])` y aquí se pinta «Sin etapas
+   * contratadas» sin barra, que es el caso del diseño §3.
+   */
+  avance?: ResumenAvance;
 }
-const { cliente: c, resumen: r } = Astro.props;
+const { cliente: c, resumen: r, avance } = Astro.props;
 const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+
+// «Sin etapas contratadas» es no tener ni un paso contratado, no estar en 0%:
+// un cliente recién contratado está en 0% y sí tiene etapas que mostrar.
+const hayEtapas = avance ? avance.pasos.some((p) => p.contratada) : false;
+// `pasoActual` es null cuando no queda ninguna etapa contratada sin aprobar.
+const paso = avance?.pasoActual ?? null;
+
+// El punto toma el mismo color con que la ficha escribe el chip del estado
+// (`COLOR_ESTADO` + `.etiqueta.<color>`); ahí «gris» lleva el texto en
+// `--suave` sobre fondo gris, y ese es el tono que aquí sirve de punto. Va en
+// una variable en línea para no repetir cinco reglas de color en la hoja.
+const COLOR_PUNTO: Record<ColorEstado, string> = {
+  gris: 'var(--suave)', azul: 'var(--azul)', amarillo: 'var(--amarillo)',
+  rosa: 'var(--rosa)', verde: 'var(--verde)',
+};
+// En la tarjeta no caben el nombre de la etapa y además la palabra del estado:
+// a 1280px la rejilla es de tres y se cortarían los dos. El diseño §3 pide el
+// nombre del paso, así que el estado va en el color del punto — y con todas
+// sus letras para quien use lector de pantalla.
+const colorPaso = COLOR_PUNTO[paso ? COLOR_ESTADO[paso.estado] : COLOR_ESTADO.aprobada];
+const textoPaso = paso ? NOMBRE_ETAPA[paso.etapa] : 'Todo aprobado';
+const estadoPaso = paso ? ETIQUETA_ESTADO_ETAPA[paso.estado] : '';
 ---
 <a href={`/clientes/${c.id}`} class="tarjeta cliente-tarjeta"
   data-estado={r.estado} data-busqueda={normalizar(`${c.nombre} ${c.giro} ${c.ciudad ?? ''}`)}>
@@ -16,6 +50,22 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
   <div class="cuerpo">
     <h3>{c.nombre}</h3>
     <p class="secundario">{c.giro}{c.ciudad ? ` · ${c.ciudad}` : ''}</p>
+
+    {avance && (hayEtapas ? (
+      <div class="tarjeta-avance">
+        <div class="avance" role="progressbar" aria-label={`Avance de ${c.nombre}`}
+          aria-valuenow={avance.porcentaje} aria-valuemin="0" aria-valuemax="100">
+          <i style={`width:${avance.porcentaje}%`}></i>
+        </div>
+        <p class="tarjeta-avance-paso" style={`--punto-estado:${colorPaso}`}>
+          <span class="cifra">{avance.porcentaje}%</span> · {textoPaso}
+          {estadoPaso && <span class="sr-solo"> · {estadoPaso}</span>}
+        </p>
+      </div>
+    ) : (
+      <p class="secundario tarjeta-avance-vacio">Sin etapas contratadas</p>
+    ))}
+
     <div class="pie">
       <span class={`punto ${r.estado}`}>{ETIQUETA_CLIENTE[r.estado]}</span>
       <span class="secundario cifra">{r.costo > 0 ? dinero(r.costo) : '—'}</span>
