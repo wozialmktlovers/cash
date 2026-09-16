@@ -27,11 +27,9 @@
 
 import { z } from 'zod';
 import { ID_TEMA } from '@/pilares/schemas';
-import { FORMATOS, type EstadoRevision, type Formato } from './reglas';
+import { FORMATOS, PLATAFORMAS, type EstadoRevision, type Formato, type Plataforma } from './reglas';
 
 /** Dónde se publica la pieza; el enum `plataforma_pieza` de la base. */
-export const PLATAFORMAS = ['facebook', 'instagram', 'ambas'] as const;
-export type Plataforma = (typeof PLATAFORMAS)[number];
 
 /** Qué es cada arte de la lista de `contenido_piezas.arte`. */
 export const TIPOS_ARTE = ['imagen', 'video', 'portada'] as const;

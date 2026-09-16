@@ -20,6 +20,13 @@ import type { Estado } from '@/flujo/reglas';
 export const FORMATOS = ['post', 'carrusel', 'reel', 'historia'] as const;
 export type Formato = (typeof FORMATOS)[number];
 
+/** Dónde se publica una pieza. Espeja el enum `plataforma_pieza` del esquema.
+ *  Vive aquí, con FORMATOS, para que los demás módulos del contenido mensual
+ *  la importen en vez de repetirla: una copia que se desincronice aceptaría
+ *  una plataforma que la base rechaza. */
+export const PLATAFORMAS = ['facebook', 'instagram', 'ambas'] as const;
+export type Plataforma = (typeof PLATAFORMAS)[number];
+
 /**
  * Lo que el cliente dijo de una **pieza** al revisarla (diseño §6): el enum
  * `estado_revision_pieza` de `contenido_piezas.estado_cliente`.

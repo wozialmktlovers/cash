@@ -21,7 +21,7 @@
 import { z } from 'zod';
 import { normalizarTema } from '@/pilares/texto';
 import type { Funcion, Formato as FormatoTema } from '@/pilares/schemas';
-import type { Formato } from './reglas';
+import { PLATAFORMAS, type Formato, type Plataforma } from './reglas';
 
 /** Cuántas opciones devuelve el agente por pieza. Ni una menos, ni una más: son para elegir. */
 export const OPCIONES = 3;
@@ -109,8 +109,6 @@ export type PropuestasCopy = z.infer<typeof propuestasCopySchema>;
  * este módulo siga sin tocar la base: lo importan el prompt y la ruta, y
  * ninguno de los dos debería arrastrar el cliente de Postgres.
  */
-export const PLATAFORMAS = ['facebook', 'instagram', 'ambas'] as const;
-export type Plataforma = (typeof PLATAFORMAS)[number];
 
 /**
  * El tema del mapa de pilares tal como lo necesita el redactor: su texto, la
