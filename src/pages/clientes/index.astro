@@ -7,6 +7,8 @@ import { db, clients, researchJobs, users } from '@/db';
 import { condicionClientes, esUuid } from '@/lib/visibilidad';
 import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
 import { resumirPorCliente, resumenDe } from '@/lib/ui/estado-cliente';
+import { etapasDeClientes } from '@/flujo/servicio';
+import { resumenAvance } from '@/lib/ui/progreso';
 
 const usuario = Astro.locals.usuario;
 const esAdmin = usuario.rol === 'admin';
@@ -23,6 +25,13 @@ const lista = await db.select().from(clients).where(cond).orderBy(desc(clients.u
 const ids = lista.map((c) => c.id);
 const jobs = ids.length ? await db.select().from(researchJobs).where(inArray(researchJobs.clientId, ids)) : [];
 const resumen = resumirPorCliente(jobs);
+
+// Una sola consulta para las etapas de toda la lista (`etapasDeClientes`, no
+// `etapasDelCliente`, que iría cliente por cliente y además crearía las filas
+// que falten). Quien no tenga ninguna fila no viene en el Map: `resumenAvance`
+// de una lista vacía es justo el «Sin etapas contratadas» de la tarjeta.
+const etapasPorCliente = await etapasDeClientes(ids);
+const avanceDe = (clientId: string) => resumenAvance(etapasPorCliente.get(clientId) ?? []);
 
 // Solo admin y operador pueden quedar como responsables de un cliente, y
 // solo los activos (tarea I4, punto 3): uno inactivo ya no puede tener
@@ -83,7 +92,7 @@ const FILTROS = [
         ))}
       </div>
       <div class="rejilla tres" id="rejilla">
-        {lista.map((c) => <TarjetaCliente cliente={c} resumen={resumenDe(resumen, c.id)} />)}
+        {lista.map((c) => <TarjetaCliente cliente={c} resumen={resumenDe(resumen, c.id)} avance={avanceDe(c.id)} />)}
       </div>
       <p class="vacio" id="sin-resultados" hidden>Ningún cliente coincide con el filtro.</p>
     </>
@@ -93,6 +102,11 @@ const FILTROS = [
 <script>
   import { normalizar } from '@/lib/ui/buscar';
   import { pasaFiltro, type EstadoCliente, type FiltroCliente } from '@/lib/ui/estado-cliente';
+  import { mostrarAvisoPendiente } from '@/scripts/aviso-al-llegar';
+
+  // Aviso de la pantalla anterior: hoy solo lo deja el borrado de un cliente,
+  // que termina aquí porque su ficha ya no existe.
+  mostrarAvisoPendiente();
 
   const buscar = document.getElementById('buscar') as HTMLInputElement | null;
   const tarjetas = [...document.querySelectorAll<HTMLElement>('#rejilla [data-estado]')];

@@ -47,3 +47,20 @@ export async function borrarArchivo(relativa: string): Promise<void> {
   const dataDir = process.env.DATA_DIR || './data';
   await rm(rutaSegura(dataDir, relativa), { force: true });
 }
+
+/**
+ * Borra la carpeta entera de un cliente en el disco de datos, con lo que haya
+ * dentro. Se usa al eliminar un cliente, después de borrar archivo por archivo
+ * los que sí están registrados: barre lo que quedó de una subida a medias (un
+ * archivo escrito cuya fila nunca se insertó) y deja de paso la carpeta vacía.
+ *
+ * El candado del id no es decorativo: con una cadena vacía o con separadores,
+ * `rutaSegura` devolvería el propio DATA_DIR y este `rm` recursivo se llevaría
+ * los archivos de TODOS los clientes. La carpeta de un cliente es siempre un
+ * solo segmento (`join(clientId, ...)` en `guardarArchivo`).
+ */
+export async function borrarCarpetaCliente(clientId: string): Promise<void> {
+  if (!/^[A-Za-z0-9-]+$/.test(clientId)) throw new Error('Id de cliente inválido para borrar su carpeta');
+  const dataDir = process.env.DATA_DIR || './data';
+  await rm(rutaSegura(dataDir, clientId), { recursive: true, force: true });
+}

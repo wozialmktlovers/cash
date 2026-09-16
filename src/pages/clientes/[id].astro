@@ -10,6 +10,7 @@ import { iniciales, tinte } from '@/lib/ui/cliente-visual';
 import { ETIQUETA_ESTADO } from '@/lib/ui/progreso';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { clienteVisible } from '@/lib/visibilidad';
+import { itemsPerdida } from '@/lib/borrado';
 import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
 import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults, clienteEtapas, etapaEventos, users, invitaciones } from '@/db';
 import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, tipoDocumentoDe, dependenciasCumplidas, type Etapa } from '@/flujo/reglas';
@@ -155,6 +156,21 @@ type ItemHistorial =
   | { tipo: 'evento'; fecha: Date; ev: (typeof eventosEtapa)[number] }
   | { tipo: 'job'; fecha: Date; job: (typeof jobs)[number] };
 
+// ── Zona de peligro (spec §2) ──────────────────────────────────────────
+// Las cantidades del diálogo salen de lo que esta misma página ya consultó:
+// ni una consulta más, y ninguna cifra inventada. `usuariosCliente` son las
+// cuentas de acceso del cliente (activas e inactivas: todas dejan de existir).
+// Solo el admin llega aquí, y admin siempre puede operar al cliente, así que
+// `usuariosCliente` está poblado.
+const perdida = esAdmin
+  ? itemsPerdida({
+      entregables: resultados.length + mapas.length + manuales.length,
+      archivos: archivos.length,
+      cuentas: usuariosCliente.length,
+      enlaces: enlaces.length,
+    })
+  : [];
+
 const historial: ItemHistorial[] = [
   ...eventosEtapa.map((ev): ItemHistorial => ({ tipo: 'evento', fecha: ev.creadoEn, ev })),
   ...jobs.map((job): ItemHistorial => ({ tipo: 'job', fecha: job.createdAt, job })),
@@ -168,16 +184,6 @@ const historial: ItemHistorial[] = [
       <h1>{cliente.nombre}</h1>
       <p class="sub">{cliente.giro}{cliente.ciudad ? ` · ${cliente.ciudad}` : ''}</p>
     </div>
-    {esAdmin && (
-      <div class="menu">
-        <button type="button" class="icono-btn" id="menu-boton" aria-haspopup="true" aria-expanded="false" aria-controls="menu-lista" aria-label="Más acciones">
-          <Icono nombre="puntos" />
-        </button>
-        <ul class="menu-lista" id="menu-lista" hidden>
-          <li><button type="button" id="borrar">Eliminar cliente</button></li>
-        </ul>
-      </div>
-    )}
   </div>
 
   <div class="rejilla" style="margin-top:20px">
@@ -329,6 +335,19 @@ const historial: ItemHistorial[] = [
     )}
   </section>
 
+  {esAdmin && (
+    <section class="tarjeta zona-peligro">
+      <h2>Zona de peligro</h2>
+      <p class="sub">
+        Eliminar a {cliente.nombre} borra su ficha y todo lo que cuelga de ella, incluidas las cuentas
+        de acceso de su gente. No hay papelera y no se puede deshacer.
+      </p>
+      <div class="acciones">
+        <button type="button" class="btn peligro" id="abrir-borrar"><Icono nombre="alerta" />Eliminar cliente</button>
+      </div>
+    </section>
+  )}
+
   {operable && (
     <dialog id="dialogo-invitar-usuario" aria-labelledby="invitar-usuario-titulo">
       <h2 id="invitar-usuario-titulo">Invitar usuario de {cliente.nombre}</h2>
@@ -358,13 +377,32 @@ const historial: ItemHistorial[] = [
   )}
 
   {esAdmin && (
-    <dialog id="dialogo-borrar" aria-labelledby="borrar-titulo">
-      <h2 id="borrar-titulo">¿Eliminar a {cliente.nombre}?</h2>
-      <p class="sub" style="margin:10px 0 0">Se borran también enlaces, archivos e investigaciones. No se puede deshacer.</p>
-      <div class="acciones">
-        <button type="button" class="btn peligro lleno" id="borrar-de-verdad">Sí, eliminar</button>
-        <button type="button" class="btn fantasma" id="cancelar-borrado">Cancelar</button>
-      </div>
+    <dialog id="dialogo-borrar" aria-labelledby="borrar-titulo" data-nombre={cliente.nombre}>
+      <h2 id="borrar-titulo">Eliminar a {cliente.nombre}</h2>
+      <p class="sub" style="margin:10px 0 0">Al confirmar se borran, para siempre:</p>
+      <ul class="lista-perdida">
+        {perdida.map((i) => (
+          <li><span class="cifra">{i.cantidad}</span><span>{i.texto}</span></li>
+        ))}
+      </ul>
+      <p class="aviso rosa" style="margin-top:14px">
+        No hay papelera ni forma de deshacerlo. Del cliente solo quedará una línea en el registro del servidor.
+      </p>
+
+      <form id="forma-borrar">
+        <div class="campo" style="margin-top:18px">
+          <label for="borrar-nombre">Escribe <strong class="nombre-exacto">{cliente.nombre}</strong> para confirmar</label>
+          <input id="borrar-nombre" name="nombre" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="borrar-pista" required />
+          <p class="secundario" id="borrar-pista" style="margin-top:7px">Tal cual, con sus mayúsculas y sus acentos.</p>
+        </div>
+
+        <p class="aviso rosa" id="borrar-error" hidden role="alert"></p>
+
+        <div class="acciones">
+          <button type="submit" class="btn peligro lleno" id="borrar-de-verdad" disabled>Eliminar para siempre</button>
+          <button type="button" class="btn fantasma" id="cancelar-borrado">Cancelar</button>
+        </div>
+      </form>
     </dialog>
   )}
 </Base>
@@ -372,6 +410,8 @@ const historial: ItemHistorial[] = [
 <script>
   import { toast } from '@/scripts/toast';
   import { copiar } from '@/scripts/copiar';
+  import { avisarEnLaSiguiente } from '@/scripts/aviso-al-llegar';
+  import { nombreConfirmado } from '@/lib/borrado';
 
   const clientId = window.location.pathname.split('/')[2];
 
@@ -421,38 +461,68 @@ const historial: ItemHistorial[] = [
     guardar.disabled = false;
   });
 
-  // ── Menú ⋯ y borrado en dos pasos. Solo el admin borra clientes (regla del
-  // dueño): ni el botón ni el diálogo se renderizan para nadie más, así que
-  // todo este bloque es opcional — mismo patrón `| null` que ya usa el
-  // diálogo de invitar usuario, más abajo.
-  const menuBoton = document.getElementById('menu-boton') as HTMLButtonElement | null;
-  const menuLista = document.getElementById('menu-lista') as HTMLElement | null;
+  // ── Zona de peligro. Solo el admin borra clientes (regla del dueño): ni la
+  // sección ni el diálogo se renderizan para nadie más, así que todo este
+  // bloque es opcional — mismo patrón `| null` que el diálogo de invitar
+  // usuario, más abajo.
   const dialogo = document.getElementById('dialogo-borrar') as HTMLDialogElement | null;
-  if (menuBoton && menuLista && dialogo) {
-    const cerrarMenu = () => { menuLista.hidden = true; menuBoton.setAttribute('aria-expanded', 'false'); };
-    menuBoton.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const abrir = menuLista.hidden;
-      menuLista.hidden = !abrir;
-      menuBoton.setAttribute('aria-expanded', String(abrir));
-    });
-    document.addEventListener('click', cerrarMenu);
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarMenu(); });
-    document.getElementById('borrar')?.addEventListener('click', () => { cerrarMenu(); dialogo.showModal(); });
-    document.getElementById('cancelar-borrado')!.addEventListener('click', () => dialogo.close());
+  if (dialogo) {
+    // El nombre viaja en un atributo y no interpolado dentro de este script:
+    // así Astro lo escapa, y un nombre con comillas o con una etiqueta de
+    // cierre dentro no puede romper (ni reescribir) esta página.
+    const nombreReal = dialogo.dataset.nombre ?? '';
+    const formaBorrar = document.getElementById('forma-borrar') as HTMLFormElement;
+    const campoNombre = document.getElementById('borrar-nombre') as HTMLInputElement;
+    const errorBorrar = document.getElementById('borrar-error') as HTMLElement;
     const borrarDeVerdad = document.getElementById('borrar-de-verdad') as HTMLButtonElement;
-    borrarDeVerdad.addEventListener('click', async () => {
-      // Se bloquea mientras corre el DELETE para que un doble clic (o un doble
-      // tap en móvil) no dispare dos borrados a la vez.
+
+    // La misma función que usa el servidor para decidir si el nombre vale
+    // (`src/lib/borrado.ts`): si la pantalla y la API no compartieran la
+    // regla, el botón se habilitaría para un nombre que la API va a rechazar.
+    const revisarNombre = () => { borrarDeVerdad.disabled = !nombreConfirmado(campoNombre.value, nombreReal); };
+    campoNombre.addEventListener('input', revisarNombre);
+
+    document.getElementById('abrir-borrar')!.addEventListener('click', () => {
+      formaBorrar.reset();
+      errorBorrar.hidden = true;
+      revisarNombre();
+      dialogo.showModal();
+      campoNombre.focus();
+    });
+    document.getElementById('cancelar-borrado')!.addEventListener('click', () => dialogo.close());
+
+    formaBorrar.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      // Enter en el campo envía la forma aunque el botón esté deshabilitado en
+      // algún navegador: la regla se vuelve a aplicar aquí.
+      if (!nombreConfirmado(campoNombre.value, nombreReal)) return;
+      // Se bloquean botón y campo mientras corre el DELETE para que un doble
+      // clic (o un doble tap en móvil) no dispare dos borrados a la vez.
       borrarDeVerdad.disabled = true;
+      campoNombre.disabled = true;
+      errorBorrar.hidden = true;
       try {
-        const res = await fetch(`/api/clientes/${clientId}`, { method: 'DELETE' });
-        if (res.ok) { window.location.href = '/clientes'; return; }
-        toast('No se pudo eliminar el cliente.', 'error');
+        const res = await fetch(`/api/clientes/${clientId}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nombre: campoNombre.value }),
+        });
+        if (res.ok) {
+          // La ficha está a punto de dejar de existir: el aviso se muestra al
+          // llegar a /clientes, no aquí, donde nadie alcanzaría a leerlo.
+          avisarEnLaSiguiente(`Se eliminó ${nombreReal}.`);
+          window.location.href = '/clientes';
+          return;
+        }
+        const cuerpo = await res.json().catch(() => null);
+        errorBorrar.textContent = (cuerpo?.errores ?? ['No se pudo eliminar el cliente.']).join(' · ');
+        errorBorrar.hidden = false;
       } catch {
-        toast('No se pudo contactar al servidor.', 'error');
+        errorBorrar.textContent = 'No se pudo contactar al servidor.';
+        errorBorrar.hidden = false;
       }
-      borrarDeVerdad.disabled = false;
+      campoNombre.disabled = false;
+      revisarNombre();
     });
   }
 
@@ -576,4 +646,19 @@ const historial: ItemHistorial[] = [
   .ficha-titulo h1 { overflow-wrap: anywhere; }
   .tarjeta-cabeza-flex { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .subtitulo-invitaciones { margin: 18px 0 0; font-size: 0.9rem; }
+
+  /* Zona de peligro: separada del resto y con el rojo del sistema (el mismo
+     de `.btn.peligro` y `.aviso.rosa`), que ya está resuelto en los dos temas. */
+  .zona-peligro { margin-top: 32px; border-color: color-mix(in srgb, var(--rojo) 38%, var(--linea)); }
+  .zona-peligro > h2 { color: var(--rojo); }
+  .zona-peligro > .sub { margin-bottom: 0; overflow-wrap: anywhere; }
+
+  .lista-perdida { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 9px; font: var(--t-small); }
+  .lista-perdida li { display: flex; gap: 10px; align-items: baseline; }
+  /* La cifra alineada a la derecha y con cifras de ancho fijo: la columna de
+     números se lee de un vistazo aunque haya un 1 y un 12 seguidos. */
+  .lista-perdida .cifra { flex: 0 0 auto; min-width: 2.2ch; text-align: right; font-weight: 700; color: var(--tinta); }
+
+  /* Un nombre largo tiene que caber en el diálogo del celular sin desbordarlo. */
+  .nombre-exacto { color: var(--tinta); overflow-wrap: anywhere; }
 </style>
