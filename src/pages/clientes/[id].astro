@@ -16,7 +16,9 @@ import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResu
 import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, tipoDocumentoDe, type Etapa } from '@/flujo/reglas';
 import { botonesEtapa, marcaEtapa, COLOR_ESTADO } from '@/flujo/ui';
 import { etapasDelCliente, comentariosAbiertosPorEtapa, enlaceDocumento } from '@/flujo/servicio';
+import { loteActivo } from '@/contenido/servicio';
 import { fechaHora as fechaHoraMx, fechaCorta } from '@/lib/ui/fecha';
+import { nombrePeriodo, periodoActual } from '@/lib/ui/periodo';
 
 const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
@@ -87,8 +89,14 @@ const RUTA_GENERAR: Partial<Record<Etapa, string>> = {
   pilares: `/clientes/${cliente.id}/pilares`,
 };
 
+// El mes al que lleva la tarjeta del desarrollo mensual (B3): el del lote
+// activo —el que el equipo tiene que atender ahora mismo, diseño §2— y, si el
+// cliente todavía no tiene ningún lote, el mes en curso, que es el que va a
+// querer abrir. Una sola consulta, y solo si esa etapa está en la ficha.
+const loteDelMes = await loteActivo(cliente.id);
+const mesMensual = loteDelMes?.periodo ?? periodoActual();
+
 const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
-  const proximamente = fila.etapa === 'desarrollo_mensual';
   const comentariosAbiertos = comentariosAbiertosPorEtapaId.get(fila.id) ?? 0;
 
   const botones = botonesEtapa({
@@ -105,6 +113,19 @@ const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
     return b;
   });
 
+  // El desarrollo mensual no tiene documento ni transiciones a mano —su estado
+  // lo pone el lote, vía `sincronizarEtapa`—, así que `botonesEtapa` no le
+  // devuelve ninguno. Su único botón es la puerta a la pantalla del mes, y la
+  // pone aquí la ficha, que es la que sabe cuál es ese mes. Sustituye al
+  // «Próximamente» que la tarjeta mostró hasta la tarea B3.
+  if (fila.etapa === 'desarrollo_mensual') {
+    botonesResueltos.push({
+      id: 'mensual',
+      href: `/clientes/${cliente.id}/contenido/${mesMensual}`,
+      texto: `${loteDelMes ? 'Ver' : 'Abrir'} ${nombrePeriodo(mesMensual)}`,
+    });
+  }
+
   return {
     etapaId: fila.id,
     etapa: fila.etapa,
@@ -115,13 +136,6 @@ const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
     marca: marcaEtapa(fila),
     actualizadoTexto: fechaHora(fila.actualizadoEn),
     comentariosAbiertos,
-    proximamente,
-    // El texto es literal y no `dependencias.razon`: hasta A3 esa razón era
-    // el «Próximamente» de `dependenciasCumplidas`, pero esa regla ya cayó
-    // (la etapa entró al flujo) y ahora devuelve cadena vacía, que dejaría la
-    // tarjeta con un párrafo en blanco. Lo que sigue pendiente es la pantalla
-    // de la etapa (fase B), y eso es cosa de esta interfaz, no de las reglas.
-    razonProximamente: proximamente ? 'Próximamente: la pantalla de esta etapa todavía no está lista.' : undefined,
     botones: botonesResueltos,
   };
 });

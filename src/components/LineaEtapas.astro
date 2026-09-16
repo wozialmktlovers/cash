@@ -12,6 +12,11 @@ export type BotonResuelto =
   | { id: 'generar'; href: string }
   | { id: 'generar-growth' }
   | { id: 'ver'; href: string }
+  // El acceso al mes del desarrollo mensual (B3). No sale de `botonesEtapa`
+  // como los demás: esa función decide qué transiciones puede pedir el
+  // usuario, y esto no es una transición sino un enlace a la pantalla donde
+  // se arma el lote. Lo resuelve la ficha, que es la que sabe a qué mes lleva.
+  | { id: 'mensual'; href: string; texto: string }
   | { id: 'iniciar' }
   | { id: 'solicitar'; disabled: boolean; razon: string }
   | { id: 'aprobar' }
@@ -28,8 +33,6 @@ export interface TarjetaEtapaVM {
   marca: MarcaEtapa;
   actualizadoTexto: string;
   comentariosAbiertos: number;
-  proximamente: boolean;
-  razonProximamente?: string;
   botones: BotonResuelto[];
 }
 
@@ -49,6 +52,9 @@ const ETIQUETA_BOTON: Record<BotonResuelto['id'], string> = {
   generar: 'Generar',
   'generar-growth': 'Generar',
   ver: 'Ver documento',
+  // El texto real lo pone la ficha (lleva el mes: «Abrir septiembre 2026»);
+  // este es el de respaldo para que el registro quede completo.
+  mensual: 'Ver el mes',
   iniciar: 'Iniciar',
   solicitar: 'Solicitar autorización',
   aprobar: 'Aprobar',
@@ -72,55 +78,50 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'manual_campan
         {t.marca === 'no_contratada' && <span class="etiqueta marca">No contratada</span>}
       </div>
 
-      {t.proximamente ? (
-        <p class="secundario etapa-proximamente">{t.razonProximamente}</p>
-      ) : (
-        <>
-          <p class="secundario">Actualizada: {t.actualizadoTexto}</p>
-          <p class="secundario">
-            {t.comentariosAbiertos === 0 ? 'Sin comentarios abiertos' : `${t.comentariosAbiertos} ${t.comentariosAbiertos === 1 ? 'comentario abierto' : 'comentarios abiertos'}`}
-          </p>
+      <p class="secundario">Actualizada: {t.actualizadoTexto}</p>
+      <p class="secundario">
+        {t.comentariosAbiertos === 0 ? 'Sin comentarios abiertos' : `${t.comentariosAbiertos} ${t.comentariosAbiertos === 1 ? 'comentario abierto' : 'comentarios abiertos'}`}
+      </p>
 
-          {t.botones.length > 0 && (
-            <div class="etapa-botones">
-              {t.botones.map((b) => {
-                if (b.id === 'generar') return <a href={b.href} class="btn chico">{ETIQUETA_BOTON.generar}</a>;
-                if (b.id === 'ver') return <a href={b.href} class="btn fantasma chico">{ETIQUETA_BOTON.ver}</a>;
-                if (b.id === 'generar-growth') return <button type="button" class="btn chico" data-generar-growth data-etapa-id={t.etapaId}>{ETIQUETA_BOTON['generar-growth']}</button>;
-                if (b.id === 'iniciar') return <button type="button" class="btn chico" data-accion="iniciar" data-etapa-id={t.etapaId}>{ETIQUETA_BOTON.iniciar}</button>;
-                if (b.id === 'solicitar') return (
-                  <>
-                    <button type="button" class="btn chico" data-accion="solicitar" data-etapa-id={t.etapaId} disabled={b.disabled} title={b.disabled ? b.razon : undefined}>
-                      {ETIQUETA_BOTON.solicitar}
-                    </button>
-                    {/* Fix menores, punto 4: la razón de un botón deshabilitado no puede
-                        depender solo de `title` (invisible en celular, sin hover) — se
-                        repite como texto secundario visible bajo el botón. */}
-                    {b.disabled && <p class="secundario etapa-razon-deshabilitado">{b.razon}</p>}
-                  </>
-                );
-                if (b.id === 'aprobar') return (
-                  <button type="button" class="btn chico" data-abrir="aprobar" data-etapa-id={t.etapaId} data-etapa-nombre={NOMBRE_ETAPA[t.etapa]}>
-                    {ETIQUETA_BOTON.aprobar}
-                  </button>
-                );
-                if (b.id === 'pedir_cambios') return (
-                  <button type="button" class="btn fantasma chico" data-abrir="comentario" data-accion="pedir_cambios" data-etapa-id={t.etapaId}
-                    data-etapa-nombre={NOMBRE_ETAPA[t.etapa]} data-requiere={String(b.requiereComentario)}>
-                    {ETIQUETA_BOTON.pedir_cambios}
-                  </button>
-                );
-                if (b.id === 'reabrir') return (
-                  <button type="button" class="btn fantasma chico" data-abrir="comentario" data-accion="reabrir" data-etapa-id={t.etapaId}
-                    data-etapa-nombre={NOMBRE_ETAPA[t.etapa]} data-requiere="true">
-                    {ETIQUETA_BOTON.reabrir}
-                  </button>
-                );
-                return null;
-              })}
-            </div>
-          )}
-        </>
+      {t.botones.length > 0 && (
+        <div class="etapa-botones">
+          {t.botones.map((b) => {
+            if (b.id === 'generar') return <a href={b.href} class="btn chico">{ETIQUETA_BOTON.generar}</a>;
+            if (b.id === 'ver') return <a href={b.href} class="btn fantasma chico">{ETIQUETA_BOTON.ver}</a>;
+            if (b.id === 'mensual') return <a href={b.href} class="btn chico">{b.texto}</a>;
+            if (b.id === 'generar-growth') return <button type="button" class="btn chico" data-generar-growth data-etapa-id={t.etapaId}>{ETIQUETA_BOTON['generar-growth']}</button>;
+            if (b.id === 'iniciar') return <button type="button" class="btn chico" data-accion="iniciar" data-etapa-id={t.etapaId}>{ETIQUETA_BOTON.iniciar}</button>;
+            if (b.id === 'solicitar') return (
+              <>
+                <button type="button" class="btn chico" data-accion="solicitar" data-etapa-id={t.etapaId} disabled={b.disabled} title={b.disabled ? b.razon : undefined}>
+                  {ETIQUETA_BOTON.solicitar}
+                </button>
+                {/* Fix menores, punto 4: la razón de un botón deshabilitado no puede
+                    depender solo de `title` (invisible en celular, sin hover) — se
+                    repite como texto secundario visible bajo el botón. */}
+                {b.disabled && <p class="secundario etapa-razon-deshabilitado">{b.razon}</p>}
+              </>
+            );
+            if (b.id === 'aprobar') return (
+              <button type="button" class="btn chico" data-abrir="aprobar" data-etapa-id={t.etapaId} data-etapa-nombre={NOMBRE_ETAPA[t.etapa]}>
+                {ETIQUETA_BOTON.aprobar}
+              </button>
+            );
+            if (b.id === 'pedir_cambios') return (
+              <button type="button" class="btn fantasma chico" data-abrir="comentario" data-accion="pedir_cambios" data-etapa-id={t.etapaId}
+                data-etapa-nombre={NOMBRE_ETAPA[t.etapa]} data-requiere={String(b.requiereComentario)}>
+                {ETIQUETA_BOTON.pedir_cambios}
+              </button>
+            );
+            if (b.id === 'reabrir') return (
+              <button type="button" class="btn fantasma chico" data-abrir="comentario" data-accion="reabrir" data-etapa-id={t.etapaId}
+                data-etapa-nombre={NOMBRE_ETAPA[t.etapa]} data-requiere="true">
+                {ETIQUETA_BOTON.reabrir}
+              </button>
+            );
+            return null;
+          })}
+        </div>
       )}
     </article>
   ))}
@@ -201,12 +202,9 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'manual_campan
   }
   .etapa-cabeza h3 { flex: 1; min-width: 0; }
   .etapa-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .etiqueta.gris { background: var(--gris); color: var(--suave); }
-  .etiqueta.azul { background: var(--azul-s); color: var(--azul); }
-  .etiqueta.amarillo { background: var(--amarillo-s); color: var(--amarillo); }
-  .etiqueta.rosa { background: var(--rosa-s); color: var(--rosa); }
-  .etiqueta.verde { background: var(--verde-s); color: var(--verde); }
-  .etapa-proximamente { margin-top: 2px; }
+  /* Los cinco colores de `COLOR_ESTADO` se fueron a global.css: la pantalla
+     del lote mensual pinta los mismos chips y un <style> con scope no llega
+     hasta allá. */
   .etapa-botones { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   /* La razón de un botón deshabilitado (fix menores, punto 4) va en su
      propio renglón dentro de la fila de botones, sin repartirse el ancho

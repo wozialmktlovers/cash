@@ -394,6 +394,17 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--r
 .etiqueta.fallido { background: var(--rojo-s); color: var(--rojo); }
 .etiqueta.cancelado { background: var(--gris); color: var(--suave); }
 
+/* Los cinco colores de `COLOR_ESTADO` (src/flujo/ui.ts). Vivían con scope
+   dentro de `LineaEtapas.astro`, que era el único sitio que los pintaba; ahora
+   también los usa la pantalla del lote mensual —el chip del lote y el de cada
+   pieza salen del mismo criterio— y un <style> con scope no alcanza el marcado
+   de una isla de React. */
+.etiqueta.gris { background: var(--gris); color: var(--suave); }
+.etiqueta.azul { background: var(--azul-s); color: var(--azul); }
+.etiqueta.amarillo { background: var(--amarillo-s); color: var(--amarillo); }
+.etiqueta.rosa { background: var(--rosa-s); color: var(--rosa); }
+.etiqueta.verde { background: var(--verde-s); color: var(--verde); }
+
 /* ── Avisos ────────────────────────────────────────── */
 
 .aviso {

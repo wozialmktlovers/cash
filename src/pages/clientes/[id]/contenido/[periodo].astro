@@ -1,0 +1,284 @@
+---
+// La pantalla donde el operador arma el lote del mes (diseño §2–§5, tarea B3).
+//
+// Una URL por cliente y mes (`/clientes/[id]/contenido/2026-09`), que es la
+// misma forma que tiene el periodo en la base: el mes es el eje de esta etapa,
+// no un filtro dentro de la ficha (diseño §2). Los meses anteriores siguen
+// aquí, cada uno en su dirección.
+//
+// La página lee y entrega; quien escribe es la API de la tarea B1, a través de
+// la isla `PiezasEditor`. No se inventa ninguna regla nueva: el cuadre con el
+// paquete es `cuadraConPaquete`, los días de revisión salen del cliente con el
+// `DIAS_REVISION_POR_OMISION` de las reglas, y el color del estado del lote es
+// el `COLOR_ESTADO` de la ficha, que puede usarse tal cual porque
+// `contenido_lotes.estado` reusa el enum de las etapas.
+import { and, asc, desc, eq } from 'drizzle-orm';
+import Base from '@/layouts/Base.astro';
+import Icono from '@/components/Icono.astro';
+import PiezasEditor, { type ArchivoCliente, type GrupoTemas, type PiezaUI } from '@/components/PiezasEditor';
+import { db, clientFiles, contenidoLotes, contenidoPiezas, pilaresResults } from '@/db';
+import { DIAS_REVISION_POR_OMISION, periodoValido, type Paquete } from '@/contenido/reglas';
+import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA } from '@/flujo/reglas';
+import { COLOR_ESTADO } from '@/flujo/ui';
+import { etapasDelCliente } from '@/flujo/servicio';
+import { puedeOperarCliente } from '@/lib/permisos';
+import { clienteVisible } from '@/lib/visibilidad';
+import { fechaHora } from '@/lib/ui/fecha';
+import { nombrePeriodo, periodoVecino } from '@/lib/ui/periodo';
+import type { MapaPilares } from '@/pilares/schemas';
+
+const usuario = Astro.locals.usuario;
+const { id, periodo } = Astro.params;
+
+const cliente = await clienteVisible(usuario, id!);
+if (!cliente) return new Response(null, { status: 404 });
+// Un periodo que no es `AAAA-MM` no puede existir en la base (la tabla lo
+// comprueba con un CHECK), así que la página no existe: 404 en vez de una
+// pantalla vacía que invite a abrir un lote imposible.
+if (!periodoValido(periodo)) return new Response(null, { status: 404 });
+const mes = periodo!;
+const operable = puedeOperarCliente(usuario, cliente);
+
+const [lote] = await db.select().from(contenidoLotes)
+  .where(and(eq(contenidoLotes.clientId, cliente.id), eq(contenidoLotes.periodo, mes)))
+  .limit(1);
+
+const filas = lote
+  ? await db.select().from(contenidoPiezas).where(eq(contenidoPiezas.loteId, lote.id)).orderBy(asc(contenidoPiezas.numero))
+  : [];
+
+// Campo por campo, como `piezaVisibleJson`: así una columna nueva de
+// `contenido_piezas` no viaja sola al navegador. Las fechas de auditoría se
+// quedan aquí —esta pantalla ordena por número— y con ellas el problema de
+// serializar `Date` hacia la isla.
+const piezas: PiezaUI[] = filas.map((p) => ({
+  id: p.id,
+  numero: p.numero,
+  formato: p.formato,
+  plataforma: p.plataforma,
+  fechaPublicacion: p.fechaPublicacion,
+  temaId: p.temaId,
+  copy: p.copy,
+  cta: p.cta,
+  hashtags: p.hashtags,
+  arte: Array.isArray(p.arte) ? p.arte : [],
+  estadoCliente: p.estadoCliente,
+  notaCliente: p.notaCliente,
+}));
+
+// Los otros meses de este cliente, para poder saltar entre ellos sin escribir
+// la URL a mano.
+const meses = await db
+  .select({ periodo: contenidoLotes.periodo, estado: contenidoLotes.estado })
+  .from(contenidoLotes)
+  .where(eq(contenidoLotes.clientId, cliente.id))
+  .orderBy(desc(contenidoLotes.periodo));
+
+const etapas = await etapasDelCliente(cliente.id);
+const etapaMensual = etapas.find((e) => e.etapa === 'desarrollo_mensual');
+// Mismo criterio que `POST /api/contenido/lotes`, para que la pantalla no
+// ofrezca abrir un lote que el servidor va a rechazar con un 409.
+const contratada = !!etapaMensual && (etapaMensual.contratada || etapaMensual.interna);
+
+// El mapa de pilares MÁS RECIENTE: es de donde se eligen los temas de las
+// piezas nuevas. Las versiones anteriores no se ofrecen, pero una pieza
+// planeada con una de ellas conserva su tema (la isla le hace su propia opción
+// en el `<select>`, y `POST …/propuestas` busca el tema en todas las versiones).
+const [mapa] = await db.select({ datos: pilaresResults.datos })
+  .from(pilaresResults)
+  .where(eq(pilaresResults.clientId, cliente.id))
+  .orderBy(desc(pilaresResults.version))
+  .limit(1);
+
+// `datos` es `jsonb`: un mapa donde los cinco pilares fallaron no tiene nada
+// que recorrer, y eso no debe tumbar la página.
+const datosMapa = (mapa?.datos ?? null) as MapaPilares | null;
+const nombresPilares = Array.isArray(datosMapa?.estrategia?.pilares) ? datosMapa!.estrategia.pilares.map((p) => p.nombre) : [];
+const grupos: GrupoTemas[] = (Array.isArray(datosMapa?.pilares) ? datosMapa!.pilares : []).flatMap((p) =>
+  p.estado === 'ok'
+    ? p.subcategorias.map((s) => ({
+        etiqueta: `${nombresPilares[p.numero - 1] ?? `Pilar ${p.numero}`} · ${s.nombre}`,
+        temas: s.temas.map((t) => ({ id: t.id, texto: t.texto })),
+      }))
+    : [],
+);
+
+// Los archivos del cliente sirven para ponerle nombre a un arte subido, que en
+// la pieza se guarda solo como `fileId`.
+const archivos: ArchivoCliente[] = await db
+  .select({ id: clientFiles.id, nombreOriginal: clientFiles.nombreOriginal })
+  .from(clientFiles)
+  .where(eq(clientFiles.clientId, cliente.id));
+
+const paquete = (cliente.paquete ?? {}) as Paquete;
+const diasRevision = cliente.diasRevision ?? DIAS_REVISION_POR_OMISION;
+const titulo = nombrePeriodo(mes);
+const anterior = periodoVecino(mes, -1);
+const siguiente = periodoVecino(mes, 1);
+const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
+---
+
+<Base titulo={`${titulo} · ${cliente.nombre}`} activo="clientes" volver={{ href: `/clientes/${cliente.id}`, texto: cliente.nombre }}>
+  <div class="encabezado">
+    <div>
+      <p class="eyebrow">{NOMBRE_ETAPA.desarrollo_mensual}</p>
+      <h1>Contenido de {titulo}</h1>
+      <p class="sub">
+        {cliente.nombre} · {diasRevision} {diasRevision === 1 ? 'día hábil' : 'días hábiles'} de revisión
+        {lote && <> · <span class={`etiqueta ${COLOR_ESTADO[lote.estado]}`}>{ETIQUETA_ESTADO_ETAPA[lote.estado]}</span></>}
+      </p>
+    </div>
+  </div>
+
+  <nav class="mes-nav" aria-label="Otros meses">
+    <a class="btn fantasma chico" href={ruta(anterior)}><Icono nombre="atras" />{nombrePeriodo(anterior)}</a>
+    <a class="btn fantasma chico" href={ruta(siguiente)}>{nombrePeriodo(siguiente)}</a>
+    {meses.filter((m) => m.periodo !== mes).map((m) => (
+      <a class="btn fantasma chico" href={ruta(m.periodo)}>{nombrePeriodo(m.periodo)}</a>
+    ))}
+  </nav>
+
+  {!contratada && (
+    <p class="aviso amarillo" style="margin-bottom:18px">
+      {NOMBRE_ETAPA.desarrollo_mensual} no está contratada para {cliente.nombre}. El mes se puede consultar, pero no abrir.
+    </p>
+  )}
+
+  {lote ? (
+    <>
+      {lote.compartidoEn && (
+        <p class="aviso" style="margin-bottom:18px">
+          Compartido con el cliente el {fechaHora(lote.compartidoEn)}
+          {lote.limiteRevision && <> · vence el {fechaHora(lote.limiteRevision)}</>}
+        </p>
+      )}
+      <PiezasEditor
+        client:load
+        clientId={cliente.id}
+        loteId={lote.id}
+        paquete={paquete}
+        grupos={grupos}
+        operable={operable}
+        piezas={piezas}
+        archivos={archivos}
+      />
+    </>
+  ) : (
+    <section class="tarjeta">
+      <div class="vacio">
+        <Icono nombre="vacio" />
+        <strong>{titulo} todavía no tiene lote</strong>
+        Abrirlo hereda el paquete del cliente y deja la etapa en proceso. Los meses anteriores no se tocan.
+        <button type="button" class="btn" id="abrir-lote" data-client-id={cliente.id} data-periodo={mes} disabled={!operable || !contratada}>
+          Abrir el lote de {titulo}
+        </button>
+      </div>
+      <p class="aviso rosa" id="error-lote" role="alert" hidden></p>
+    </section>
+  )}
+</Base>
+
+<style is:global>
+  /* Global y no con scope a propósito: casi todo lo de aquí abajo lo pinta la
+     isla de React (`PiezasEditor`), y el `data-astro-cid` que Astro le pone a
+     un <style> con scope solo alcanza al marcado de este archivo. El CSS
+     igual viaja solo en esta página, que es la única que lo carga. */
+
+  .mes-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+
+  /* El indicador de global.css es de dos renglones (valor y nombre); aquí lleva
+     un tercero con lo que pide el paquete, y sin esto se pegaría al nombre. */
+  .indicador .nombre, .indicador .secundario { display: block; }
+
+  .piezas { display: flex; flex-direction: column; gap: 12px; }
+
+  .pieza { border: 1px solid var(--linea); border-radius: var(--r); background: var(--tarjeta); overflow: hidden; }
+
+  /* La cabecera entera es el botón que abre la pieza: en celular, un área de
+     toque del ancho de la tarjeta es la diferencia entre poder trabajar y no. */
+  .pieza-cabeza {
+    display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px;
+    padding: 12px 14px; border: 0; background: transparent; cursor: pointer; text-align: left; font: inherit;
+  }
+  .pieza-cabeza:hover { background: var(--gris); }
+  .pieza-cabeza:focus-visible { outline: none; box-shadow: var(--foco); }
+  .pieza-numero {
+    flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--gris); color: var(--suave); font: var(--t-micro);
+  }
+  .pieza-resumen { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .pieza-resumen strong { color: var(--tinta); font: var(--t-h3); }
+  .pieza-resumen .secundario { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .pieza-cuerpo { padding: 4px 14px 18px; border-top: 1px solid var(--linea); }
+  .pieza-cuerpo .campos { margin-top: 16px; }
+  .pieza-cuerpo .aviso { margin-top: 14px; }
+
+  .pieza-artes { margin-top: 20px; }
+  .pieza-artes h4, .propuestas h4 { font: var(--t-h3); color: var(--tinta); margin-bottom: 8px; }
+  .pieza-artes .lista-archivos li { flex-wrap: wrap; }
+  .pieza-artes .agregar { margin-top: 12px; }
+  .pieza-artes input[type="file"] { padding: 9px 12px; }
+
+  .propuestas { margin-top: 20px; border-top: 1px solid var(--linea); padding-top: 16px; }
+  .propuesta { background: var(--gris); border-radius: var(--r-sm); padding: 14px; margin-top: 10px; }
+  .propuesta strong { display: block; color: var(--tinta); margin-bottom: 8px; }
+  /* El copy viene con sus saltos de línea: así se ve como se va a publicar. */
+  .propuesta-copy { white-space: pre-wrap; margin-bottom: 8px; }
+  .propuesta .btn { margin-top: 12px; }
+
+  /* A partir de tablet los campos cortos comparten renglón; en celular cada
+     uno ocupa el ancho completo (`.campos` de global.css ya es de 1 columna). */
+  @media (min-width: 700px) {
+    .pieza-cuerpo .campos { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* En celular el resumen y el chip de revisión no caben en el mismo renglón:
+     compartiéndolo, «post · Facebook e Instagram · 2026-09-18» se partía en
+     cuatro líneas de dos palabras. El `min-width` obliga al chip a bajar a su
+     propio renglón en vez de estrujar el texto. */
+  @media (max-width: 599px) {
+    .pieza-cabeza { flex-wrap: wrap; }
+    .pieza-resumen { min-width: 190px; }
+    .pieza-cabeza .etiqueta { margin-left: 42px; }
+  }
+</style>
+
+<script>
+  import { toast } from '@/scripts/toast';
+
+  // Abrir el lote del mes. Es lo único que esta página hace por su cuenta: en
+  // cuanto el lote existe, manda la isla.
+  const boton = document.getElementById('abrir-lote') as HTMLButtonElement | null;
+  const error = document.getElementById('error-lote') as HTMLElement | null;
+
+  boton?.addEventListener('click', async () => {
+    if (!error) return;
+    error.hidden = true;
+    boton.disabled = true;
+    const original = boton.textContent;
+    boton.textContent = 'Abriendo…';
+
+    try {
+      const res = await fetch('/api/contenido/lotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: boton.dataset.clientId, periodo: boton.dataset.periodo }),
+      });
+      const cuerpo = await res.json();
+      if (cuerpo.ok) {
+        toast('Lote abierto');
+        location.reload();
+        return;
+      }
+      error.textContent = (cuerpo.errores ?? ['No se pudo abrir el lote.']).join(' · ');
+      error.hidden = false;
+    } catch {
+      error.textContent = 'No se pudo contactar al servidor.';
+      error.hidden = false;
+    }
+
+    boton.disabled = false;
+    boton.textContent = original;
+  });
+</script>
