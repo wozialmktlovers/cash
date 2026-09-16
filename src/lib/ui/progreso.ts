@@ -85,9 +85,14 @@ export type ResumenAvance = { porcentaje: number; pasos: PasoAvance[]; pasoActua
  * Lo que necesita una tarjeta de cliente para pintarse, en una sola pasada:
  *
  * - `porcentaje`: el mismo `avanceCliente` que ve el cliente en su portal, sin
- *   recalcular nada. Ojo: `etapasParaAvance` deja fuera `desarrollo_mensual`
- *   mientras no tenga generador, así que esa etapa puede aparecer en `pasos` y
- *   ser `pasoActual` sin mover el porcentaje.
+ *   recalcular nada. Hasta A3 había aquí una advertencia:
+ *   `etapasParaAvance` dejaba fuera `desarrollo_mensual` mientras no tuviera
+ *   generador, así que esa etapa podía ser `pasoActual` sin mover el
+ *   porcentaje — y un cliente veía «100%» con el paso 3 en curso. Al entrar
+ *   la etapa 3 al flujo, `etapasParaAvance` y `etapasVisiblesCliente` filtran
+ *   ya con el mismo criterio (contratada y no interna), y las dos mitades de
+ *   este resumen vuelven a hablar del mismo conjunto: el porcentaje llega a
+ *   100 exactamente cuando `pasoActual` es `null`.
  * - `pasos`: las cuatro etapas en el orden de `ETAPAS`, incluidas las no
  *   contratadas (la tira las pinta apagadas), con el criterio de
  *   «visible para el cliente» de `etapasVisiblesCliente` — una etapa interna

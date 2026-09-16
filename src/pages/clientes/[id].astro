@@ -13,7 +13,7 @@ import { clienteVisible } from '@/lib/visibilidad';
 import { itemsPerdida } from '@/lib/borrado';
 import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
 import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults, clienteEtapas, etapaEventos, users, invitaciones } from '@/db';
-import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, tipoDocumentoDe, dependenciasCumplidas, type Etapa } from '@/flujo/reglas';
+import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, tipoDocumentoDe, type Etapa } from '@/flujo/reglas';
 import { botonesEtapa, marcaEtapa, COLOR_ESTADO } from '@/flujo/ui';
 import { etapasDelCliente, comentariosAbiertosPorEtapa, enlaceDocumento } from '@/flujo/servicio';
 import { fechaHora as fechaHoraMx, fechaCorta } from '@/lib/ui/fecha';
@@ -88,7 +88,6 @@ const RUTA_GENERAR: Partial<Record<Etapa, string>> = {
 };
 
 const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
-  const dependencias = dependenciasCumplidas(fila.etapa, etapasCliente, hayInvestigacionConDatos);
   const proximamente = fila.etapa === 'desarrollo_mensual';
   const comentariosAbiertos = comentariosAbiertosPorEtapaId.get(fila.id) ?? 0;
 
@@ -117,7 +116,12 @@ const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
     actualizadoTexto: fechaHora(fila.actualizadoEn),
     comentariosAbiertos,
     proximamente,
-    razonProximamente: proximamente ? dependencias.razon : undefined,
+    // El texto es literal y no `dependencias.razon`: hasta A3 esa razón era
+    // el «Próximamente» de `dependenciasCumplidas`, pero esa regla ya cayó
+    // (la etapa entró al flujo) y ahora devuelve cadena vacía, que dejaría la
+    // tarjeta con un párrafo en blanco. Lo que sigue pendiente es la pantalla
+    // de la etapa (fase B), y eso es cosa de esta interfaz, no de las reglas.
+    razonProximamente: proximamente ? 'Próximamente: la pantalla de esta etapa todavía no está lista.' : undefined,
     botones: botonesResueltos,
   };
 });

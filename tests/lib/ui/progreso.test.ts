@@ -71,18 +71,39 @@ describe('resumenAvance', () => {
     ];
     const r = resumenAvance(etapas);
 
-    // El plan esperaba 63 (media de 100, 100, 50 y 0). No sale eso porque
-    // `etapasParaAvance` deja fuera `desarrollo_mensual` mientras no tenga
-    // generador: cuentan (100+100+0)/3 = 66.67 -> 67. Se corrige el número
-    // esperado, no la fórmula: el diseño dice que el cálculo no se toca.
-    expect(r.porcentaje).toBe(67);
+    // Media de las cuatro: (100+100+50+0)/4 = 62.5 -> 63. Es el número que
+    // esperaba el plan original y que la exclusión de `desarrollo_mensual`
+    // convertía en 67 ((100+100+0)/3) mientras esa etapa no tenía generador.
+    expect(r.porcentaje).toBe(63);
     expect(r.porcentaje).toBe(avanceCliente(etapas));
     expect(r.pasos.map((p) => p.etapa)).toEqual([...ETAPAS_FLUJO]);
     expect(r.pasos.map((p) => p.estado)).toEqual(['aprobada', 'aprobada', 'en_revision', 'no_iniciada']);
     expect(r.pasos.every((p) => p.contratada)).toBe(true);
-    // El paso en curso sí es el tercero: es la primera etapa visible que no
-    // está aprobada, aunque no cuente para el porcentaje.
+    // El paso en curso es el tercero: la primera etapa visible que no está
+    // aprobada. Ahora además cuenta para el porcentaje, que es justo lo que
+    // arregla la incoherencia que este archivo documentaba.
     expect(r.pasoActual?.etapa).toBe('desarrollo_mensual');
+  });
+
+  // La incoherencia que había entre las dos mitades del resumen: `pasoActual`
+  // miraba las cuatro etapas y el porcentaje solo tres, así que un cliente
+  // podía ver «100%» con el paso 3 todavía en curso. Al entrar la etapa 3 al
+  // avance, las dos mitades usan el mismo conjunto.
+  it('el 100% y «sin paso en curso» ya no se contradicen en desarrollo_mensual', () => {
+    const etapas = [
+      et('investigacion', { estado: 'aprobada' }),
+      et('pilares', { estado: 'aprobada' }),
+      et('desarrollo_mensual', { estado: 'en_proceso' }),
+      et('manual_campana', { estado: 'aprobada' }),
+    ];
+    const r = resumenAvance(etapas);
+    // Antes: 100 con pasoActual = desarrollo_mensual. Ahora (100+100+25+100)/4 = 81.
+    expect(r.porcentaje).toBe(81);
+    expect(r.pasoActual?.etapa).toBe('desarrollo_mensual');
+
+    const listo = resumenAvance(etapas.map((e) => ({ ...e, estado: 'aprobada' as const })));
+    expect(listo.porcentaje).toBe(100);
+    expect(listo.pasoActual).toBeNull();
   });
 
   it('redondea el promedio', () => {

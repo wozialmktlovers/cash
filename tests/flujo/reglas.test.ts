@@ -110,24 +110,50 @@ describe('avanceCliente', () => {
     expect(avanceCliente(etapas)).toBe(38);
   });
 
-  // Ruling del controller (menores, punto 5): mientras desarrollo_mensual no
-  // tenga generador, una etapa contratada de ese tipo no cuenta en el
-  // promedio. Sin esta exclusión, su peso 0 (siempre no_iniciada) diluye el
-  // avance de las demás etapas ya aprobadas, dejándolo atorado ≤75% para
-  // siempre.
-  it('no cuenta una etapa desarrollo_mensual contratada, aunque esté visible', () => {
+  // A3: desarrollo_mensual entra al promedio como una etapa más. La exclusión
+  // del ruling del controller (menores, punto 5) existía solo mientras la
+  // etapa no tuviera generador y su estado no pudiera moverse de
+  // `no_iniciada`; con el lote mensual sí se mueve, así que esconderla sería
+  // ocultar una cuarta parte de lo contratado.
+  it('cuenta una etapa desarrollo_mensual contratada como cualquier otra', () => {
     const etapas = [
       et('investigacion', { estado: 'aprobada' }),
       et('pilares', { estado: 'aprobada' }),
       et('manual_campana', { estado: 'aprobada' }),
       et('desarrollo_mensual', { estado: 'no_iniciada' }),
     ];
-    // Sin la exclusión: (100+100+100+0)/4 = 75. Con ella: 100/100/100 -> 100.
-    expect(avanceCliente(etapas)).toBe(100);
+    // (100+100+100+0)/4 = 75. Con la exclusión de antes daba 100: el cliente
+    // veía «listo» un mes de contenido que nadie había empezado.
+    expect(avanceCliente(etapas)).toBe(75);
   });
 
-  it('con solo desarrollo_mensual contratada (y ninguna otra visible), da 0', () => {
+  it('el lote del mes mueve el avance: el mismo cliente con el mes en revisión sube', () => {
+    const etapas = [
+      et('investigacion', { estado: 'aprobada' }),
+      et('pilares', { estado: 'aprobada' }),
+      et('manual_campana', { estado: 'aprobada' }),
+      et('desarrollo_mensual', { estado: 'en_revision' }),
+    ];
+    // (100+100+100+50)/4 = 87.5 -> 88. Antes daba 100 pasara lo que pasara.
+    expect(avanceCliente(etapas)).toBe(88);
+  });
+
+  it('con solo desarrollo_mensual contratada, su estado es todo el avance', () => {
     expect(avanceCliente([et('desarrollo_mensual', { estado: 'no_iniciada' })])).toBe(0);
+    expect(avanceCliente([et('desarrollo_mensual', { estado: 'en_proceso' })])).toBe(25);
+    expect(avanceCliente([et('desarrollo_mensual', { estado: 'aprobada' })])).toBe(100);
+  });
+
+  // El caso que pidió el controlador al revisar A3, escrito como prueba para
+  // que el cambio de número quede fijado y no se «arregle» de vuelta.
+  it('cuatro etapas contratadas y dos aprobadas dan 50, no 67', () => {
+    const etapas = [
+      et('investigacion', { estado: 'aprobada' }),
+      et('pilares', { estado: 'aprobada' }),
+      et('desarrollo_mensual', { estado: 'no_iniciada' }),
+      et('manual_campana', { estado: 'no_iniciada' }),
+    ];
+    expect(avanceCliente(etapas)).toBe(50);
   });
 });
 
@@ -191,16 +217,24 @@ describe('dependenciasCumplidas', () => {
     expect(dependenciasCumplidas('pilares', contratada, false).ok).toBe(false);
   });
 
-  it('desarrollo_mensual sigue bloqueada con "Próximamente", aun con todo aprobado', () => {
+  // A3: se cae el bloqueo «Próximamente». La etapa entra por la misma puerta
+  // que pilares y el manual — ni más (no espera a que nadie apruebe) ni menos
+  // (sin investigación con datos no hay de dónde sacar temas ni copy).
+  it('desarrollo_mensual solo pide investigación con datos, como pilares y el manual', () => {
     const etapas = [
       et('investigacion', { estado: 'aprobada' }),
       et('pilares', { estado: 'aprobada' }),
     ];
     for (const lista of [[], etapas]) {
-      const r = dependenciasCumplidas('desarrollo_mensual', lista, true);
-      expect(r.ok).toBe(false);
-      expect(r.razon).toContain('Próximamente');
+      expect(dependenciasCumplidas('desarrollo_mensual', lista, true)).toEqual({ ok: true, razon: '' });
     }
+  });
+
+  it('desarrollo_mensual sin investigación con datos: bloqueada por la misma razón que las otras', () => {
+    const r = dependenciasCumplidas('desarrollo_mensual', [], false);
+    expect(r.ok).toBe(false);
+    expect(r.razon).toBe(dependenciasCumplidas('pilares', [], false).razon);
+    expect(r.razon).not.toContain('Próximamente');
   });
 });
 
@@ -283,11 +317,20 @@ describe('puedeGenerar (I1 punto 1: 409 de POST /api/jobs)', () => {
     }
   });
 
-  it('desarrollo_mensual contratada: no-ok con "Próximamente"', () => {
+  // `puedeGenerar` solo lo consulta POST /api/jobs, cuyo `tipo` únicamente
+  // puede ser research/growth/pilares: desarrollo_mensual no llega ahí ni
+  // tiene job que encolar (`tipoDocumentoDe` da null). Se prueba igual porque
+  // la función es pública y hasta A3 contestaba «Próximamente».
+  it('desarrollo_mensual contratada, con investigación con datos: ok', () => {
     const etapas = [et('investigacion', { estado: 'aprobada' }), et('desarrollo_mensual')];
-    const r = puedeGenerar('desarrollo_mensual', etapas, true);
+    expect(puedeGenerar('desarrollo_mensual', etapas, true)).toEqual({ ok: true, razon: '' });
+  });
+
+  it('desarrollo_mensual sin investigación con datos: no-ok, sin hablar de «Próximamente»', () => {
+    const etapas = [et('investigacion', { estado: 'en_proceso' }), et('desarrollo_mensual')];
+    const r = puedeGenerar('desarrollo_mensual', etapas, false);
     expect(r.ok).toBe(false);
-    expect(r.razon).toContain('Próximamente');
+    expect(r.razon).not.toContain('Próximamente');
   });
 });
 

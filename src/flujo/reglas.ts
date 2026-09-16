@@ -78,15 +78,27 @@ export type EtapaCliente = {
 };
 
 /**
- * Etapas que cuentan en el % de avance: contratadas, no internas y —
- * ruling del controller (menores, punto 5)— sin `desarrollo_mensual`
- * mientras no tenga generador («Próximamente» — ver `dependenciasCumplidas`
- * más abajo). Sin esta exclusión, contratar `desarrollo_mensual` deja el
- * avance atorado en ≤75% para siempre, porque su estado nunca puede pasar de
- * `no_iniciada` (peso 0) hasta que exista el generador. La marca de
- * «próximamente» ya usada en `portal.ts`/`clientes/[id].astro`
- * (`etapa === 'desarrollo_mensual'`) es la misma que se usa aquí — no hay
- * una bandera dedicada, así que se reutiliza ese criterio.
+ * Etapas que cuentan en el % de avance: contratadas y no internas. Es el
+ * mismo criterio que `etapasVisiblesCliente` —lo que el cliente ve es lo que
+ * cuenta—; la única diferencia entre las dos es que aquella ordena.
+ *
+ * Hasta A3 esta función excluía además `desarrollo_mensual` (ruling del
+ * controller, menores punto 5). La razón era concreta y está escrita aquí
+ * para que se entienda por qué se fue: esa etapa no tenía generador
+ * («Próximamente» en `dependenciasCumplidas`), su estado no podía salir
+ * nunca de `no_iniciada` y, con peso 0 fijo, dejaba el avance atorado en
+ * ≤75% para siempre. El lote mensual (diseño §2) acabó con esa razón: la
+ * etapa sí se mueve ahora —`en_proceso` al crear el lote, `en_revision` al
+ * compartirlo, `con_cambios` si el cliente pide cambios y `aprobada` cuando
+ * todas sus piezas lo están, vía `sincronizarEtapa`
+ * (src/contenido/servicio.ts)—, así que seguir excluyéndola sería esconderle
+ * al cliente una cuarta parte de lo que contrató.
+ *
+ * Consecuencia buscada, no efecto secundario: **el porcentaje baja** para
+ * todo cliente con la etapa contratada y sin aprobar, porque ahora promedia
+ * sobre una etapa más. Un cliente con las cuatro contratadas y las dos
+ * primeras aprobadas iba en 67 ((100+100+0)/3) y pasa a 50
+ * ((100+100+0+0)/4). Es el número correcto: son cuatro pasos y lleva dos.
  *
  * Genérica sobre `T` (no exige `EtapaCliente` completo) para que también la
  * use `carga()` en `src/lib/desempeno.ts` (M3, punto 6 del controlador):
@@ -98,7 +110,7 @@ export type EtapaCliente = {
  * reglas desalinee otra vez a las dos pantallas.
  */
 export function etapasParaAvance<T extends { contratada: boolean; interna: boolean; etapa: Etapa }>(etapas: T[]): T[] {
-  return etapas.filter((e) => e.contratada && !e.interna && e.etapa !== 'desarrollo_mensual');
+  return etapas.filter((e) => e.contratada && !e.interna);
 }
 
 /**
@@ -137,8 +149,17 @@ export function etapasVisiblesCliente<T extends { contratada: boolean; interna: 
 /**
  * Dependencias para poder trabajar una etapa (diseño 2026-09-16, §1):
  * - investigacion: ninguna, es la fuente de la que sale todo lo demás.
- * - pilares y manual_campana: solo necesitan una investigación CON DATOS.
- * - desarrollo_mensual: todavía no se puede iniciar (Próximamente).
+ * - pilares, desarrollo_mensual y manual_campana: solo necesitan una
+ *   investigación CON DATOS.
+ *
+ * `desarrollo_mensual` estaba bloqueada aquí con «Próximamente» porque no
+ * tenía nada que abrir. Con el lote mensual (diseño §2) ya lo tiene, así que
+ * entra por la misma puerta que las otras dos: sin investigación no hay
+ * pilares de los que sacar temas ni criterio para escribir el copy. Lo que
+ * NO cambia es la interfaz de la ficha: `botonesEtapa` (src/flujo/ui.ts)
+ * sigue devolviendo cero botones para esta etapa y la tarjeta sigue diciendo
+ * «Próximamente» hasta que la fase B le dé su pantalla. Aquí se abre la
+ * regla; la puerta visible la abre B3.
  *
  * Antes cada etapa esperaba a la anterior: pilares exigía la investigación
  * `aprobada` y el manual exigía además el mapa de pilares aprobado. Eso
@@ -156,10 +177,6 @@ export function etapasVisiblesCliente<T extends { contratada: boolean; interna: 
  */
 export function dependenciasCumplidas(etapa: Etapa, _etapas: EtapaCliente[], hayInvestigacionConDatos: boolean): { ok: boolean; razon: string } {
   if (etapa === 'investigacion') return { ok: true, razon: '' };
-
-  if (etapa === 'desarrollo_mensual') {
-    return { ok: false, razon: 'Próximamente: esta etapa todavía no está disponible.' };
-  }
 
   if (!hayInvestigacionConDatos) {
     return { ok: false, razon: 'Falta completar la investigación antes de continuar.' };

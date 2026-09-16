@@ -6,11 +6,11 @@
 // fuera de este módulo (ver clarificación de la tarea D1), EXCEPTO el % de
 // avance de `carga()`: ese cálculo sí importa PESOS y etapasParaAvance de
 // src/flujo/reglas.ts (M3, punto 6 del controlador). Tenerlo repetido aquí
-// hacía que este módulo NO excluyera `desarrollo_mensual` mientras esa etapa
-// no tenga generador, a diferencia de avanceCliente (portal) que sí lo
-// excluye — el tablero de desempeño y el portal terminaban mostrando un %
-// distinto para el mismo cliente. Compartir la regla (en vez de duplicarla
-// de nuevo, esta vez ya correcta) evita que se vuelvan a desalinear.
+// hacía que este módulo y avanceCliente (portal) filtraran distinto, y el
+// tablero de desempeño y el portal terminaban mostrando un % distinto para
+// el mismo cliente. Compartir la regla (en vez de duplicarla de nuevo)
+// evita que se vuelvan a desalinear, y es lo que hizo que A3 —al meter
+// `desarrollo_mensual` en el avance— no tuviera que tocar este archivo.
 import { PESOS, etapasParaAvance, type Etapa, type Estado } from '@/flujo/reglas';
 
 export type Evento = {
@@ -304,10 +304,9 @@ export function carga(
   const etapasActivas = etapas.filter((e) => e.contratada && !e.interna && ACTIVOS.includes(e.estado)).length;
 
   // Avance por cliente: mismo cálculo que avanceCliente (etapasParaAvance:
-  // contratadas, no internas y sin desarrollo_mensual mientras no tenga
-  // generador; 0 sin ninguna), sin redondear cada cliente por separado para
-  // no acumular el sesgo de un doble redondeo antes de promediar entre
-  // clientes.
+  // contratadas y no internas, las cuatro etapas; 0 sin ninguna), sin
+  // redondear cada cliente por separado para no acumular el sesgo de un
+  // doble redondeo antes de promediar entre clientes.
   const porCliente = new Map<string, EtapaM[]>();
   for (const e of etapas) {
     const lista = porCliente.get(e.clientId);
