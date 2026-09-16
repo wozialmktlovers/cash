@@ -6,6 +6,7 @@ import { ejecutarPilares } from '@/pilares/pipeline';
 import { limpiarSesionesVencidas } from '@/lib/auth';
 import { convertirLecturasPendientes } from './convertir-lecturas';
 import { NOMBRE_ETAPA, etapaDeTipo } from '@/flujo/reglas';
+import { INTERVALO_BARRIDO_MS, autoAprobarVencidos } from '@/contenido/auto-aprobacion';
 import { avisarJob } from '@/flujo/avisos';
 
 let corriendo = false;
@@ -127,6 +128,29 @@ export function arrancarWorker(): void {
   setInterval(() => {
     void limpiarSesionesVencidas().catch((e) => console.error('[worker] limpieza:', e));
   }, 6 * 60 * 60_000);
+
+  // Auto-aprobación de los lotes mensuales vencidos (C3, diseño §6). Va por
+  // su propio intervalo y NO dentro de `tick()`, por dos razones:
+  //
+  // - `tick()` se sale de inmediato si `corriendo` está puesto, así que una
+  //   investigación de varios minutos dejaría el barrido sin correr justo
+  //   mientras más tarda todo. El barrido no habla con ningún modelo ni toca
+  //   la cola: son dos consultas a la base, y puede correr en paralelo con un
+  //   job sin estorbarle.
+  // - `tick()` late cada cinco segundos y esto no lo necesita: el plazo vence
+  //   a las 23:59:59 de un día (ver `limiteRevision`).
+  //
+  // El primer barrido es inmediato, y eso es lo que salva el caso del fin de
+  // semana: el worker solo arranca con la primera visita al sitio, así que si
+  // un plazo venció el sábado, la primera petición del lunes lo resuelve sin
+  // esperar diez minutos más. Para que ni siquiera haga falta esa visita, la
+  // recomendación operativa (un monitor de uptime pegándole al sitio) está
+  // escrita en `src/contenido/auto-aprobacion.ts` y en el README.
+  const barrerLotes = () => {
+    void autoAprobarVencidos().catch((e) => console.error('[worker] auto-aprobación de lotes:', e));
+  };
+  barrerLotes();
+  setInterval(barrerLotes, INTERVALO_BARRIDO_MS);
 
   // La conversión de lecturas antiguas ya no se agenda aparte con
   // `setTimeout`: eso la dejaba correr en paralelo con un job real, porque

@@ -17,6 +17,7 @@ import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, tipoDocumentoDe, type Etapa } from
 import { botonesEtapa, marcaEtapa, COLOR_ESTADO } from '@/flujo/ui';
 import { etapasDelCliente, comentariosAbiertosPorEtapa, enlaceDocumento } from '@/flujo/servicio';
 import { loteActivo } from '@/contenido/servicio';
+import { ACCION_AUTO_APROBADA, asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
 import { fechaHora as fechaHoraMx, fechaCorta } from '@/lib/ui/fecha';
 import { nombrePeriodo, periodoActual } from '@/lib/ui/periodo';
 
@@ -27,6 +28,14 @@ const cliente = await clienteVisible(usuario, id!);
 if (!cliente) return new Response(null, { status: 404 });
 const operable = puedeOperarCliente(usuario, cliente);
 const esAdmin = usuario.rol === 'admin';
+
+// Antes de leer nada del flujo: si a este cliente se le venció el plazo de
+// revisión de algún lote, se resuelve ahora (C3, diseño §6). La ficha es la
+// pantalla donde el equipo mira el estado del mes, y no debe enseñar «en
+// revisión» un lote cuyo plazo pasó el sábado solo porque el worker todavía
+// no barre. Cuesta una consulta sin filas cuando no hay nada vencido, y nunca
+// lanza: el porqué completo está en `src/contenido/auto-aprobacion.ts`.
+await asegurarLotesAlDia(cliente.id);
 
 // ── Responsable ────────────────────────────────────
 const [responsable] = cliente.operadorId
@@ -168,6 +177,11 @@ const ETIQUETA_ACCION: Record<string, string> = {
   // insertan su propio evento de etapa (`accion` es texto libre, no el enum
   // de acciones — ver `etapaEventos` en el esquema).
   edicion: 'Edición del documento', restaurada: 'Versión restaurada',
+  // C3: el lote del mes se aprobó solo al vencer el plazo. El evento va con
+  // `usuario_id` nulo, así que el renglón ya se firma «Sistema» y el
+  // comentario explica de qué mes y con qué fecha límite. Es la constancia de
+  // que la aprobación no fue del cliente (`src/contenido/auto-aprobacion.ts`).
+  [ACCION_AUTO_APROBADA]: 'Aprobación automática por vencimiento',
 };
 
 type ItemHistorial =

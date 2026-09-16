@@ -34,7 +34,19 @@ Astro 7 con SSR · React 19 · TypeScript · PostgreSQL · Drizzle · Zod ·
 
 El worker vive dentro del mismo proceso del servidor: toma trabajos de la tabla
 `research_jobs` cada cinco segundos. Un reinicio retoma los trabajos que quedaron
-en estado `corriendo`.
+en estado `corriendo`. También barre cada diez minutos los lotes de contenido
+mensual a los que se les venció el plazo de revisión y los da por aprobados
+(diseño §6 de la etapa 3).
+
+**Ojo con el arranque:** el worker se inicia desde `src/middleware.ts`, que Astro
+carga en la **primera petición** al sitio, no al levantar el proceso. Si nadie
+entra al Studio en todo un fin de semana, el worker no corre. Para la
+auto-aprobación eso está cubierto por dos lados: las pantallas resuelven el
+vencimiento de los lotes que van a mostrar (`asegurarLotesAlDia`), y el worker
+barre en cuanto arranca. Si se quiere que un plazo venza en sábado sin que nadie
+entre, basta apuntar un monitor de uptime al sitio cada pocos minutos: cualquier
+petición levanta el middleware y con él el worker. No hace falta ningún endpoint
+nuevo ni tocar la configuración de Railway.
 
 ## Correr en local
 

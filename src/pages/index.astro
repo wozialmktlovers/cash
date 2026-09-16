@@ -7,6 +7,7 @@ import { db, clients, researchJobs } from '@/db';
 import { NOMBRE_ETAPA } from '@/flujo/reglas';
 import { etapasDeClientes } from '@/flujo/servicio';
 import { listarPendientes, type MotivoPendiente } from '@/lib/pendientes';
+import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
 import { nombreVisible } from '@/lib/usuarios';
 import { condicionClientes } from '@/lib/visibilidad';
 import { gastoDelMes } from '@/lib/ui/tablero';
@@ -16,6 +17,15 @@ import { enlacePendiente } from '@/lib/ui/enlaces';
 import { fechaCorta, fechaLarga } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
+
+// El tablero enseña el estado de TODOS los clientes que quien mira puede ver,
+// así que aquí el barrido de lotes vencidos va sin filtrar por cliente (C3,
+// diseño §6): filtrarlo sería una consulta por cliente en vez de una sola. Es
+// además la pantalla de inicio, la primera que alguien abre por la mañana, y
+// por eso el mejor sitio para que el lunes se resuelva lo que venció el fin de
+// semana sin depender de que el worker ya haya barrido.
+await asegurarLotesAlDia();
+
 const cond = condicionClientes(usuario);
 const lista = await db.select().from(clients).where(cond).orderBy(desc(clients.updatedAt));
 

@@ -8,7 +8,8 @@ import { and, eq } from 'drizzle-orm';
 import { db, notificaciones, users } from '@/db';
 import { enviarCorreo } from '@/lib/correo';
 import { enlaceCorreo } from '@/lib/base-url';
-import type { Rol } from './reglas';
+import { nombrePeriodo } from '@/lib/ui/periodo';
+import { NOMBRE_ETAPA, type Rol } from './reglas';
 
 export type Usuario = { id: string; email: string; nombre: string | null; apellido: string | null; rol: Rol; activo: boolean };
 
@@ -22,7 +23,8 @@ export type EventoAviso =
   | 'cliente_respondio'
   | 'cliente_reasignado'
   | 'entregable_generado'
-  | 'job_fallido';
+  | 'job_fallido'
+  | 'lote_auto_aprobado';
 
 /**
  * Contexto para calcular destinatarios (spec §3, tabla «Eventos»).
@@ -68,6 +70,16 @@ function candidatosDe(evento: EventoAviso, ctx: ContextoDestinatarios): (Usuario
     case 'entregable_generado':
     case 'job_fallido':
       return [ctx.autor];
+    case 'lote_auto_aprobado':
+      // C3: el plazo del lote mensual venció y el sistema lo dio por aprobado.
+      // Se entera el equipo, no el cliente: al cliente ya se le anunció el
+      // plazo y la cuenta regresiva en el propio entregable (diseño §6), y un
+      // correo diciéndole que se le pasó el plazo no le da ninguna opción que
+      // no tenga ya —puede seguir pidiendo cambios—, pero sí suena a reproche.
+      // Quien necesita enterarse es quien tiene que seguir con el mes. Mismo
+      // reparto que `cliente_respondio`: el operador asignado, y si no hay uno
+      // activo, los admins, para que no se pierda.
+      return ctx.operador && ctx.operador.activo ? [ctx.operador] : ctx.admins;
   }
   // Inalcanzable: EventoAviso es una unión cerrada y todos los casos regresan arriba.
   throw new Error(`Evento de aviso desconocido: ${evento}`);
@@ -90,7 +102,12 @@ export function destinatarios(evento: EventoAviso, ctx: ContextoDestinatarios): 
   return resultado;
 }
 
-export type DatosAviso = { cliente: string; etapa: string; autor?: string };
+/**
+ * `periodo` es el mes en `AAAA-MM` y solo lo usa `lote_auto_aprobado`: el
+ * desarrollo mensual es la única etapa que se repite cada mes, así que es la
+ * única cuyo aviso necesita decir de qué mes habla (diseño §2).
+ */
+export type DatosAviso = { cliente: string; etapa: string; autor?: string; periodo?: string };
 
 /**
  * Nombre que ve un cliente en vez de la identidad real de quien actuó (spec
@@ -173,6 +190,17 @@ export function textoAviso(evento: EventoAviso, datos: DatosAviso): { titulo: st
         titulo: `${etapa} de ${cliente} falló`,
         texto: `El trabajo para generar ${etapa} de ${cliente} falló. Puedes volver a intentarlo.`,
       };
+    case 'lote_auto_aprobado': {
+      // El texto dice las dos cosas que importan si mañana alguien reclama:
+      // que venció el plazo y que NO lo aprobó el cliente. La constancia
+      // formal queda en `etapa_eventos` (ver src/contenido/auto-aprobacion.ts);
+      // esto es el aviso que la acompaña.
+      const mes = datos.periodo ? nombrePeriodo(datos.periodo) : 'el mes';
+      return {
+        titulo: `${cliente} · el contenido de ${mes} se aprobó por vencimiento`,
+        texto: `Venció el plazo de revisión del contenido de ${mes} de ${cliente} sin respuesta del cliente, así que el lote se dio por aprobado. No lo aprobó el cliente: lo aprobó el plazo.`,
+      };
+    }
   }
   // Inalcanzable: mismo cierre que candidatosDe, por si el switch deja de ser exhaustivo.
   throw new Error(`Evento de aviso desconocido: ${evento}`);
@@ -362,6 +390,26 @@ export async function avisarRespuestaDelCliente(o: {
   await notificar(
     'cliente_respondio',
     { admins, operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false, actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa } },
+    o.enlace,
+  );
+}
+
+/**
+ * Aviso de que un lote mensual se aprobó solo al vencer el plazo (C3, diseño
+ * §6): al operador asignado, o a los admins si no hay uno activo. No hay
+ * `actorId` porque no hubo actor — es justamente lo que el aviso comunica.
+ */
+export async function avisarLoteAutoAprobado(o: {
+  operadorId: string | null; cliente: string; periodo: string; enlace: string;
+}): Promise<void> {
+  const operador = await usuarioPorId(o.operadorId);
+  const admins = operador && operador.activo ? [] : await adminsActivos();
+  await notificar(
+    'lote_auto_aprobado',
+    {
+      admins, operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false,
+      datos: { cliente: o.cliente, etapa: NOMBRE_ETAPA.desarrollo_mensual, periodo: o.periodo },
+    },
     o.enlace,
   );
 }

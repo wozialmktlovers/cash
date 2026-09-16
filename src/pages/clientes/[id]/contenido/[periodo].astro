@@ -18,6 +18,7 @@ import Icono from '@/components/Icono.astro';
 import PiezasEditor, { type ArchivoCliente, type GrupoTemas, type PiezaUI } from '@/components/PiezasEditor';
 import { db, clientFiles, contenidoLotes, contenidoPiezas, pilaresResults } from '@/db';
 import { DIAS_REVISION_POR_OMISION, periodoValido, type Paquete } from '@/contenido/reglas';
+import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
 import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA } from '@/flujo/reglas';
 import { COLOR_ESTADO } from '@/flujo/ui';
 import { etapasDelCliente } from '@/flujo/servicio';
@@ -38,6 +39,12 @@ if (!cliente) return new Response(null, { status: 404 });
 if (!periodoValido(periodo)) return new Response(null, { status: 404 });
 const mes = periodo!;
 const operable = puedeOperarCliente(usuario, cliente);
+
+// La pantalla del mes es donde más caro sale ver un estado viejo: aquí se
+// decide si el lote sigue esperando al cliente. Se resuelve el vencimiento
+// antes de leerlo (C3, diseño §6); sin nada vencido es una consulta sin filas
+// y ninguna escritura.
+await asegurarLotesAlDia(cliente.id);
 
 const [lote] = await db.select().from(contenidoLotes)
   .where(and(eq(contenidoLotes.clientId, cliente.id), eq(contenidoLotes.periodo, mes)))
