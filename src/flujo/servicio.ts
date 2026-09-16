@@ -40,7 +40,8 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Ejecutor = Tx | typeof db;
 
 type MotivoVersion = 'generado' | 'edicion' | 'aprobada' | 'restaurada';
-type FilaEtapa = typeof clienteEtapas.$inferSelect;
+/** Una fila de `cliente_etapas` tal como sale de la base. Exportado porque lo devuelven `etapasDelCliente` y `etapasDeClientes`, y las pantallas que las usan necesitan nombrarlo. */
+export type FilaEtapa = typeof clienteEtapas.$inferSelect;
 
 /** Se lanza cuando la actualización condicional pierde la carrera contra otra petición; nunca sale de este módulo. */
 class CambioConcurrenteError extends Error {}
@@ -156,9 +157,46 @@ export async function etapasDelCliente(clientId: string): Promise<FilaEtapa[]> {
       .onConflictDoNothing({ target: [clienteEtapas.clientId, clienteEtapas.etapa] });
   }
 
-  const filas = await db.select().from(clienteEtapas).where(eq(clienteEtapas.clientId, clientId));
+  // Con las 4 filas ya en la base, leerlas y ordenarlas es exactamente lo que
+  // hace el lote para un solo cliente, así que se reusa en vez de repetir el
+  // orden por `ETAPAS`. Lo que se queda aquí es el relleno de huecos de
+  // arriba: es la única diferencia real entre las dos funciones.
+  const porCliente = await etapasDeClientes([clientId]);
+  return porCliente.get(clientId) ?? [];
+}
+
+/**
+ * Las etapas de varios clientes en una sola consulta, indexadas por
+ * `clientId` y ordenadas por `ETAPAS` dentro de cada cliente. La usan las
+ * pantallas que pintan muchos clientes a la vez (el tablero del Inicio y la
+ * lista de clientes), donde `etapasDelCliente` haría una consulta por cliente.
+ *
+ * A diferencia de `etapasDelCliente`, esta **solo lee**: no crea las filas
+ * que falten. Un cliente sin ninguna fila no aparece en el `Map`, y quien
+ * pinta lo trata como «sin etapas contratadas». Pintar un tablero no es
+ * razón para escribir en la base.
+ *
+ * Con la lista vacía devuelve un `Map` vacío **sin consultar**: un `inArray`
+ * de cero valores no tiene nada que buscar y el tablero de un operador sin
+ * clientes no debe tocar la base.
+ */
+export async function etapasDeClientes(clientIds: string[]): Promise<Map<string, FilaEtapa[]>> {
+  const porCliente = new Map<string, FilaEtapa[]>();
+  const ids = [...new Set(clientIds)];
+  if (ids.length === 0) return porCliente;
+
+  const filas = await db.select().from(clienteEtapas).where(inArray(clienteEtapas.clientId, ids));
+  for (const fila of filas) {
+    const lista = porCliente.get(fila.clientId);
+    if (lista) lista.push(fila);
+    else porCliente.set(fila.clientId, [fila]);
+  }
+
   const orden = new Map(ETAPAS.map((e, i) => [e, i]));
-  return filas.sort((a, b) => (orden.get(a.etapa) ?? 0) - (orden.get(b.etapa) ?? 0));
+  for (const lista of porCliente.values()) {
+    lista.sort((a, b) => (orden.get(a.etapa) ?? 0) - (orden.get(b.etapa) ?? 0));
+  }
+  return porCliente;
 }
 
 /**
