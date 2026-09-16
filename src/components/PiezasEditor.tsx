@@ -378,7 +378,8 @@ function TarjetaPieza({
   abierta: boolean;
   onAbrir: () => void;
   onGuardada: (p: PiezaUI) => void;
-  onBorrada: () => void;
+  /** Recibe el estado en que la API dejó el LOTE: borrar una pieza puede moverlo. */
+  onBorrada: (estadoLote: string | undefined) => void;
   onArchivo: (a: ArchivoCliente) => void;
 }) {
   const [borrador, setBorrador] = useState<Borrador>(() => aBorrador(pieza));
@@ -436,7 +437,7 @@ function TarjetaPieza({
     const r = await pedir(`/api/contenido/piezas/${pieza.id}`, { method: 'DELETE' });
     setOcupado(false);
     if (!r.ok) { setError(r.error); setConfirmando(false); return; }
-    onBorrada();
+    onBorrada(r.cuerpo.estadoLote);
     toast('Pieza borrada');
   }
 
@@ -594,7 +595,7 @@ function TarjetaPieza({
 // ── La pantalla ─────────────────────────────────────────────────────────
 
 export default function PiezasEditor({
-  clientId, loteId, paquete, grupos, operable,
+  clientId, loteId, paquete, grupos, operable, estadoLote,
   piezas: iniciales, archivos: archivosIniciales,
 }: {
   clientId: string;
@@ -602,6 +603,8 @@ export default function PiezasEditor({
   paquete: Paquete;
   grupos: GrupoTemas[];
   operable: boolean;
+  /** El estado del lote con el que la PÁGINA se dibujó; ver `avisarSiElMesCambioDeLado`. */
+  estadoLote: string;
   piezas: PiezaUI[];
   archivos: ArchivoCliente[];
 }) {
@@ -617,6 +620,32 @@ export default function PiezasEditor({
   // Por número, que es el orden en que el cliente ve el mes; la API lo asigna
   // sola al dar de alta, pero el operador puede renumerar al planear.
   const ordenadas = [...piezas].sort((a, b) => a.numero - b.numero);
+
+  /**
+   * Un alta o un borrado pueden mover el estado del LOTE, no solo el de la
+   * lista, y entonces la mitad de arriba de la pantalla —la etiqueta del mes y
+   * el bloque de «Compartir con el cliente»— deja de ser cierta.
+   *
+   * El caso que obliga a esto: tocar las piezas de un mes cuya ronda ya terminó
+   * lo devuelve al operador (`en_proceso`, con el plazo borrado; el porqué está
+   * en `refrescarLote`, src/contenido/servicio.ts). Sin recargar, el operador
+   * seguiría viendo «Aprobada» arriba y un texto que promete que volver a
+   * compartir «no mueve la fecha límite», cuando ahora es justo lo contrario.
+   * Cambiar el estado en silencio es lo único que no se puede hacer aquí.
+   *
+   * Se recarga en vez de reproducir esa mitad dentro de la isla: son datos del
+   * servidor, y la explicación de lo que pasó —el aviso amarillo— ya la pinta la
+   * página. Cuesta perder la pieza recién abierta, que en el alta está vacía.
+   * El caso normal —ir armando un mes que todavía no se comparte— no pasa por
+   * aquí: ahí el lote se queda `en_proceso` y el estado no se mueve.
+   */
+  function avisarSiElMesCambioDeLado(nuevo: string | undefined) {
+    if (!nuevo || nuevo === estadoLote) return;
+    toast(nuevo === 'en_proceso'
+      ? 'El mes volvió a estar en proceso: hay contenido que el cliente no ha visto. Compártelo otra vez cuando esté listo.'
+      : 'Cambió el estado del mes.');
+    setTimeout(() => location.reload(), 2200);
+  }
 
   async function agregar(e: React.FormEvent) {
     e.preventDefault();
@@ -634,6 +663,7 @@ export default function PiezasEditor({
     setAbierta(pieza.id);
     setFecha('');
     toast(`Pieza ${pieza.numero} agregada`);
+    avisarSiElMesCambioDeLado(r.cuerpo.estadoLote);
   }
 
   return (
@@ -663,7 +693,11 @@ export default function PiezasEditor({
                 abierta={abierta === p.id}
                 onAbrir={() => setAbierta((a) => (a === p.id ? null : p.id))}
                 onGuardada={(nueva) => setPiezas((lista) => lista.map((x) => (x.id === nueva.id ? nueva : x)))}
-                onBorrada={() => { setPiezas((lista) => lista.filter((x) => x.id !== p.id)); setAbierta(null); }}
+                onBorrada={(nuevoEstadoLote) => {
+                  setPiezas((lista) => lista.filter((x) => x.id !== p.id));
+                  setAbierta(null);
+                  avisarSiElMesCambioDeLado(nuevoEstadoLote);
+                }}
                 onArchivo={(a) => setArchivos((lista) => [...lista, a])}
               />
             ))}

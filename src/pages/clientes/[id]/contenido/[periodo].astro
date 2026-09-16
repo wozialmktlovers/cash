@@ -118,8 +118,26 @@ const archivos: ArchivoCliente[] = await db
   .from(clientFiles)
   .where(eq(clientFiles.clientId, cliente.id));
 
+// **Un mes que volvió al operador.** `refrescarLote` (src/contenido/servicio.ts)
+// devuelve a `en_proceso` un lote cuya ronda ya terminó, y le limpia
+// `compartido_en` y `limite_revision`, en cuanto sus piezas cambian: un plazo
+// solo corre sobre material que se le compartió al cliente, y la pieza que se
+// acaba de agregar no lo es. La firma de ese estado es un lote sin
+// `compartido_en` cuyas piezas, sin embargo, ya traen la respuesta del cliente
+// —uno que nunca se compartió las tiene todas `pendiente`—.
+//
+// La pantalla lo dice porque si no, el cambio es mudo: el operador dejó un mes
+// aprobado, agrega una pieza y se encuentra la etiqueta en «En proceso» sin
+// nada que lo explique. Y lo que hay que explicar no es solo el estado: es que
+// el plazo anterior se detuvo y que hace falta volver a compartir para que el
+// cliente vea lo nuevo.
+const reabierto = !!lote && lote.compartidoEn === null && filas.some((p) => p.estadoCliente !== 'pendiente');
+
 const paquete = (cliente.paquete ?? {}) as Paquete;
+// El plazo en palabras («2 días hábiles»), en un solo lugar: la pantalla lo
+// repite en el encabezado y en los tres textos del bloque de compartir.
 const diasRevision = cliente.diasRevision ?? DIAS_REVISION_POR_OMISION;
+const plazo = `${diasRevision} ${diasRevision === 1 ? 'día hábil' : 'días hábiles'}`;
 const titulo = nombrePeriodo(mes);
 const anterior = periodoVecino(mes, -1);
 const siguiente = periodoVecino(mes, 1);
@@ -132,7 +150,7 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
       <p class="eyebrow">{NOMBRE_ETAPA.desarrollo_mensual}</p>
       <h1>Contenido de {titulo}</h1>
       <p class="sub">
-        {cliente.nombre} · {diasRevision} {diasRevision === 1 ? 'día hábil' : 'días hábiles'} de revisión
+        {cliente.nombre} · {plazo} de revisión
         {lote && <> · <span class={`etiqueta ${COLOR_ESTADO[lote.estado]}`}>{ETIQUETA_ESTADO_ETAPA[lote.estado]}</span></>}
       </p>
     </div>
@@ -152,6 +170,15 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
     </p>
   )}
 
+  {reabierto && (
+    <p class="aviso amarillo" style="margin-bottom:18px">
+      <strong>Este mes volvió a estar en proceso.</strong> Sus piezas cambiaron después de que el cliente
+      lo revisó, así que el plazo anterior se detuvo: lo que ya había aprobado sigue aprobado, pero el
+      contenido nuevo todavía no lo ha visto y el mes dejó de estar a la vista en su portal.
+      Cuando esté listo, vuelve a compartirlo: eso le da acceso otra vez y arranca un plazo nuevo de {plazo}.
+    </p>
+  )}
+
   {lote ? (
     <>
       <section class="compartir-mes" data-lote={lote.id}>
@@ -166,15 +193,21 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
                 ? ' Al volver a compartirlo, el plazo empieza de nuevo: es una ronda nueva de revisión.'
                 : ' Volver a compartirlo crea otro enlace, pero no mueve la fecha límite.'}
             </p>
+          ) : reabierto ? (
+            <p class="secundario">
+              El plazo de la ronda anterior se detuvo al cambiar las piezas. Volver a compartir el mes es lo
+              que arranca uno nuevo de {plazo}: el lote pasa a revisión y, si el cliente no contesta antes de
+              la fecha límite, se da por aprobado.
+            </p>
           ) : (
             <p class="secundario">
-              Crea el enlace del mes y arranca el plazo de {diasRevision} {diasRevision === 1 ? 'día hábil' : 'días hábiles'}:
+              Crea el enlace del mes y arranca el plazo de {plazo}:
               el lote pasa a revisión y, si el cliente no contesta antes de la fecha límite, se da por aprobado.
             </p>
           )}
         </div>
         <button type="button" class="btn" id="compartir-lote" disabled={!operable}>
-          {lote.compartidoEn ? 'Crear otro enlace' : 'Compartir el mes'}
+          {lote.compartidoEn ? 'Crear otro enlace' : reabierto ? 'Volver a compartir el mes' : 'Compartir el mes'}
         </button>
         <div class="link-publico" id="link-lote" hidden>
           <input type="text" id="url-lote" readonly aria-label="Enlace del mes para el cliente" />
@@ -188,6 +221,7 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
         paquete={paquete}
         grupos={grupos}
         operable={operable}
+        estadoLote={lote.estado}
         piezas={piezas}
         archivos={archivos}
       />

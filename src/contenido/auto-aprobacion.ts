@@ -129,10 +129,12 @@ export function textoConstancia(periodo: string, limiteRevision: Date | null): s
  * 3. **Las piezas `pendiente` pasan a `aprobada`**, con su `revisado_en`. Es la
  *    parte que conviene justificar: dejarlas pendientes dejaría un lote
  *    «aprobado» que el entregable describiría como «14 de 22 aprobadas»
- *    (`avanceRevision`), y, peor, `refrescarLote` deshace la aprobación en
- *    cuanto alguien dé de alta o borre una pieza, porque `estadoLoteSegunPiezas`
- *    volvería a deducir `en_revision` de esas piezas pendientes. Con esto, el
- *    lote y sus piezas dicen lo mismo y el estado es estable.
+ *    (`avanceRevision`), y, peor, `refrescarLote` desharía la aprobación en
+ *    cuanto alguien diera de alta o borrara una pieza —devolviendo el mes al
+ *    operador—, porque `estadoLoteSegunPiezas` seguiría deduciendo `en_revision`
+ *    de esas piezas pendientes. Con esto, el lote y sus piezas dicen lo mismo y
+ *    el estado es estable: mientras nadie toque las piezas, un mes aprobado se
+ *    queda aprobado.
  *    **Las piezas con `cambios` no se tocan, y el `WHERE` lo deja por escrito.**
  *    Lo que el sistema garantiza —después de arreglar `compartirLote`— es que
  *    un lote `en_revision` no tiene ninguna: llega a ese estado por una de dos
@@ -147,7 +149,7 @@ export function textoConstancia(periodo: string, limiteRevision: Date | null): s
  *    la razón de que el `WHERE` sea estrecho y no un «todas las piezas del
  *    lote»: quedaría un mes `aprobada` con una pieza en `cambios`, el entregable
  *    diría «9 de 10 aprobadas» sobre un mes aprobado y la primera alta o borrado
- *    posterior desharía la aprobación en silencio. El `WHERE` no lo evita —es la
+ *    posterior desharía la aprobación. El `WHERE` no lo evita —es la
  *    máquina de estados la que tiene que impedirlo—, pero tampoco lo tapa
  *    aprobando de oficio lo que el cliente devolvió, que sería peor.
  * 4. `sincronizarEtapa`, que es quien refleja el lote activo en

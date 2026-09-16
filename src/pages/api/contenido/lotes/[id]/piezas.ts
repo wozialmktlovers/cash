@@ -56,8 +56,9 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   try {
     // El alta, el estado del lote y el de la etapa van en la misma
     // transacción: un lote ya compartido cambia de estado al recibir una pieza
-    // nueva (vuelve a `en_revision`, ver `refrescarLote`) y eso tiene que
-    // llegar a la ficha, al Inicio y al portal de una pieza.
+    // nueva —si su ronda de revisión ya terminó, vuelve al lado del operador
+    // con el plazo borrado; ver `refrescarLote`— y eso tiene que llegar a la
+    // ficha, al Inicio y al portal de una pieza.
     resultado = await db.transaction(async (tx) => {
       let numero = v.datos.numero;
       if (numero === undefined) {

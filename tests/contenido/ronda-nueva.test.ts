@@ -1,26 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import type { Fila } from './doble-base';
 
 /**
  * La **segunda ronda de revisión**: qué pasa con las piezas que el cliente
  * devolvió cuando el operador las corrige y vuelve a compartir el mes
  * (diseño §6, «una ronda nueva sobre contenido que el cliente no ha visto»).
  *
- * Es el único archivo de pruebas de contenido que necesita una base de verdad
- * en miniatura y no el doble de siempre. La razón está en lo que se prueba: la
- * secuencia completa —compartir, pedir cambios, recompartir, dar de alta una
- * pieza— es una cadena de escrituras donde **cada paso lee lo que escribió el
- * anterior**. Los dobles de `servicio.test.ts` y `auto-aprobacion.test.ts`
- * devuelven filas fijas y solo apuntan los `set`, así que no pueden encadenar:
- * con ellos el error de esta secuencia es literalmente invisible.
- *
- * Por eso el doble de aquí guarda filas y **respeta el `WHERE`**: las
- * condiciones de Drizzle se interpretan (solo `eq`, `and`, `isNotNull` y `lt`,
- * que es todo lo que usan los módulos bajo prueba; cualquier otra revienta en
- * vez de pasar de largo). Eso es lo que permite afirmar que una escritura toca
- * las piezas que dice tocar y no las demás.
+ * Usa la base en miniatura de `./doble-base.ts` y no el doble de siempre. La
+ * razón está en lo que se prueba: la secuencia completa —compartir, pedir
+ * cambios, recompartir, dar de alta una pieza— es una cadena de escrituras
+ * donde **cada paso lee lo que escribió el anterior**. Los dobles de
+ * `servicio.test.ts` y `auto-aprobacion.test.ts` devuelven filas fijas y solo
+ * apuntan los `set`, así que no pueden encadenar: con ellos el error de esta
+ * secuencia es literalmente invisible.
  */
-
-type Fila = Record<string, unknown>;
 
 const espia = vi.hoisted(() => ({
   lotes: [] as Fila[],
@@ -36,138 +29,8 @@ vi.mock('@/flujo/avisos', async (importarReal) => ({
 
 vi.mock('@/db', async (importarReal) => {
   const real = await importarReal<typeof import('@/db')>();
-  const { Column, getTableColumns } = await import('drizzle-orm');
-
-  // Se guarda el NOMBRE de la lista, no la lista: cada prueba estrena arrays
-  // en `beforeEach`, y quedarse con la referencia de la primera haría que las
-  // escrituras fueran a una tabla que ya nadie lee.
-  const tablas = new Map<unknown, keyof typeof espia>([
-    [real.contenidoLotes, 'lotes'],
-    [real.contenidoPiezas, 'piezas'],
-    [real.clienteEtapas, 'etapas'],
-    [real.etapaEventos, 'eventos'],
-  ]);
-
-  const filasDe = (tabla: unknown): Fila[] => {
-    const nombre = tablas.get(tabla);
-    if (!nombre) throw new Error('El doble de la base no conoce esa tabla.');
-    return espia[nombre];
-  };
-
-  /** Nombre de la propiedad de la fila que corresponde a esa columna. */
-  const clave = (tabla: unknown, columna: unknown): string => {
-    for (const [nombre, col] of Object.entries(getTableColumns(tabla as never))) {
-      if (col === columna) return nombre;
-    }
-    throw new Error('El doble de la base no reconoce esa columna.');
-  };
-
-  /**
-   * Traduce una condición de Drizzle a un predicado sobre la fila. Entiende
-   * `eq`, `and`, `isNotNull` y `lt`; ante cualquier otra cosa lanza, para que
-   * un `WHERE` que esta prueba no sepa evaluar no se ignore en silencio.
-   */
-  const predicado = (tabla: unknown, condicion: unknown): ((fila: Fila) => boolean) => {
-    if (condicion === undefined || condicion === null) return () => true;
-    const partes: ((fila: Fila) => boolean)[] = [];
-    let columna: unknown = null;
-    let operador: '=' | '<' | null = null;
-
-    const recorrer = (sql: any) => {
-      for (const trozo of sql?.queryChunks ?? []) {
-        if (trozo?.queryChunks) { recorrer(trozo); continue; }
-        if (trozo instanceof Column) { columna = trozo; continue; }
-        if (trozo && typeof trozo === 'object' && 'encoder' in trozo) {
-          const col = columna, op = operador;
-          if (col === null || op === null) throw new Error('Valor sin columna ni operador.');
-          const k = clave(tabla, col), v = (trozo as { value: unknown }).value;
-          partes.push(op === '='
-            ? (fila) => fila[k] === v
-            : (fila) => fila[k] != null && (fila[k] as number) < (v as number));
-          columna = null; operador = null;
-          continue;
-        }
-        const texto = (Array.isArray(trozo?.value) ? trozo.value.join('') : String(trozo ?? '')).trim();
-        if (texto === '' || texto === '(' || texto === ')' || texto === 'and') continue;
-        if (texto === '=' || texto === '<') { operador = texto as '=' | '<'; continue; }
-        if (texto === 'is not null') {
-          const col = columna;
-          if (col === null) throw new Error('«is not null» sin columna.');
-          const k = clave(tabla, col);
-          partes.push((fila) => fila[k] != null);
-          columna = null;
-          continue;
-        }
-        throw new Error(`El doble de la base solo entiende eq/and/isNotNull/lt; encontró «${texto}».`);
-      }
-    };
-
-    recorrer(condicion);
-    return (fila) => partes.every((p) => p(fila));
-  };
-
-  const consulta = () => {
-    let tabla: unknown = null;
-    let filtro: (fila: Fila) => boolean = () => true;
-    const q: Record<string, unknown> = {
-      from(t: unknown) { tabla = t; return q; },
-      // El `innerJoin` con `clients` solo sirve para traer el nombre del
-      // cliente al aviso; las decisiones no lo miran, así que no se emula.
-      innerJoin() { return q; },
-      where(c: unknown) { filtro = predicado(tabla, c); return q; },
-      orderBy() { return q; },
-      for() { return q; },
-      limit() { return q; },
-      then(resolver: (v: unknown) => unknown, rechazar: (e: unknown) => unknown) {
-        try {
-          // Copias: quien lee no debe poder mutar la tabla sin pasar por un UPDATE.
-          return Promise.resolve(filasDe(tabla).filter(filtro).map((f) => ({ ...f }))).then(resolver, rechazar);
-        } catch (e) {
-          return Promise.reject(e).then(resolver, rechazar);
-        }
-      },
-    };
-    return q;
-  };
-
-  const escritura = (tabla: unknown) => {
-    let cambio: Fila = {};
-    const w: Record<string, unknown> = {
-      set(c: Fila) { cambio = c; return w; },
-      where(c: unknown) {
-        const filtro = predicado(tabla, c);
-        const tocadas = filasDe(tabla).filter(filtro);
-        for (const fila of tocadas) Object.assign(fila, cambio);
-        return { then: (r: (v: unknown) => unknown) => Promise.resolve(tocadas.map((f) => ({ ...f }))).then(r),
-                 returning: () => Promise.resolve(tocadas.map((f) => ({ ...f }))) };
-      },
-    };
-    return w;
-  };
-
-  const alta = (tabla: unknown) => {
-    let fila: Fila = {};
-    const guardar = (evitarDuplicado: boolean) => {
-      const filas = filasDe(tabla);
-      if (evitarDuplicado && filas.some((f) => f.clientId === fila.clientId && f.etapa === fila.etapa)) return;
-      filas.push({ id: `fila-${filas.length + 1}`, ...fila });
-    };
-    const a: Record<string, unknown> = {
-      values(f: Fila) { fila = f; return a; },
-      onConflictDoNothing() { return { then: (r: (v: unknown) => unknown) => { guardar(true); return Promise.resolve(undefined).then(r); } }; },
-      then(r: (v: unknown) => unknown) { guardar(false); return Promise.resolve(undefined).then(r); },
-    };
-    return a;
-  };
-
-  const falso = {
-    select: () => consulta(),
-    update: (tabla: unknown) => escritura(tabla),
-    insert: (tabla: unknown) => alta(tabla),
-    transaction: async (fn: (tx: unknown) => unknown) => fn(falso),
-  };
-
-  return { ...real, db: falso };
+  const { dobleDeBase } = await import('./doble-base');
+  return { ...real, db: dobleDeBase(real, espia) };
 });
 
 import { autoAprobarVencidos } from '@/contenido/auto-aprobacion';
@@ -331,8 +194,9 @@ describe('la ronda nueva deja la máquina de estados otra vez en marcha', () => 
     await autoAprobarVencidos({ clientId: CLIENTE, ahora: despues });
 
     // Borrar una pieza de un mes ya aprobado: el lote sigue aprobado porque
-    // las que quedan lo están. (Un ALTA sí lo devuelve a `en_revision`, y eso
-    // es lo correcto: hay contenido que el cliente no ha visto.)
+    // las que quedan lo están. (Un ALTA sí lo saca de ahí —hay contenido que el
+    // cliente no ha visto—, pero lo devuelve al OPERADOR, no a una revisión con
+    // el plazo ya vencido: ver `./lote-reabierto.test.ts`.)
     espia.piezas.splice(1, 1);
     expect(await refrescarLote(comoRefrescable())).toBe('aprobada');
     expect(espia.etapas[0]?.estado).toBe('aprobada');

@@ -74,8 +74,10 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
  *
  * **Borrar la última pieza no borra el lote** ni lo deja en un estado inventado:
  * un lote que todavía se arma se queda `en_proceso` (existe y es trabajo
- * empezado) y uno ya compartido queda `en_revision`, porque vacío no es
- * aprobado. El criterio entero, con su porqué, está en `refrescarLote`.
+ * empezado), y uno ya compartido vuelve al lado del operador —también
+ * `en_proceso`, y con el plazo borrado—, porque vacío no es aprobado pero
+ * tampoco es una revisión que el cliente esté haciendo. El criterio entero, con
+ * su porqué, está en `refrescarLote`.
  *
  * Tampoco se devuelve la etapa a `no_iniciada`: eso solo tendría sentido al
  * borrar el último LOTE del cliente, y esta versión de la API no borra lotes

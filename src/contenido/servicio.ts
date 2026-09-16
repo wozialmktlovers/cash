@@ -138,16 +138,65 @@ export type LoteRefrescable = { id: string; clientId: string; estado: Estado; co
  *   `en_revision` —«esperando al cliente»— por el mero hecho de tener piezas
  *   pendientes, y la ficha anunciaría una revisión que nadie pidió. Así que se
  *   queda como está.
- * - Ya compartido, sí: la pieza nueva entra `pendiente` y devuelve el lote a
- *   `en_revision` aunque estuviera `aprobada`, que es lo correcto —hay
- *   contenido que el cliente no ha visto—, y la pieza borrada puede completar
- *   el `aprobada` que faltaba.
+ * - Ya compartido, sí: la pieza borrada puede completar el `aprobada` que
+ *   faltaba, y la pieza nueva —que entra `pendiente`— saca al mes de ahí,
+ *   porque hay contenido que el cliente no ha visto.
  *
- * **Borrar la última pieza** cae de ahí sin caso especial: un lote sin
- * compartir se queda `en_proceso` (existe, se está armando, y un lote vacío es
- * trabajo empezado, no aprobado); uno ya compartido queda `en_revision`, que es
- * lo que `estadoLoteSegunPiezas` contesta para la lista vacía, con el mismo
- * argumento: vacío no es aprobado. En ningún caso el lote se borra solo.
+ * ── Un plazo solo corre sobre material que se le compartió ────────────────
+ *
+ * Adónde va el mes cuando deja de estar aprobado es el otro punto fino, y costó
+ * un fallo: **este recálculo nunca devuelve un lote a `en_revision` desde fuera
+ * de `en_revision`**. Si el estado deducido es `en_revision` y el lote no estaba
+ * ya ahí, el mes vuelve al lado del operador —`en_proceso`, con `compartido_en`
+ * y `limite_revision` LIMPIOS— en vez de adoptar el estado deducido.
+ *
+ * Lo que pasaba sin esa salvedad: `en_revision` significa «esperando al
+ * cliente», y el reloj de esa espera es `limite_revision`, que solo estampa
+ * `compartirLote`. Un lote `aprobada` al que el operador le daba de alta una
+ * pieza días después volvía a `en_revision` arrastrando el límite ya vencido de
+ * la ronda anterior, y el siguiente barrido de `autoAprobarVencidos` lo aprobaba
+ * **de inmediato**, con la pieza nueva incluida, sin que el cliente hubiera
+ * podido verla, y dejaba otra constancia en `etapa_eventos` diciendo que no
+ * respondió.
+ *
+ * No se arregla recalculando el límite aquí: eso sería arrancar un plazo sin
+ * repartir el mes —el cliente no recibe nada, no se entera de que hay una ronda
+ * nueva, y la cuenta regresiva de su entregable diría otra cosa—. El plazo lo
+ * arranca el reparto. Así que el mes vuelve al operador y **para que el cliente
+ * lo vea otra vez hay que compartirlo explícitamente**, que es lo que estampa el
+ * plazo nuevo. Es la misma decisión que ya había tomado `compartirLote` por el
+ * otro lado: un lote `aprobada` no se reabre desde un botón que dice
+ * «Compartir», y un mes cerrado tampoco se reabre desde un alta de pieza.
+ *
+ * La regla se escribe una sola vez porque el arrastre no era solo el de
+ * `aprobada` + alta; llega por tres caminos:
+ *
+ * - `aprobada` + **alta** de una pieza: el caso reportado.
+ * - `aprobada` + **borrado de la última** pieza: `estadoLoteSegunPiezas` da
+ *   `en_revision` para la lista vacía («vacío no es aprobado»), con el mismo
+ *   límite muerto.
+ * - `con_cambios` + **borrado de la pieza devuelta** (el operador resuelve la
+ *   petición quitando la pieza en vez de corregirla): lo que queda son
+ *   pendientes, deduce `en_revision`, y el límite que arrastra es el de la
+ *   ronda anterior, que a esas alturas casi siempre venció.
+ *
+ * Un `con_cambios` con un ALTA, en cambio, no se mueve —sigue `con_cambios`, que
+ * no es auto-aprobable— y ahí no hay nada que limpiar: la ronda nueva la abre
+ * `compartirLote`, que ya reinicia plazo y piezas.
+ *
+ * **Lo que el cliente decidió no se toca al reabrir**: las piezas conservan su
+ * `estado_cliente`. Reabrir devuelve el mes al operador, no borra la revisión; y
+ * si luego se comparte otra vez, `compartirLote` ya decide qué piezas empiezan
+ * de nuevo (las `cambios`) y cuáles siguen aprobadas.
+ *
+ * Deducir `aprobada` sí se acepta tal cual, aunque el lote venga de
+ * `con_cambios`: no es un plazo corriendo sobre material no visto, es la
+ * conclusión de lo que el cliente decidió pieza por pieza. En ningún caso el
+ * lote se borra solo.
+ *
+ * Un lote **sin compartir** al que se le borra la última pieza se queda
+ * `en_proceso` por el primer punto, sin llegar a este: existe, se está armando,
+ * y un lote vacío es trabajo empezado, no aprobado.
  *
  * `PATCH` de una pieza no pasa por aquí: los campos que edita el operador
  * —planeación, copy, cta, hashtags, arte— no entran en `estadoLoteSegunPiezas`,
@@ -162,7 +211,18 @@ export async function refrescarLote(lote: LoteRefrescable, ejecutor: Ejecutor = 
       .from(contenidoPiezas)
       .where(eq(contenidoPiezas.loteId, lote.id));
     const deducido = estadoLoteSegunPiezas(piezas);
-    if (deducido !== estado) {
+
+    // Volver a `en_revision` es volver a esperar al cliente, y eso solo lo
+    // puede decidir el reparto del mes. Si el lote no estaba ya ahí, se le
+    // devuelve al operador con el plazo borrado.
+    const reabre = deducido === 'en_revision' && estado !== 'en_revision';
+
+    if (reabre) {
+      await ejecutor.update(contenidoLotes)
+        .set({ estado: 'en_proceso', compartidoEn: null, limiteRevision: null, actualizadoEn: new Date() })
+        .where(eq(contenidoLotes.id, lote.id));
+      estado = 'en_proceso';
+    } else if (deducido !== estado) {
       await ejecutor.update(contenidoLotes)
         .set({ estado: deducido, actualizadoEn: new Date() })
         .where(eq(contenidoLotes.id, lote.id));
@@ -206,9 +266,10 @@ export type ResultadoCompartir = {
  * ── Compartir dos veces el mismo lote ─────────────────────────────────────
  *
  * **El plazo arranca solo cuando el mes está del lado del operador**
- * (`en_proceso`, el lote que se estaba armando, o `con_cambios`, el que vuelve
- * corregido). En los otros dos casos se crea el enlace pero no se toca ninguna
- * fecha:
+ * (`en_proceso` —el lote que se estaba armando, o el que `refrescarLote`
+ * devolvió al operador porque sus piezas cambiaron después de la revisión— o
+ * `con_cambios`, el que vuelve corregido). En los otros dos casos se crea el
+ * enlace pero no se toca ninguna fecha:
  *
  * - **`en_revision`** (ya compartido, plazo corriendo): el segundo enlace casi
  *   siempre es el mismo mes reenviado a otra persona del cliente. Reiniciar el
@@ -221,7 +282,9 @@ export type ResultadoCompartir = {
  *   Reabrir en silencio una aprobación —del cliente o por vencimiento— desde un
  *   botón que solo dice «Compartir» sería lo contrario de lo que espera quien
  *   lo pulsa. Si hay que rehacer un mes aprobado, se abre trabajo nuevo, no se
- *   recomparte.
+ *   recomparte. Y cuando ese trabajo nuevo llega —una pieza de más o de menos—,
+ *   es `refrescarLote` quien devuelve el mes a `en_proceso` y le borra el plazo;
+ *   a partir de ahí este botón vuelve a arrancarlo, que es el primer caso.
  *
  * `con_cambios` sí reinicia, y es el caso que justifica la regla: el cliente ya
  * contestó, el operador rehízo lo que le pidieron y lo que se comparte es una

@@ -214,18 +214,25 @@ describe('refrescarLote', () => {
     expect(espia.cambiosLote).toEqual([]);
   });
 
-  it('borrar la última pieza de un lote compartido lo deja en_revision: vacío no es aprobado', async () => {
+  // Los dos casos que siguen son el mismo criterio: vaciar o ampliar un mes ya
+  // cerrado lo devuelve al OPERADOR (`en_proceso`, sin plazo), no a una
+  // revisión que nadie pidió. `en_revision` sería aquí un plazo corriendo sobre
+  // material que el cliente no ha visto —y con el límite muerto de la ronda
+  // anterior—. El porqué entero está en `refrescarLote`; la secuencia completa,
+  // con el barrido que lo aprobaba de inmediato, en `./lote-reabierto.test.ts`.
+
+  it('borrar la última pieza de un lote compartido lo devuelve al operador: vacío no es aprobado', async () => {
     espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'aprobada' }];
     espia.piezas = [];
-    expect(await refrescarLote({ ...compartido, estado: 'aprobada' })).toBe('en_revision');
-    expect(espia.cambiosLote[0]?.estado).toBe('en_revision');
+    expect(await refrescarLote({ ...compartido, estado: 'aprobada' })).toBe('en_proceso');
+    expect(espia.cambiosLote[0]).toMatchObject({ estado: 'en_proceso', compartidoEn: null, limiteRevision: null });
   });
 
-  it('una pieza nueva en un lote aprobado lo devuelve a revisión', async () => {
+  it('una pieza nueva en un lote aprobado lo devuelve al operador, con el plazo limpio', async () => {
     espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'aprobada' }];
     espia.piezas = [pieza('aprobada'), pieza('pendiente')];
-    expect(await refrescarLote({ ...compartido, estado: 'aprobada' })).toBe('en_revision');
-    expect(espia.cambiosLote[0]?.estado).toBe('en_revision');
+    expect(await refrescarLote({ ...compartido, estado: 'aprobada' })).toBe('en_proceso');
+    expect(espia.cambiosLote[0]).toMatchObject({ estado: 'en_proceso', compartidoEn: null, limiteRevision: null });
   });
 
   it('quitar la pieza con cambios puede completar el aprobado del mes', async () => {
