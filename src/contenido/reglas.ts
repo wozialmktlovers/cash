@@ -58,6 +58,60 @@ export type EstadoLote = Estado;
  */
 export type EstadoLoteSegunPiezas = Extract<EstadoLote, 'en_revision' | 'con_cambios' | 'aprobada'>;
 
+/**
+ * Los únicos esquemas de URL que puede llevar el enlace de un arte.
+ *
+ * El enlace de un arte lo escribe un operador o un admin, y acaba en el `href`
+ * de «Ver el reel» y en el `src`/`poster` del visor del entregable que abre el
+ * CLIENTE, en el origen del Studio y con su sesión. Un `javascript:` o un
+ * `data:text/html,…` ahí es script del operador corriendo en la pestaña del
+ * cliente, así que qué esquemas se admiten se decide aquí, en un solo sitio, y
+ * no en cada sumidero.
+ *
+ * Vive en este archivo —puro, sin Zod y sin base— para que lo compartan los
+ * tres que lo necesitan sin arrastrarse dependencias entre sí: el esquema de
+ * alta y edición (`src/contenido/piezas.ts`, que se lo pasa a `z.url`), el
+ * entregable (`src/render/contenido/datos.ts`) y la pantalla interna de React
+ * (`src/components/PiezasEditor.tsx`), que importa de aquí en tiempo de
+ * ejecución precisamente porque aquí no hay Zod que arrastrar al navegador.
+ */
+export const ESQUEMAS_ARTE = ['http:', 'https:'] as const;
+
+/** Los mismos esquemas en la forma que pide `z.url({ protocol })`: sin los dos puntos. */
+export const PROTOCOLO_ARTE = /^https?$/;
+
+/**
+ * El enlace tal cual si apunta a la web, o `null` si no.
+ *
+ * **Por qué el render también comprueba, si el esquema ya lo hace**
+ * (`arteSchema`, src/contenido/piezas.ts): `contenido_piezas.arte` es `jsonb` y
+ * nadie lo vuelve a validar al leerlo —`piezaVisibleJson` hace un `as Arte[]`,
+ * no un `parse`—. Una fila guardada antes de esta regla, o por cualquier camino
+ * que no pase por `validarNuevaPieza`/`validarCambioPieza` (un script, una
+ * migración, una restauración de respaldo), llegaría intacta al documento. Y
+ * ese documento se sirve también por el enlace público `/p/…`, que no caduca y
+ * lo abre cualquiera: una sola fila mala seguiría disparando mucho después de
+ * haber cerrado la entrada. Validar corta la entrada; esto corta la salida, y
+ * cuesta una función.
+ *
+ * Se parsea con `URL` en vez de comparar el texto con una expresión regular
+ * porque el parser es el mismo que aplicará el navegador al `href`: los tabs,
+ * saltos de línea y espacios que el navegador ignora —el truco de
+ * `jav&#9;ascript:`— los ignora también esta comprobación, en vez de dejarlos
+ * pasar por no empezar literalmente por `http`. Se devuelve la cadena ORIGINAL
+ * y no `u.href`: ya se sabe que su esquema es web, y normalizarla cambiaría el
+ * enlace que el operador escribió.
+ */
+export function enlaceWeb(url: string | null | undefined): string | null {
+  if (typeof url !== 'string' || url === '') return null;
+  try {
+    return (ESQUEMAS_ARTE as readonly string[]).includes(new URL(url).protocol) ? url : null;
+  } catch {
+    // URL sin forma: no hay esquema que autorizar.
+    return null;
+  }
+}
+
 /** Lo que estas reglas necesitan saber de una pieza. */
 export type PiezaRevisable = { formato: Formato; estadoCliente: EstadoRevision };
 

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import { db, clienteEtapas, clients, users, comentarios } from '@/db';
 import { comentariosAbiertosPorEtapa } from '@/flujo/servicio';
 import type { Etapa, TipoDocumento } from '@/flujo/reglas';
@@ -7,11 +7,90 @@ import { nombreVisible } from './usuarios';
 import type { UsuarioSesion } from './permisos';
 
 /**
+ * La etapa que se repite cada mes. Se nombra aquí porque es la única que no
+ * habla el idioma de las demás, y de eso dependen las dos condiciones de abajo.
+ */
+const ETAPA_MENSUAL: Etapa = 'desarrollo_mensual';
+
+/**
+ * Lo que de verdad espera la autorización del admin.
+ *
+ * **`en_revision` quiere decir dos cosas distintas según la etapa, y esta es la
+ * línea donde se separan.** En el flujo de siempre (investigación, pilares,
+ * manual) `en_revision` es «el operador solicitó y el admin tiene que aprobar
+ * o pedir cambios». En el lote mensual, `sincronizarEtapa`
+ * (src/contenido/servicio.ts) copia `contenido_lotes.estado` a
+ * `cliente_etapas.estado` **sin traducirlo** —a propósito: los dos reusan el
+ * enum `estado_etapa`— y ahí `en_revision` significa «se le compartió el mes al
+ * CLIENTE y se espera su respuesta». Ninguna de las dos lecturas está mal; lo
+ * que estaba mal era contarlas juntas.
+ *
+ * Sin este `ne`, cada mes compartido caía en «Etapas que esperan tu
+ * autorización» de `/pendientes` y en el contador rojo de la barra. El admin no
+ * tiene ahí nada que autorizar —`botonesEtapa` (src/flujo/ui.ts) no devuelve
+ * ningún botón para esta etapa— y el «Ver» del renglón cae a `/clientes/{id}`
+ * porque `desarrollo_mensual` no tiene `documentoId`: entraba solo y no había
+ * forma de sacarlo. Es regresión de esta rama: hasta que algo empezó a estampar
+ * `compartido_en`, ningún lote llegaba a `en_revision`.
+ *
+ * **Se exporta y la usan LAS DOS consultas del admin** —el `count` de
+ * `contarPendientes` y el `select` de `listarPendientes`—, no dos copias con
+ * las mismas tres condiciones. Es el mismo cuidado que ya hubo con el contador
+ * de la barra lateral contra la página (fix wave, punto 6): la única manera de
+ * que el número rojo, `/pendientes` y el «Te toca a ti» del Inicio no se
+ * contradigan es que no haya dos sitios donde equivocarse.
+ *
+ * Los otros dos estados del lote NO se tocan, y conviene que quede escrito:
+ * `con_cambios` (el cliente devolvió el mes) y `en_proceso` (el mes se está
+ * armando) significan en el lote exactamente lo mismo que en las demás etapas
+ * —le toca al operador—, así que siguen contando tal cual en su camino.
+ */
+export function esperaAutorizacionDelAdmin(): SQL {
+  return and(
+    eq(clienteEtapas.estado, 'en_revision'),
+    eq(clienteEtapas.contratada, true),
+    ne(clienteEtapas.etapa, ETAPA_MENSUAL),
+  )!;
+}
+
+/**
+ * El otro lado de la moneda: el mes ya compartido que espera la respuesta del
+ * cliente. Es justo lo que `esperaAutorizacionDelAdmin` deja fuera.
+ *
+ * **Por qué no desaparece del todo:** que el admin no tenga nada que autorizar
+ * no quiere decir que a nadie le importe. El operador que compartió el mes
+ * quiere saber que sigue sin contestar —para insistirle al cliente antes de que
+ * venza el plazo y el lote se auto-apruebe en silencio (diseño §6)—, y ese dato
+ * no se ve en ninguna otra pantalla del Studio.
+ *
+ * **Por qué tampoco entra en «Te toca a ti»:** no le toca a él. Va en su propio
+ * bloque de `/pendientes`, con su propio texto, y **fuera de `total`**, que es
+ * lo que alimenta el contador rojo de la barra (`contarPendientes`) y el
+ * indicador «Esperan por ti» del Inicio. Meterlo dentro inflaría los tres
+ * números con trabajo que el operador no puede hacer, y le devolvería el mismo
+ * problema que este arreglo le quita al admin: un renglón que no se puede
+ * cerrar.
+ *
+ * Al admin no se le enseña esta lista: su bandeja es, por diseño, solo lo que
+ * tiene que autorizar. Si algún día quiere ver el mes de todos, es una regla
+ * nueva y habría que decidir también qué hace con el contador.
+ */
+export function esperaAlCliente(): SQL {
+  return and(
+    eq(clienteEtapas.etapa, ETAPA_MENSUAL),
+    eq(clienteEtapas.estado, 'en_revision'),
+    eq(clienteEtapas.contratada, true),
+  )!;
+}
+
+/**
  * Conteo barato para el contador de «Pendientes» en la barra de navegación:
  * una sola consulta, sin listar filas — se corre en `Base.astro`, o sea en
  * cada página, así que no puede ser una consulta cara ni disparar varias.
  *
- * Admin cuenta etapas `en_revision` de todos (le toca decidir). Operador
+ * Admin cuenta lo que `esperaAutorizacionDelAdmin` define: etapas
+ * `en_revision` de todos MENOS el lote mensual, donde ese estado significa que
+ * se espera al cliente y no a él. Operador
  * cuenta exactamente lo que `/pendientes` le lista (spec §3, tabla
  * «Pendientes»): sus etapas `con_cambios`, sus etapas `en_proceso` (que
  * todavía no se solicitaron) y los comentarios abiertos de primer nivel en
@@ -28,8 +107,10 @@ import type { UsuarioSesion } from './permisos';
  */
 export async function contarPendientes(usuario: UsuarioSesion): Promise<number> {
   if (usuario.rol === 'admin') {
+    // La MISMA condición que lista `listarPendientes`, no una copia: es lo que
+    // garantiza que el número rojo y la página digan lo mismo.
     const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(clienteEtapas)
-      .where(and(eq(clienteEtapas.estado, 'en_revision'), eq(clienteEtapas.contratada, true)));
+      .where(esperaAutorizacionDelAdmin());
     return n;
   }
 
@@ -64,8 +145,14 @@ export async function contarPendientes(usuario: UsuarioSesion): Promise<number> 
  * reciba (la página `/pendientes` o el Inicio) pueda separarlas en grupos sin
  * volver a consultar ni adivinar por el estado: `en_revision` solo le sale al
  * admin, `con_cambios` y `en_proceso` solo al operador.
+ *
+ * `esperando_cliente` es el raro de la lista y por eso lleva nombre propio en
+ * vez de reusar `en_revision`: **nunca aparece en `Pendientes.etapas`**, solo
+ * en `Pendientes.esperandoCliente`, porque no es trabajo de quien mira sino un
+ * aviso de que su mes sigue sin respuesta (ver `esperaAlCliente`). Confundirlo
+ * con `en_revision` es exactamente el error que este arreglo corrige.
  */
-export type MotivoPendiente = 'en_revision' | 'con_cambios' | 'en_proceso';
+export type MotivoPendiente = 'en_revision' | 'con_cambios' | 'en_proceso' | 'esperando_cliente';
 
 export type EtapaPendiente = {
   id: string;
@@ -104,19 +191,38 @@ export type Pendientes = {
   etapas: EtapaPendiente[];
   /** De la más reciente a la más vieja. Recortados a `limiteComentarios`. */
   comentarios: ComentarioPendiente[];
+  /**
+   * Meses ya compartidos que siguen esperando la respuesta del cliente
+   * (`esperaAlCliente`). Vacía salvo que se pida con `incluirEsperandoCliente`,
+   * y solo para el operador.
+   *
+   * **No entra en `total`, a propósito.** No es trabajo de quien mira: es un
+   * aviso. Contarla aquí subiría el contador rojo de la barra y el «Esperan por
+   * ti» del Inicio con renglones que el operador no puede cerrar.
+   */
+  esperandoCliente: EtapaPendiente[];
   /** Cuántas etapas esperan en total, antes de recortar. */
   totalEtapas: number;
   /** Cuántos comentarios esperan en total, antes de recortar. */
   totalComentarios: number;
+  /** Cuántos meses esperan al cliente en total, antes de recortar. Fuera de `total`. */
+  totalEsperandoCliente: number;
   /** `totalEtapas + totalComentarios`: lo que espera por esta persona. */
   total: number;
 };
 
 export type OpcionesPendientes = {
-  /** Máximo de etapas a devolver. Sin él, todas. */
+  /** Máximo de etapas a devolver. Sin él, todas. Aplica también a `esperandoCliente`. */
   limite?: number;
   /** Máximo de comentarios a devolver. Sin él, el valor de `limite`; sin ninguno, todos. */
   limiteComentarios?: number;
+  /**
+   * Traer también los meses que esperan al cliente. Apagado por omisión porque
+   * es una consulta más y solo `/pendientes` los pinta: el Inicio enseña «Te
+   * toca a ti», y esto justamente no le toca, así que no tiene por qué pagar
+   * por traerlo.
+   */
+  incluirEsperandoCliente?: boolean;
 };
 
 const CAMPOS_ETAPA = {
@@ -136,10 +242,14 @@ const CAMPOS_ETAPA = {
  * El criterio es exactamente el que ya tenía la página:
  *
  * - **Admin:** las etapas `en_revision` de todos los clientes, con el
- *   responsable de cada uno, porque es a él a quien le toca autorizar.
+ *   responsable de cada uno, porque es a él a quien le toca autorizar. Menos
+ *   el lote mensual, donde `en_revision` significa que se espera al cliente y
+ *   no a él: el porqué está entero en `esperaAutorizacionDelAdmin`.
  * - **Operador:** sus etapas `con_cambios` (el admin le pidió correcciones),
  *   sus etapas `en_proceso` (todavía sin solicitar) y los comentarios
- *   abiertos de primer nivel de sus clientes.
+ *   abiertos de primer nivel de sus clientes. Con
+ *   `incluirEsperandoCliente`, además, sus meses compartidos sin respuesta,
+ *   aparte y fuera de `total` (ver `esperaAlCliente`).
  * - **Cliente:** nada. Nunca llega a estas pantallas.
  *
  * Los tres caminos filtran `contratada = true` (fix I1, punto 3): una etapa
@@ -159,10 +269,11 @@ const CAMPOS_ETAPA = {
  * una consulta aparte de `count`.
  */
 export async function listarPendientes(usuario: UsuarioSesion, opciones: OpcionesPendientes = {}): Promise<Pendientes> {
-  const { limite, limiteComentarios = limite } = opciones;
+  const { limite, limiteComentarios = limite, incluirEsperandoCliente = false } = opciones;
 
   let todas: EtapaPendiente[] = [];
   let comentariosPendientes: ComentarioPendiente[] = [];
+  let todasEsperandoCliente: EtapaPendiente[] = [];
   let totalComentarios = 0;
 
   // Una etapa descontratada no cuenta como pendiente de nadie (fix I1, punto
@@ -180,7 +291,9 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
       .from(clienteEtapas)
       .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
       .leftJoin(users, eq(users.id, clients.operadorId))
-      .where(and(eq(clienteEtapas.estado, 'en_revision'), contratada))
+      // La misma condición que cuenta `contarPendientes`; `contratada` ya va
+      // dentro de ella.
+      .where(esperaAutorizacionDelAdmin())
       .orderBy(asc(clienteEtapas.actualizadoEn));
 
     // El `leftJoin` deja las tres columnas del operador en NULL cuando el cliente
@@ -219,6 +332,20 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
     // que dos etapas con la misma fecha conservan el orden en que vinieron de
     // su consulta: quien filtre por `motivo` recupera cada lista tal cual.
     todas.sort((a, b) => a.actualizadoEn.getTime() - b.actualizadoEn.getTime());
+
+    // Aparte de las dos de arriba y no en el mismo `IN`: no es un motivo más
+    // de la misma lista, es otra lista, con otro texto y fuera del total.
+    if (incluirEsperandoCliente) {
+      const esperando = await db
+        .select(CAMPOS_ETAPA)
+        .from(clienteEtapas)
+        .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+        .where(and(esperaAlCliente(), cond))
+        .orderBy(asc(clienteEtapas.actualizadoEn));
+      todasEsperandoCliente = esperando.map((fila) => ({
+        ...fila, motivo: 'esperando_cliente' as const, operador: null, comentariosAbiertos: 0,
+      }));
+    }
 
     const condicionComentarios = and(eq(comentarios.estado, 'abierto'), isNull(comentarios.respuestaDe), contratada, cond);
 
@@ -259,8 +386,13 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
   return {
     etapas,
     comentarios: comentariosPendientes,
+    esperandoCliente: limite === undefined ? todasEsperandoCliente : todasEsperandoCliente.slice(0, limite),
     totalEtapas: todas.length,
     totalComentarios,
+    totalEsperandoCliente: todasEsperandoCliente.length,
+    // `esperandoCliente` NO se suma: ver el comentario del tipo `Pendientes`.
+    // De esto depende que el contador rojo (`contarPendientes`), esta página y
+    // el «Te toca a ti» del Inicio sigan diciendo el mismo número.
     total: todas.length + totalComentarios,
   };
 }

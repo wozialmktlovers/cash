@@ -30,8 +30,13 @@ const verTodosComentarios = Astro.url.searchParams.get('comentarios') === 'todos
 // segunda versión del criterio (etapa contratada, rol de quien mira,
 // comentarios sin atender). Esta página las pide todas —las etapas no se
 // paginan— y solo recorta los comentarios.
+//
+// `incluirEsperandoCliente` se pide solo aquí: esta es la bandeja, el sitio al
+// que el operador viene a ver cómo va lo suyo. El Inicio enseña «Te toca a ti»
+// y un mes esperando al cliente justamente no le toca, así que no lo pide.
 const pendientes = await listarPendientes(usuario, {
   limiteComentarios: verTodosComentarios ? undefined : LIMITE_COMENTARIOS,
+  incluirEsperandoCliente: true,
 });
 
 // Cada grupo se enseña por separado; `motivo` dice a cuál pertenece cada
@@ -41,6 +46,9 @@ const pendientes = await listarPendientes(usuario, {
 const enRevision = pendientes.etapas.filter((e) => e.motivo === 'en_revision');
 const conCambios = pendientes.etapas.filter((e) => e.motivo === 'con_cambios');
 const enProceso = pendientes.etapas.filter((e) => e.motivo === 'en_proceso');
+// Viene en su propia lista, no en `etapas`: no cuenta en el total ni en el
+// contador de la barra (src/lib/pendientes.ts, `esperaAlCliente`).
+const esperandoCliente = pendientes.esperandoCliente;
 const comentariosPendientes = pendientes.comentarios;
 const totalComentariosPendientes = pendientes.totalComentarios;
 const conteoPorEtapa = new Map<string, number>(pendientes.etapas.map((e) => [e.id, e.comentariosAbiertos]));
@@ -53,7 +61,7 @@ const conteoPorEtapa = new Map<string, number>(pendientes.etapas.map((e) => [e.i
       <p class="sub">
         {usuario.rol === 'admin'
           ? 'Etapas que esperan tu autorización.'
-          : 'Tus etapas con cambios pedidos, en preparación y comentarios abiertos.'}
+          : 'Tus etapas con cambios pedidos, en preparación, comentarios abiertos y los meses que esperan respuesta del cliente.'}
       </p>
     </div>
   </div>
@@ -135,6 +143,33 @@ const conteoPorEtapa = new Map<string, number>(pendientes.etapas.map((e) => [e.i
           </section>
         )}
       </div>
+
+      {/* No es un pendiente del operador y por eso va aparte, con su propio
+          título y fuera del total: es el mes ya compartido que el cliente
+          todavía no contesta. Se enseña porque el plazo corre solo y, al
+          vencer, el lote se da por aprobado en silencio (diseño §6) — quien lo
+          compartió querrá insistirle antes de que eso pase. El vacío no se
+          pinta: un bloque «no hay nada» de algo que ni siquiera es tarea
+          añadiría ruido a la bandeja. */}
+      {esperandoCliente.length > 0 && (
+        <div class="seccion">
+          <h2>Esperando al cliente</h2>
+          <p class="sub">No te toca a ti: son meses que ya compartiste y siguen sin respuesta.</p>
+          <section class="tarjeta">
+            <ul class="lista">
+              {esperandoCliente.map((e) => (
+                <li class="renglon">
+                  <div class="cuerpo">
+                    <strong>{e.cliente}</strong>
+                    <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · compartido desde {fecha(e.actualizadoEn)}</p>
+                  </div>
+                  <a href={`/clientes/${e.clientId}`} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+      )}
 
       <div class="seccion" id="comentarios-abiertos">
         <h2>Comentarios abiertos{verTodosComentarios ? '' : ' recientes'} {totalComentariosPendientes > 0 && <span class="secundario">({totalComentariosPendientes})</span>}</h2>

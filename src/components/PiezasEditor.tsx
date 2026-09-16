@@ -26,7 +26,7 @@
 
 import { useState } from 'react';
 import {
-  FORMATOS, PLATAFORMAS, cuadraConPaquete, estadoLoteSegunPiezas,
+  FORMATOS, PLATAFORMAS, cuadraConPaquete, enlaceWeb, estadoLoteSegunPiezas,
   type EstadoRevision, type Formato, type Paquete, type Plataforma,
 } from '@/contenido/reglas';
 import { COLOR_ESTADO } from '@/flujo/ui';
@@ -233,8 +233,16 @@ function Artes({
           {pieza.arte.map((a, i) => (
             <li key={`${a.fileId ?? a.url}-${i}`}>
               <span className="etiqueta marca">{TIPOS.find((t) => t.valor === a.tipo)?.texto ?? a.tipo}</span>
+              {/* El enlace SIEMPRE se enseña —el operador tiene que poder ver
+                  y quitar el que esté mal—, pero solo se vuelve `href` si
+                  apunta a la web: un `javascript:` guardado antes de que el
+                  esquema lo prohibiera correría aquí, en el Studio y con la
+                  sesión de quien esté editando. Sin esquema web queda como
+                  texto, que es lo que hace falta para reconocerlo y borrarlo. */}
               {a.url ? (
-                <a className="nombre" href={a.url} target="_blank" rel="noreferrer noopener">{a.url}</a>
+                enlaceWeb(a.url)
+                  ? <a className="nombre" href={a.url} target="_blank" rel="noreferrer noopener">{a.url}</a>
+                  : <span className="nombre">{a.url}</span>
               ) : (
                 <span className="nombre">{nombreDe(a.fileId!)}</span>
               )}

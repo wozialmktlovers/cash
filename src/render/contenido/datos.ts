@@ -8,10 +8,12 @@
 // nueva de `contenido_piezas` no se cuela sola al documento que ve el cliente.
 
 import type { Arte } from '@/contenido/piezas';
+import { enlaceWeb } from '@/contenido/reglas';
 import type { EstadoRevision, Formato, Plataforma } from '@/contenido/reglas';
 import { escapar } from '@/render/escapar';
 
 export type { Arte, EstadoRevision, Formato, Plataforma };
+export { enlaceWeb };
 
 /** Una pieza tal como se pinta en el entregable. */
 export type PiezaEntregable = {
@@ -131,7 +133,12 @@ export function porFecha(a: PiezaEntregable, b: PiezaEntregable): number {
  * De dónde pide el documento un arte.
  *
  * - Con `url`, el arte vive fuera (el caso del reel alojado en otro sitio) y se
- *   usa tal cual.
+ *   usa tal cual **si apunta a la web**. `enlaceWeb` (src/contenido/reglas.ts)
+ *   descarta cualquier otro esquema —`javascript:`, `data:`, `file:`—, que
+ *   desde aquí acabaría en un `src`, un `poster` o un `href` servidos en el
+ *   origen del Studio. El esquema de alta ya no los deja entrar; esto es para
+ *   lo que pueda haber entrado antes, porque `arte` es `jsonb` y nadie lo
+ *   vuelve a validar al leerlo (ver el comentario de `enlaceWeb`).
  * - Con `fileId`, lo sirve el Studio y la ruta se arma con `base`. En el enlace
  *   público esa base es RELATIVA al propio documento
  *   (`{token}/archivo/`, ver `resolverDocumentoPublico`), de modo que el
@@ -143,7 +150,7 @@ export function porFecha(a: PiezaEntregable, b: PiezaEntregable): number {
  */
 export function rutaArte(arte: Arte | undefined, base: string): string | null {
   if (!arte) return null;
-  if (arte.url) return arte.url;
+  if (arte.url) return enlaceWeb(arte.url);
   if (arte.fileId) return `${base}${encodeURIComponent(arte.fileId)}`;
   return null;
 }

@@ -51,10 +51,17 @@ const pendientes = await listarPendientes(usuario, { limite: LIMITE_PENDIENTES }
 // cuando se cruza el límite: con 3 etapas y 6 comentarios se ven los nueve.
 const pendientesMostrados = pendientes.etapas.length + pendientes.comentarios.length;
 
+// `esperando_cliente` no llega nunca a `pendientes.etapas` —viaja en su propia
+// lista, que este Inicio no pide (`incluirEsperandoCliente`, src/lib/pendientes.ts)
+// porque no es algo que le toque a quien mira—, pero el `Record` lo exige y así,
+// si algún día se decide enseñarlo aquí, ya hay texto. Y nótese que NO dice
+// «Espera tu autorización»: confundir los dos idiomas de `en_revision` es
+// exactamente lo que llenaba la bandeja del admin de meses ajenos.
 const ETIQUETA_MOTIVO: Record<MotivoPendiente, string> = {
   en_revision: 'Espera tu autorización',
   con_cambios: 'Cambios pedidos',
   en_proceso: 'En preparación',
+  esperando_cliente: 'Esperando al cliente',
 };
 
 // Una sola consulta para las etapas de toda la lista (`etapasDeClientes`, no

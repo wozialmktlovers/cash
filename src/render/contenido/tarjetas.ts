@@ -10,7 +10,7 @@
 import { escapar, encabezadoSeccion } from '@/render/editorial/comunes';
 import {
   ESTADO, FORMATO, PLATAFORMA, ICONO_COPIAR, ICONO_ENLACE, ICONO_SIN_ARTE, REVISION_SOLO_LECTURA,
-  chipEstado, diaLargo, esDeFeed, imagenesDe, portadaDe, porFecha, rutaArte, videoDe,
+  chipEstado, diaLargo, enlaceWeb, esDeFeed, imagenesDe, portadaDe, porFecha, rutaArte, videoDe,
   type EstadoRevision, type Formato, type PiezaEntregable, type Revision,
 } from './datos';
 
@@ -109,8 +109,14 @@ function bloqueArte(p: PiezaEntregable, base: string): string {
     partes.push(`<div class="pieza-miniaturas" data-visor>${miniaturas}</div>`);
   }
 
-  if (video && video.url) {
-    partes.push(`<a class="pieza-enlace" href="${escapar(video.url)}" target="_blank" rel="noopener noreferrer">${ICONO_ENLACE}Ver el ${escapar(FORMATO[p.formato].texto.toLowerCase())}</a>`);
+  // El enlace del reel alojado fuera. Pasa por `enlaceWeb` y no directo al
+  // `href`: `escapar` cubre las comillas, no el esquema, y un `javascript:`
+  // guardado en el `jsonb` de `arte` correría en el origen del Studio con la
+  // sesión del cliente en cuanto pinchara «Ver el reel». Sin enlace web, el
+  // botón no se pinta: mejor que no esté a que lleve a cualquier parte.
+  const enlaceVideo = video ? enlaceWeb(video.url) : null;
+  if (enlaceVideo) {
+    partes.push(`<a class="pieza-enlace" href="${escapar(enlaceVideo)}" target="_blank" rel="noopener noreferrer">${ICONO_ENLACE}Ver el ${escapar(FORMATO[p.formato].texto.toLowerCase())}</a>`);
   }
 
   return `<div class="pieza-arte">${partes.join('')}</div>`;

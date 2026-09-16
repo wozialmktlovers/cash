@@ -8,6 +8,8 @@ import {
   cuadraConPaquete,
   estadoLoteSegunPiezas,
   periodoValido,
+  enlaceWeb,
+  ESQUEMAS_ARTE,
   type PiezaRevisable,
   type LoteRevisable,
 } from '@/contenido/reglas';
@@ -305,5 +307,49 @@ describe('periodoValido', () => {
     expect(periodoValido(null)).toBe(false);
     expect(periodoValido(202609)).toBe(false);
     expect(periodoValido(undefined)).toBe(false);
+  });
+});
+
+/**
+ * La segunda línea de defensa del enlace del arte. La primera es el esquema de
+ * alta (`arteSchema`, src/contenido/piezas.ts), pero `contenido_piezas.arte` es
+ * `jsonb` y nadie lo revalida al leerlo, así que el entregable y la pantalla
+ * interna preguntan aquí antes de poner nada en un `href` o un `src`.
+ */
+describe('enlaceWeb', () => {
+  it('solo admite http y https', () => {
+    expect(ESQUEMAS_ARTE).toEqual(['http:', 'https:']);
+  });
+
+  it('devuelve el enlace tal cual, sin normalizarlo', () => {
+    const url = 'https://videos.ejemplo.mx/reel-3.mp4?t=10';
+    expect(enlaceWeb(url)).toBe(url);
+    expect(enlaceWeb('http://ejemplo.mx')).toBe('http://ejemplo.mx');
+  });
+
+  it('descarta los esquemas que ejecutan o leen del disco', () => {
+    expect(enlaceWeb('javascript:alert(1)')).toBeNull();
+    expect(enlaceWeb('JAVASCRIPT:alert(1)')).toBeNull();
+    expect(enlaceWeb('data:text/html,<script>alert(1)</script>')).toBeNull();
+    expect(enlaceWeb('vbscript:msgbox(1)')).toBeNull();
+    expect(enlaceWeb('file:///etc/passwd')).toBeNull();
+    expect(enlaceWeb('mailto:alguien@ejemplo.mx')).toBeNull();
+  });
+
+  it('no se deja engañar por los espacios y tabs que el navegador ignora', () => {
+    // El navegador los borra antes de resolver el `href`, así que un
+    // `/^https?:\/\//` sobre el texto crudo diría «esto no empieza por http»
+    // y dejaría el enlace intacto en el atributo. `URL` los borra igual.
+    expect(enlaceWeb(' javascript:alert(1)')).toBeNull();
+    expect(enlaceWeb('jav\tascript:alert(1)')).toBeNull();
+    expect(enlaceWeb('\njavascript:alert(1)')).toBeNull();
+  });
+
+  it('lo que no es una URL, o no es texto, no pasa', () => {
+    expect(enlaceWeb('')).toBeNull();
+    expect(enlaceWeb('//ejemplo.mx/a.mp4')).toBeNull();
+    expect(enlaceWeb('ejemplo.mx/a.mp4')).toBeNull();
+    expect(enlaceWeb(null)).toBeNull();
+    expect(enlaceWeb(undefined)).toBeNull();
   });
 });
