@@ -169,3 +169,104 @@ describe('0006: la columna `apellido` de users', () => {
     expect(snapshot.tables['public.users'].columns.apellido).toMatchObject({ name: 'apellido', type: 'text', notNull: false });
   });
 });
+
+describe('0007: lotes y piezas del desarrollo mensual', () => {
+  const carpeta = path.resolve(__dirname, '../../drizzle');
+  const m0007 = () => leerMigraciones(carpeta).find((x: { tag: string }) => x.tag === '0007_desarrollo_mensual')!;
+  const snapshot = () => JSON.parse(fs.readFileSync(path.join(carpeta, 'meta', '0007_snapshot.json'), 'utf8'));
+  const trozos = (): string[] => m0007().sql.map((t: string) => t.trim()).filter(Boolean);
+
+  it('solo añade: dos tablas nuevas y dos columnas de clients, sin tocar datos existentes', () => {
+    // La etapa 3 no reinterpreta nada de lo que ya hay, así que la migración
+    // no lleva UPDATE ni DELETE (a diferencia del saneo de 0005).
+    const texto = trozos().join('\n');
+    expect(texto).toContain('CREATE TABLE "contenido_lotes"');
+    expect(texto).toContain('CREATE TABLE "contenido_piezas"');
+    expect(texto).toContain('ALTER TABLE "clients" ADD COLUMN "paquete" jsonb;');
+    expect(texto).toContain('ALTER TABLE "clients" ADD COLUMN "dias_revision" integer;');
+    expect(texto).not.toMatch(/^(UPDATE|DELETE)\b/mi);
+    expect(texto).not.toContain('DROP');
+  });
+
+  it('no añade valores a un enum existente: el lote reusa `estado_etapa`', () => {
+    // Importa por el migrador (scripts/migraciones.mjs): un valor añadido con
+    // `ALTER TYPE ... ADD VALUE` no se puede usar hasta que su transacción
+    // confirma. Aquí no hay ninguno —los tres enums son nuevos, y un tipo
+    // creado en la transacción sí se puede usar en ella—, así que 0007 entra
+    // entera aunque se aplique de golpe sobre una base atrasada.
+    expect(trozos().join('\n')).not.toContain('ADD VALUE');
+    // Reusarlo no es ahorro: la etapa muestra el estado de su lote activo, y
+    // `sincronizarEtapa` (tarea A3) lo copia sin traducir.
+    expect(snapshot().tables['public.contenido_lotes'].columns.estado).toMatchObject({
+      name: 'estado', type: 'estado_etapa', notNull: true, default: "'en_proceso'",
+    });
+  });
+
+  it('los tres enums nuevos se crean antes de la tabla que los usa', () => {
+    const t = trozos();
+    const indice = (fragmento: string) => t.findIndex((x) => x.includes(fragmento));
+    for (const tipo of ['formato_pieza', 'plataforma_pieza', 'estado_revision_pieza']) {
+      const creacion = indice(`CREATE TYPE "public"."${tipo}"`);
+      expect(creacion).toBeGreaterThanOrEqual(0);
+      expect(creacion).toBeLessThan(indice('CREATE TABLE "contenido_piezas"'));
+    }
+    const enums = snapshot().enums;
+    expect(enums['public.formato_pieza'].values).toEqual(['post', 'carrusel', 'reel', 'historia']);
+    expect(enums['public.plataforma_pieza'].values).toEqual(['facebook', 'instagram', 'ambas']);
+    expect(enums['public.estado_revision_pieza'].values).toEqual(['pendiente', 'aprobada', 'cambios']);
+  });
+
+  it('un solo lote por cliente y mes: la restricción vive en la base, no solo en el código', () => {
+    // Es lo que sostiene el diseño §2 (el lote activo). Si solo lo cuidara la
+    // API, dos operadores creando septiembre a la vez dejarían al cliente con
+    // dos «meses en curso» y un lote activo ambiguo.
+    expect(trozos().join('\n')).toContain('CONSTRAINT "contenido_lotes_client_id_periodo" UNIQUE("client_id","periodo")');
+    expect(snapshot().tables['public.contenido_lotes'].uniqueConstraints.contenido_lotes_client_id_periodo)
+      .toMatchObject({ columns: ['client_id', 'periodo'] });
+  });
+
+  it('`periodo` se valida con un CHECK, como el `client_id` por rol de 0005', () => {
+    const valor: string = snapshot().tables['public.contenido_lotes'].checkConstraints.contenido_lotes_periodo_formato.value;
+    expect(trozos().join('\n')).toContain(`CHECK (${valor})`);
+    // Se prueba la expresión tal como quedó en la base, no una copia: es el
+    // mismo formato que comprobará `periodoValido` (tarea A2).
+    const patron = new RegExp(valor.match(/'(\^.*\$)'/)![1]);
+    for (const bueno of ['2026-01', '2026-09', '2026-12', '1999-11']) expect(patron.test(bueno)).toBe(true);
+    for (const malo of ['2026-9', '2026-00', '2026-13', '26-09', '2026-09-01', 'septiembre', '']) expect(patron.test(malo)).toBe(false);
+  });
+
+  it('el número identifica a la pieza dentro de su lote', () => {
+    // «La pieza 7 de septiembre» es como se habla de ella con el cliente.
+    expect(trozos().join('\n')).toContain('CONSTRAINT "contenido_piezas_lote_id_numero" UNIQUE("lote_id","numero")');
+  });
+
+  it('borrar el cliente se lleva sus lotes y el lote sus piezas; al autor solo lo desliga', () => {
+    const texto = trozos().join('\n');
+    expect(texto).toMatch(/"contenido_lotes_client_id_clients_id_fk".*REFERENCES "public"\."clients".*ON DELETE cascade/);
+    expect(texto).toMatch(/"contenido_piezas_lote_id_contenido_lotes_id_fk".*REFERENCES "public"\."contenido_lotes".*ON DELETE cascade/);
+    // El lote sobrevive a que se dé de baja al operador que lo creó.
+    expect(texto).toMatch(/"contenido_lotes_creado_por_users_id_fk".*REFERENCES "public"\."users".*ON DELETE set null/);
+  });
+
+  it('`arte` es jsonb con lista vacía por omisión, y el copy nunca es nulo', () => {
+    const cols = snapshot().tables['public.contenido_piezas'].columns;
+    expect(cols.arte).toMatchObject({ type: 'jsonb', notNull: true, default: "'[]'::jsonb" });
+    // Texto vacío y no nulo: la pieza nace al planear el mes y el copy llega
+    // después, pero leerlo no debería obligar a pensar en null.
+    for (const c of ['copy', 'cta', 'hashtags']) expect(cols[c]).toMatchObject({ type: 'text', notNull: true, default: "''" });
+    expect(cols.estado_cliente).toMatchObject({ type: 'estado_revision_pieza', notNull: true, default: "'pendiente'" });
+    // La fecha de publicación es un día, sin hora ni zona, y puede faltar.
+    expect(cols.fecha_publicacion).toMatchObject({ type: 'date', notNull: false });
+  });
+
+  it('el paquete y el plazo de revisión viven en el cliente, nulos y sin relleno', () => {
+    // Diseño §3: el paquete se guarda en el cliente y cada lote lo hereda.
+    // Nulos porque los clientes de hoy no tienen contratada la etapa 3; los
+    // días de revisión nulos significan «los 2 de por omisión», constante del
+    // código, para no migrar si ese valor por omisión cambia.
+    const cols = snapshot().tables['public.clients'].columns;
+    expect(cols.paquete).toMatchObject({ name: 'paquete', type: 'jsonb', notNull: false });
+    expect(cols.dias_revision).toMatchObject({ name: 'dias_revision', type: 'integer', notNull: false });
+    for (const c of ['paquete', 'dias_revision']) expect(cols[c].default).toBeUndefined();
+  });
+});

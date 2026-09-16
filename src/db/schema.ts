@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, numeric, pgEnum, primaryKey, unique, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, date, integer, boolean, jsonb, numeric, pgEnum, primaryKey, unique, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
 
 export const jobEstado = pgEnum('job_estado', ['encolado','corriendo','completado','fallido','cancelado']);
 export const linkTipo = pgEnum('link_tipo', ['sitio','instagram','facebook','tiktok','youtube','ventas','otro']);
@@ -18,6 +18,12 @@ export const accionEtapa = pgEnum('accion_etapa', ['iniciar', 'solicitar', 'apro
 export const motivoVersion = pgEnum('motivo_version', ['generado', 'edicion', 'aprobada', 'restaurada']);
 /** Estado de un comentario anclado. */
 export const estadoComentario = pgEnum('estado_comentario', ['abierto', 'atendido', 'descartado']);
+/** Formato de una pieza de contenido mensual (diseño §4). */
+export const formatoPieza = pgEnum('formato_pieza', ['post', 'carrusel', 'reel', 'historia']);
+/** Dónde se publica la pieza. `ambas` = Facebook e Instagram. */
+export const plataformaPieza = pgEnum('plataforma_pieza', ['facebook', 'instagram', 'ambas']);
+/** Lo que el cliente dijo de una pieza al revisarla (diseño §6). */
+export const estadoRevisionPieza = pgEnum('estado_revision_pieza', ['pendiente', 'aprobada', 'cambios']);
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -61,6 +67,16 @@ export const clients = pgTable('clients', {
   notas: text('notas'),
   // El operador que da de alta al cliente queda asignado; el admin reasigna.
   operadorId: uuid('operador_id').references(() => users.id, { onDelete: 'set null' }),
+  // Cuántas piezas al mes lleva este cliente, por formato (diseño §3):
+  // `{ post: 8, carrusel: 4, reel: 4, historia: 6 }`. Las claves son los
+  // valores de `formato_pieza`; una clave ausente es cero. Se guarda en el
+  // cliente, no en el lote, y cada lote nuevo lo hereda. Nulo mientras no se
+  // contrate la etapa 3. El sistema AVISA si el mes no cuadra, no lo impide.
+  paquete: jsonb('paquete'),
+  // Días hábiles que tiene el cliente para revisar un lote antes de que se dé
+  // por aprobado. Nulo = los 2 de por omisión (diseño §6); la constante vive
+  // en el código para no tener que migrar si cambia el valor por omisión.
+  diasRevision: integer('dias_revision'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -246,3 +262,94 @@ export const notificaciones = pgTable('notificaciones', {
   leidaEn: timestamp('leida_en', { withTimezone: true }),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index('notificaciones_usuario_id_leida_en_idx').on(t.usuarioId, t.leidaEn)]);
+
+/**
+ * Un lote de contenido por cliente y mes (diseño §2). Las otras tres etapas
+ * ocurren una vez; esta se repite cada mes, y `cliente_etapas` solo guarda un
+ * estado por etapa y cliente. Por eso el mes vive aquí y la fila de
+ * `desarrollo_mensual` refleja siempre el lote ACTIVO (el más reciente sin
+ * aprobar; si todos están aprobados, el último).
+ *
+ * `estado` reusa `estado_etapa` a propósito: lo que la etapa muestra es
+ * exactamente el estado de su lote activo, así que `sincronizarEtapa` copia el
+ * valor sin traducirlo. Se usan cuatro de los cinco: `en_proceso` al crearlo,
+ * `en_revision` al compartirlo, `con_cambios` si el cliente pide cambios y
+ * `aprobada` cuando todas sus piezas lo están. `no_iniciada` no se usa: un
+ * lote que existe ya es trabajo empezado.
+ */
+export const contenidoLotes = pgTable('contenido_lotes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clientId: uuid('client_id').notNull().references(() => clients.id, { onDelete: 'cascade' }),
+  // El mes del lote, `YYYY-MM`. Texto y no `date` porque es un periodo, no un
+  // día: ordena bien alfabéticamente y es lo que viaja en la URL del
+  // entregable (`/clientes/[id]/contenido/[periodo]`).
+  periodo: text('periodo').notNull(),
+  estado: estadoEtapa('estado').notNull().default('en_proceso'),
+  // Cuándo se compartió con el cliente. El plazo de revisión cuenta desde
+  // aquí, no desde que se creó el lote (diseño §6).
+  compartidoEn: timestamp('compartido_en', { withTimezone: true }),
+  // Fecha límite ya calculada (compartidoEn + días hábiles del cliente). Se
+  // guarda en vez de recalcularla para que la cuenta regresiva que ve el
+  // cliente no se mueva si alguien le cambia `dias_revision` a medio mes.
+  limiteRevision: timestamp('limite_revision', { withTimezone: true }),
+  creadoPor: uuid('creado_por').references(() => users.id, { onDelete: 'set null' }),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // Un solo lote por cliente y mes. Es la regla que sostiene todo el diseño de
+  // §2, así que vive en la base: el 409 de la API es la cortesía, esto es el
+  // candado. Sin él, dos operadores creando el lote de septiembre a la vez
+  // dejarían al cliente con dos «meses en curso» y un lote activo ambiguo.
+  unique('contenido_lotes_client_id_periodo').on(t.clientId, t.periodo),
+  // `periodo` es un formato, no texto libre. Se valida aquí igual que el rol y
+  // el `client_id` de `users` (migración 0005): la tabla es nueva, no hay
+  // filas que sanear antes, y una fila con `2026-9` o `septiembre` rompería el
+  // orden del lote activo y la URL del entregable sin que nada se queje.
+  // `periodoValido` (tarea A2) dice lo mismo en el código, para el mensaje.
+  check('contenido_lotes_periodo_formato', sql`periodo ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'`),
+]);
+
+/**
+ * Una pieza del lote (diseño §4). El orden lo da `numero`, no la fecha: el
+ * operador numera las piezas al planear el mes y la fecha de publicación puede
+ * faltar o moverse.
+ */
+export const contenidoPiezas = pgTable('contenido_piezas', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  loteId: uuid('lote_id').notNull().references(() => contenidoLotes.id, { onDelete: 'cascade' }),
+  numero: integer('numero').notNull(),
+  formato: formatoPieza('formato').notNull(),
+  plataforma: plataformaPieza('plataforma').notNull(),
+  // `date` y no `timestamp`: es el día de publicación, sin hora ni zona.
+  fechaPublicacion: date('fecha_publicacion'),
+  // El tema del mapa de pilares del que salió, con su id `P{n}-S{m}-{nn}`.
+  // Sin FK: `pilares_temas` solo tiene fila para los temas que alguien tocó
+  // (ver su comentario), así que el tema puede existir en el mapa y no en la
+  // tabla. Opcional: una pieza puede no venir del mapa.
+  temaId: text('tema_id'),
+  copy: text('copy').notNull().default(''),
+  cta: text('cta').notNull().default(''),
+  // Los hashtags tal como se copian, en una sola línea. Texto y no arreglo
+  // porque el operador los edita y los copia en bloque; nadie los consulta.
+  hashtags: text('hashtags').notNull().default(''),
+  // Los artes de la pieza, en orden. El esquema no captura la forma, así que
+  // queda escrita aquí: una lista de `{ tipo, fileId }` o `{ tipo, url }`,
+  // donde `tipo` es `imagen | video | portada` y se usa `fileId` (un
+  // `client_files.id`) si el arte se subió, o `url` si es un enlace externo
+  // —el caso del reel alojado fuera—. Cuántos lleva cada formato lo dice el
+  // diseño §4: post 1 imagen, carrusel de 2 a 10, reel portada + video o
+  // enlace, historia 1 imagen o video. Eso lo cuida el código, no la base.
+  arte: jsonb('arte').notNull().default([]),
+  estadoCliente: estadoRevisionPieza('estado_cliente').notNull().default('pendiente'),
+  // La nota que dejó el cliente al pedir cambios. El comentario anclado vive
+  // en `comentarios`; esto es la copia a la mano para pintar la tarjeta.
+  notaCliente: text('nota_cliente'),
+  revisadoEn: timestamp('revisado_en', { withTimezone: true }),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+  actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // El número identifica la pieza dentro de su mes («pieza 7 de septiembre»),
+  // y es lo que ve el cliente. Dos piezas con el mismo número harían ambigua
+  // cualquier referencia, así que no se permite.
+  unique('contenido_piezas_lote_id_numero').on(t.loteId, t.numero),
+]);

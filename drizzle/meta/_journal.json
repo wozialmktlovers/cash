@@ -50,6 +50,13 @@
       "when": 1789512970595,
       "tag": "0006_usuarios_apellido",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789584963210,
+      "tag": "0007_desarrollo_mensual",
+      "breakpoints": true
     }
   ]
 }
