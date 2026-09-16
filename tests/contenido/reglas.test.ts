@@ -11,6 +11,7 @@ import {
   type PiezaRevisable,
   type LoteRevisable,
 } from '@/contenido/reglas';
+import { ESTADOS } from '@/flujo/reglas';
 
 /**
  * Instante UTC de una hora civil de Ciudad de México. Se escribe a mano con el
@@ -46,10 +47,11 @@ const pieza = (over: Partial<PiezaRevisable> = {}): PiezaRevisable => ({
   ...over,
 });
 
+/** Un lote compartido y esperando al cliente: el caso del que hablan las reglas. */
 const lote = (over: Partial<LoteRevisable> = {}): LoteRevisable => ({
   compartidoEn: mx('2026-09-11T17:00:00'),
   limiteRevision: mx('2026-09-15T23:59:59.999'),
-  estado: 'pendiente',
+  estado: 'en_revision',
   ...over,
 });
 
@@ -57,6 +59,17 @@ describe('constantes', () => {
   it('FORMATOS y ESTADOS_REVISION traen los valores del diseño en orden', () => {
     expect(FORMATOS).toEqual(['post', 'carrusel', 'reel', 'historia']);
     expect(ESTADOS_REVISION).toEqual(['pendiente', 'aprobada', 'cambios']);
+  });
+
+  it('«pendiente» y «cambios» son de la pieza: la columna del lote no los admite', () => {
+    // El error que originó este cambio: el lote se comparaba contra
+    // 'pendiente', un valor que su columna (`estado_etapa`) no puede tomar, así
+    // que sobre una fila real la comparación siempre fallaba en silencio.
+    // 'aprobada' sí está en los dos vocabularios, y es justo lo que los vuelve
+    // fáciles de confundir.
+    expect(ESTADOS).not.toContain('pendiente');
+    expect(ESTADOS).not.toContain('cambios');
+    expect(ESTADOS).toContain('aprobada');
   });
 });
 
@@ -145,7 +158,20 @@ describe('loteAutoAprobado', () => {
   });
 
   it('si el cliente pidió cambios, el silencio ya se rompió: no se auto-aprueba', () => {
-    expect(loteAutoAprobado(lote({ estado: 'cambios' }), mx('2026-09-30T09:00:00'))).toBe(false);
+    expect(loteAutoAprobado(lote({ estado: 'con_cambios' }), mx('2026-09-30T09:00:00'))).toBe(false);
+  });
+
+  it('un lote que volvió al operador tampoco vence, aunque conserve el compartido de antes', () => {
+    // `en_proceso` es el lote que se está armando o que se reabrió para atender
+    // los cambios del cliente: no le toca al cliente, así que su fecha límite
+    // vieja no puede aprobarlo por la puerta de atrás.
+    expect(loteAutoAprobado(lote({ estado: 'en_proceso' }), mx('2026-09-30T09:00:00'))).toBe(false);
+  });
+
+  it('solo `en_revision` se auto-aprueba, de todos los estados que puede tener la columna', () => {
+    const vencido = mx('2026-09-30T09:00:00');
+    const seAprueban = ESTADOS.filter((estado) => loteAutoAprobado(lote({ estado }), vencido));
+    expect(seAprueban).toEqual(['en_revision']);
   });
 });
 
@@ -226,18 +252,31 @@ describe('estadoLoteSegunPiezas', () => {
     expect(estadoLoteSegunPiezas(piezas)).toBe('aprobada');
   });
 
-  it('pendiente mientras falte alguna por revisar', () => {
+  it('sigue en revisión mientras falte alguna pieza por revisar', () => {
     const piezas = [pieza({ estadoCliente: 'aprobada' }), pieza({ estadoCliente: 'pendiente' })];
-    expect(estadoLoteSegunPiezas(piezas)).toBe('pendiente');
+    expect(estadoLoteSegunPiezas(piezas)).toBe('en_revision');
   });
 
-  it('cambios manda sobre pendiente: una sola pieza devuelta regresa el lote al operador', () => {
+  it('con_cambios manda sobre en_revision: una sola pieza devuelta regresa el lote al operador', () => {
     const piezas = [pieza({ estadoCliente: 'cambios' }), pieza({ estadoCliente: 'pendiente' })];
-    expect(estadoLoteSegunPiezas(piezas)).toBe('cambios');
+    expect(estadoLoteSegunPiezas(piezas)).toBe('con_cambios');
   });
 
-  it('un lote sin piezas sigue pendiente, no aprobado', () => {
-    expect(estadoLoteSegunPiezas([])).toBe('pendiente');
+  it('un lote sin piezas sigue en revisión, no aprobado', () => {
+    expect(estadoLoteSegunPiezas([])).toBe('en_revision');
+  });
+
+  it('devuelve estados de etapa, que es lo que la columna del lote admite', () => {
+    // Es el punto de todo el cambio: lo que sale de aquí se escribe en
+    // `contenido_lotes.estado` y `sincronizarEtapa` lo copia a `cliente_etapas`
+    // sin traducirlo, así que tiene que estar en el enum de la etapa.
+    const salidas = [
+      estadoLoteSegunPiezas([]),
+      estadoLoteSegunPiezas([pieza({ estadoCliente: 'pendiente' })]),
+      estadoLoteSegunPiezas([pieza({ estadoCliente: 'cambios' })]),
+      estadoLoteSegunPiezas([pieza({ estadoCliente: 'aprobada' })]),
+    ];
+    for (const salida of salidas) expect(ESTADOS).toContain(salida);
   });
 });
 

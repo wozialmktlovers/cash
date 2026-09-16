@@ -8,18 +8,48 @@
 // (arte, hashtags, autor de la revisión) sin tocar este archivo, y este
 // archivo se puede probar sin levantar la base. Adaptar la fila al tipo
 // ligero es trabajo del servicio (A3), no de estas funciones.
+//
+// La pieza y el lote hablan idiomas distintos, y no es un descuido: la pieza
+// dice lo que el cliente opinó de ella (`EstadoRevision`) y el lote dice en qué
+// estado está la etapa (`EstadoLote`). Manda el vocabulario de la base, que es
+// donde se guardan los dos. `estadoLoteSegunPiezas` es el único puente.
+
+import type { Estado } from '@/flujo/reglas';
 
 /** Formatos de pieza del diseño §4. */
 export const FORMATOS = ['post', 'carrusel', 'reel', 'historia'] as const;
 export type Formato = (typeof FORMATOS)[number];
 
 /**
- * Estado de revisión del cliente. Lo comparten la pieza y el lote: el lote no
- * tiene un estado propio de revisión, es el resumen de sus piezas
- * (`estadoLoteSegunPiezas`).
+ * Lo que el cliente dijo de una **pieza** al revisarla (diseño §6): el enum
+ * `estado_revision_pieza` de `contenido_piezas.estado_cliente`.
+ *
+ * Es el vocabulario de la pieza y solo de la pieza. El lote no lo comparte
+ * —ver `EstadoLote`—, aunque las tres palabras se parezcan.
  */
 export const ESTADOS_REVISION = ['pendiente', 'aprobada', 'cambios'] as const;
 export type EstadoRevision = (typeof ESTADOS_REVISION)[number];
+
+/**
+ * El estado de un **lote** es el de una etapa: `contenido_lotes.estado` reusa
+ * el enum `estado_etapa` (ver el comentario de la tabla en `src/db/schema.ts`)
+ * para que `sincronizarEtapa` copie el valor a `cliente_etapas` sin traducirlo.
+ * Por eso el tipo se importa de `src/flujo/reglas.ts` en vez de redeclararse:
+ * si algún día cambia allá, tiene que romper aquí.
+ *
+ * De los cinco estados, el lote usa cuatro: `en_proceso` al crearlo,
+ * `en_revision` al compartirlo, `con_cambios` si el cliente pide cambios y
+ * `aprobada` cuando todas sus piezas lo están. `no_iniciada` no, porque un lote
+ * que existe ya es trabajo empezado.
+ */
+export type EstadoLote = Estado;
+
+/**
+ * Los estados de lote que se pueden deducir de las piezas
+ * (`estadoLoteSegunPiezas`). Los otros dos dependen de lo que hizo el operador
+ * —crear el lote, compartirlo—, no de lo que opinó el cliente.
+ */
+export type EstadoLoteSegunPiezas = Extract<EstadoLote, 'en_revision' | 'con_cambios' | 'aprobada'>;
 
 /** Lo que estas reglas necesitan saber de una pieza. */
 export type PiezaRevisable = { formato: Formato; estadoCliente: EstadoRevision };
@@ -28,7 +58,7 @@ export type PiezaRevisable = { formato: Formato; estadoCliente: EstadoRevision }
 export type LoteRevisable = {
   compartidoEn: Date | null;
   limiteRevision: Date | null;
-  estado: EstadoRevision;
+  estado: EstadoLote;
 };
 
 /** Cuántas piezas al mes lleva el cliente, por formato (diseño §3). */
@@ -157,17 +187,27 @@ export function limiteRevision(compartidoEn: Date, diasHabiles = 2): Date {
 /**
  * ¿Al lote le venció el plazo sin que el cliente contestara? (diseño §6).
  *
- * Solo se auto-aprueba el **silencio**: un lote en `cambios` ya tiene la
- * respuesta del cliente y la pelota está del lado del operador, así que darlo
- * por aprobado sería aprobar justo lo que el cliente devolvió. El plan decía
- * «compartido, no aprobado y vencido»; esto es más estrecho a propósito.
+ * Solo se auto-aprueba el **silencio**, y silencio en el vocabulario del lote
+ * es `en_revision`: se le compartió al cliente y el cliente todavía no ha
+ * contestado. Los demás estados no lo son, cada uno por su razón:
+ *
+ * - `con_cambios` ya tiene la respuesta del cliente y la pelota está del lado
+ *   del operador, así que darlo por aprobado sería aprobar justo lo que el
+ *   cliente devolvió.
+ * - `en_proceso` es el lote que se está armando o que el operador reabrió para
+ *   atender esos cambios: aún no le toca al cliente, y su `compartido_en` viejo
+ *   no debería vencerle nada.
+ * - `aprobada` ya está, y `no_iniciada` no le ocurre a un lote.
+ *
+ * El plan decía «compartido, no aprobado y vencido»; esto es más estrecho a
+ * propósito.
  *
  * El instante exacto del límite todavía es del cliente: la comparación es
  * estricta.
  */
 export function loteAutoAprobado(lote: LoteRevisable, ahora: Date): boolean {
   if (lote.compartidoEn === null || lote.limiteRevision === null) return false;
-  if (lote.estado !== 'pendiente') return false;
+  if (lote.estado !== 'en_revision') return false;
   return ahora.getTime() > lote.limiteRevision.getTime();
 }
 
@@ -201,19 +241,25 @@ export function cuadraConPaquete(piezas: PiezaRevisable[], paquete: Paquete): Di
 }
 
 /**
- * Estado de revisión del lote a partir de sus piezas (diseño §6).
+ * Estado del lote a partir de lo que el cliente dijo de sus piezas (diseño §6).
  *
- * `cambios` gana sobre `pendiente`: en cuanto el cliente devuelve una pieza,
- * el lote vuelve al operador aunque queden piezas sin revisar. El plan
- * enumeraba primero `pendiente`, pero el diseño dice que solicitar cambios
+ * Aquí se cruza de un vocabulario al otro, y en un solo lugar a propósito: lo
+ * que sale es un `estado_etapa`, listo para escribirse en
+ * `contenido_lotes.estado` y para que `sincronizarEtapa` lo copie tal cual. La
+ * pieza `pendiente` es el lote `en_revision` (esperando al cliente) y la pieza
+ * con `cambios` es el lote `con_cambios`.
+ *
+ * `con_cambios` gana sobre `en_revision`: en cuanto el cliente devuelve una
+ * pieza, el lote vuelve al operador aunque queden piezas sin revisar. El plan
+ * enumeraba primero «pendiente», pero el diseño dice que solicitar cambios
  * «pasa el lote a con cambios», sin esperar al resto.
  *
- * Un lote sin piezas queda `pendiente`: vacío no es aprobado.
+ * Un lote sin piezas queda `en_revision`: vacío no es aprobado.
  */
-export function estadoLoteSegunPiezas(piezas: PiezaRevisable[]): EstadoRevision {
-  if (piezas.length === 0) return 'pendiente';
-  if (piezas.some((p) => p.estadoCliente === 'cambios')) return 'cambios';
-  if (piezas.some((p) => p.estadoCliente === 'pendiente')) return 'pendiente';
+export function estadoLoteSegunPiezas(piezas: PiezaRevisable[]): EstadoLoteSegunPiezas {
+  if (piezas.length === 0) return 'en_revision';
+  if (piezas.some((p) => p.estadoCliente === 'cambios')) return 'con_cambios';
+  if (piezas.some((p) => p.estadoCliente === 'pendiente')) return 'en_revision';
   return 'aprobada';
 }
 
