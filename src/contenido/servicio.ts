@@ -229,6 +229,52 @@ export type ResultadoCompartir = {
  * arrastraría el límite vencido de la ronda anterior y se auto-aprobaría en
  * cuanto alguien lo mirara.
  *
+ * ── La ronda nueva también reinicia las PIEZAS ────────────────────────────
+ *
+ * Reiniciar el plazo y dejar las piezas como estaban rompía la máquina de
+ * estados, y en silencio. `PATCH` de una pieza rechaza a propósito escribir
+ * `estado_cliente` (es del cliente y de su ruta), así que la pieza que el
+ * cliente devolvió se quedaba en `cambios` para siempre: nada en el sistema la
+ * devolvía a `pendiente`. A partir de ahí el mes tenía dos finales, los dos
+ * malos:
+ *
+ * - `estadoLoteSegunPiezas` deduce `con_cambios` en cuanto UNA pieza lo esté,
+ *   así que la primera alta o borrado de pieza sacaba el lote de `en_revision`
+ *   —vía `refrescarLote`— y **el plazo ya no vencía nunca**, porque
+ *   `loteAutoAprobado` solo auto-aprueba el silencio de un `en_revision`.
+ * - Y si el plazo alcanzaba a vencer antes, el lote quedaba `aprobada` con una
+ *   pieza en `cambios`: el entregable decía «9 de 10 aprobadas» de un mes
+ *   aprobado, el cliente ya no podía arreglarlo (`aceptaDecision` contesta 409)
+ *   y la siguiente alta o borrado **deshacía la aprobación en silencio**, junto
+ *   con `cliente_etapas` y la tarjeta del portal, dejando un `etapa_eventos`
+ *   que hablaba de un mes aprobado sobre un lote que acabó `con_cambios`.
+ *
+ * Así que la ronda nueva devuelve a `pendiente` las piezas `cambios` de este
+ * lote. Es lo que ya decía el diseño §6 —«contenido que el cliente no ha
+ * visto»— aplicado a la pieza: si se le vuelve a pedir su opinión, todavía no
+ * la ha dado. Las `aprobada` no se tocan: lo que el cliente aprobó sigue
+ * aprobado, y la ronda nueva es sobre lo que se corrigió, no un borrón y cuenta
+ * nueva del mes entero.
+ *
+ * **La nota se borra con ella**, y `revisado_en` también. Una fila con
+ * `estado_cliente = 'pendiente'` y la nota puesta es una contradicción: la
+ * tarjeta la pinta como «Cambios que pediste» y la precarga en la caja de
+ * pedir cambios (`src/render/contenido/tarjetas.ts`), así que el cliente vería
+ * como petición viva algo que el operador ya atendió —y sobre una pieza que ya
+ * cambió—. El precedente es de la casa: aprobar ya borra la nota anterior por
+ * este mismo motivo (ver `registrarRevision` en ./revision.ts). Y el historial
+ * no se pierde, que es lo que haría dudar de esta decisión: lo que el cliente
+ * pidió quedó como **comentario anclado a la pieza**, con su autor y su fecha,
+ * y eso sí sobrevive a la ronda (`anclaDePieza`, ./revision.ts).
+ *
+ * Las piezas se reinician **antes** que el lote a propósito. Esto no corre en
+ * una transacción —quien llama es `POST /api/share`, que además crea el
+ * enlace—, así que, si algo se cae entre las dos escrituras, el orden decide
+ * cómo queda el mes: con las piezas primero queda `con_cambios` con todo
+ * pendiente, que se arregla volviendo a pulsar «Compartir»; al revés quedaría
+ * justo el `en_revision` con una pieza en `cambios` que este bloque existe
+ * para impedir.
+ *
  * `diasRevision` es `clients.dias_revision`. Un valor imposible (negativo, o no
  * entero porque alguien tocó la columna a mano) cae a
  * `DIAS_REVISION_POR_OMISION` en vez de tumbar la petición: `limiteRevision`
@@ -255,6 +301,11 @@ export async function compartirLote(
     ? (diasRevision as number)
     : DIAS_REVISION_POR_OMISION;
   const limite = limiteRevision(ahora, dias);
+
+  // Primero las piezas de la ronda anterior, y solo las que el cliente devolvió.
+  await ejecutor.update(contenidoPiezas)
+    .set({ estadoCliente: 'pendiente', notaCliente: null, revisadoEn: null, actualizadoEn: ahora })
+    .where(and(eq(contenidoPiezas.loteId, lote.id), eq(contenidoPiezas.estadoCliente, 'cambios')));
 
   await ejecutor.update(contenidoLotes)
     .set({ estado: 'en_revision', compartidoEn: ahora, limiteRevision: limite, actualizadoEn: ahora })

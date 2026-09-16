@@ -16,6 +16,7 @@ const espia = vi.hoisted(() => ({
   piezas: [] as Record<string, unknown>[],
   cambios: [] as Record<string, unknown>[],
   cambiosLote: [] as Record<string, unknown>[],
+  cambiosPiezas: [] as Record<string, unknown>[],
   insertados: [] as Record<string, unknown>[],
 }));
 
@@ -58,7 +59,14 @@ vi.mock('@/db', async (importarReal) => {
         piezasPedidas = columnas !== undefined;
         return consulta;
       },
-      update: (tabla: unknown) => escritura(tabla === real.contenidoLotes ? espia.cambiosLote : espia.cambios),
+      // Cada tabla, a su cesta: `compartirLote` escribe en las tres —piezas,
+      // lote y etapa— y mezclarlas haría que una prueba de la etapa pasara
+      // mirando, sin saberlo, la escritura de las piezas.
+      update: (tabla: unknown) => escritura(
+        tabla === real.contenidoLotes ? espia.cambiosLote
+          : tabla === real.contenidoPiezas ? espia.cambiosPiezas
+          : espia.cambios,
+      ),
       insert: () => alta,
     },
   };
@@ -78,6 +86,7 @@ beforeEach(() => {
   espia.piezas = [];
   espia.cambios = [];
   espia.cambiosLote = [];
+  espia.cambiosPiezas = [];
   espia.insertados = [];
 });
 afterEach(() => { if (urlPrevia !== undefined) process.env.DATABASE_URL = urlPrevia; });
@@ -318,5 +327,21 @@ describe('compartirLote', () => {
     expect(r.arrancoElPlazo).toBe(true);
     expect(r.compartidoEn).toEqual(VIERNES);
     expect(r.limiteRevision).toEqual(limiteRevision(VIERNES, 2));
+
+    // Y la ronda nueva empieza con las piezas devueltas otra vez pendientes,
+    // sin la nota ni la fecha de la ronda anterior. El porqué, y la secuencia
+    // completa que lo destapó, están en `tests/contenido/ronda-nueva.test.ts`.
+    expect(espia.cambiosPiezas).toHaveLength(1);
+    expect(espia.cambiosPiezas[0]).toMatchObject({
+      estadoCliente: 'pendiente', notaCliente: null, revisadoEn: null,
+    });
+  });
+
+  it('el lote que NO reinicia el plazo tampoco toca sus piezas', async () => {
+    const compartidoEn = new Date('2026-09-10T20:00:00.000Z');
+    await compartirLote(
+      { ...base, estado: 'en_revision', compartidoEn, limiteRevision: limiteRevision(compartidoEn, 2) }, 2, VIERNES,
+    );
+    expect(espia.cambiosPiezas).toEqual([]);
   });
 });

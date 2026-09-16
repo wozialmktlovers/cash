@@ -133,9 +133,23 @@ export function textoConstancia(periodo: string, limiteRevision: Date | null): s
  *    cuanto alguien dé de alta o borre una pieza, porque `estadoLoteSegunPiezas`
  *    volvería a deducir `en_revision` de esas piezas pendientes. Con esto, el
  *    lote y sus piezas dicen lo mismo y el estado es estable.
- *    Nunca se tocan las piezas con `cambios`: por definición no las hay —un
- *    lote con una sola pieza devuelta está `con_cambios` y la regla ya lo
- *    excluyó—, y el `WHERE` lo deja por escrito de todos modos.
+ *    **Las piezas con `cambios` no se tocan, y el `WHERE` lo deja por escrito.**
+ *    Lo que el sistema garantiza —después de arreglar `compartirLote`— es que
+ *    un lote `en_revision` no tiene ninguna: llega a ese estado por una de dos
+ *    vías, y las dos lo dejan sin piezas devueltas. Compartir por primera vez
+ *    un lote `en_proceso`, cuyas piezas nacen `pendiente` (por omisión de la
+ *    columna) y nadie ha revisado; o recompartir uno `con_cambios`, que es la
+ *    ronda nueva y **devuelve a `pendiente` las piezas que el cliente había
+ *    devuelto**. Mientras haya una sola en `cambios`, el lote está
+ *    `con_cambios` y `loteAutoAprobado` ya lo excluyó.
+ *
+ *    Conviene saber qué pasaría si esa garantía se rompiera otra vez, porque es
+ *    la razón de que el `WHERE` sea estrecho y no un «todas las piezas del
+ *    lote»: quedaría un mes `aprobada` con una pieza en `cambios`, el entregable
+ *    diría «9 de 10 aprobadas» sobre un mes aprobado y la primera alta o borrado
+ *    posterior desharía la aprobación en silencio. El `WHERE` no lo evita —es la
+ *    máquina de estados la que tiene que impedirlo—, pero tampoco lo tapa
+ *    aprobando de oficio lo que el cliente devolvió, que sería peor.
  * 4. `sincronizarEtapa`, que es quien refleja el lote activo en
  *    `cliente_etapas` (y de ahí salen la ficha, el portal y el tablero).
  * 5. La constancia en `etapa_eventos`, con `usuario_id` nulo.
