@@ -1,3 +1,11 @@
+// `@/flujo/reglas` es puro (no toca la base ni el SDK), así que este módulo
+// puede importarlo y seguir viajando al navegador con ProgresoJob. Las etapas
+// de los pipelines, en cambio, sí hay que copiarlas — ver la nota de abajo.
+import {
+  ETAPAS, avanceCliente, etapasVisiblesCliente,
+  type Estado, type EtapaCliente, type Etapa as EtapaFlujo,
+} from '@/flujo/reglas';
+
 export type Etapa = { clave: string; titulo: string; detalle: string };
 
 // Se copian aquí y no se importan de los pipelines porque ProgresoJob corre en
@@ -61,3 +69,47 @@ export const ETIQUETA_ETAPA: Record<string, string> = {
   fallo: 'Falló',
   omitido_por_costo: 'Omitida por costo',
 };
+
+// ---------------------------------------------------------------------------
+// Avance del cliente (tablero e Inicio).
+
+/** Lo mínimo de una etapa contratada para resumir el avance de un cliente. */
+export type EtapaResumen = Pick<EtapaCliente, 'etapa' | 'estado' | 'contratada' | 'interna'>;
+
+/** Uno de los cuatro pasos de la tira de avance. `contratada` = visible para el cliente. */
+export type PasoAvance = { etapa: EtapaFlujo; estado: Estado; contratada: boolean };
+
+export type ResumenAvance = { porcentaje: number; pasos: PasoAvance[]; pasoActual: PasoAvance | null };
+
+/**
+ * Lo que necesita una tarjeta de cliente para pintarse, en una sola pasada:
+ *
+ * - `porcentaje`: el mismo `avanceCliente` que ve el cliente en su portal, sin
+ *   recalcular nada. Ojo: `etapasParaAvance` deja fuera `desarrollo_mensual`
+ *   mientras no tenga generador, así que esa etapa puede aparecer en `pasos` y
+ *   ser `pasoActual` sin mover el porcentaje.
+ * - `pasos`: las cuatro etapas en el orden de `ETAPAS`, incluidas las no
+ *   contratadas (la tira las pinta apagadas), con el criterio de
+ *   «visible para el cliente» de `etapasVisiblesCliente` — una etapa interna
+ *   cuenta como no contratada.
+ * - `pasoActual`: el primer paso contratado que no está aprobado, o `null` si
+ *   no hay ninguno (ni etapas contratadas, o todas aprobadas).
+ *
+ * Pura, como `resumenPortal`: la consulta vive en `src/flujo/servicio.ts`.
+ */
+export function resumenAvance(etapas: EtapaResumen[]): ResumenAvance {
+  const porEtapa = new Map(etapas.map((e) => [e.etapa, e]));
+  const visibles = new Set(etapasVisiblesCliente(etapas).map((e) => e.etapa));
+
+  const pasos: PasoAvance[] = ETAPAS.map((etapa) => ({
+    etapa,
+    estado: porEtapa.get(etapa)?.estado ?? 'no_iniciada',
+    contratada: visibles.has(etapa),
+  }));
+
+  return {
+    porcentaje: avanceCliente(etapas),
+    pasos,
+    pasoActual: pasos.find((p) => p.contratada && p.estado !== 'aprobada') ?? null,
+  };
+}

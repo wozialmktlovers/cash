@@ -120,8 +120,16 @@ export function avanceCliente(etapas: Pick<EtapaCliente, 'contratada' | 'interna
   return Math.round(suma / visibles.length);
 }
 
-/** Etapas contratadas y no internas, en el orden de ETAPAS. */
-export function etapasVisiblesCliente(etapas: EtapaCliente[]): EtapaCliente[] {
+/**
+ * Etapas contratadas y no internas, en el orden de ETAPAS.
+ *
+ * Genérica sobre `T` por la misma razón que `etapasParaAvance`: así la usa
+ * también `resumenAvance` (src/lib/ui/progreso.ts), cuyas filas traen solo
+ * `etapa`/`estado`/`contratada`/`interna`. Antes exigía `EtapaCliente`
+ * completo, lo que obligaba a `resumenPortal` a un `as` y habría obligado al
+ * tablero a reimplementar el criterio de «visible para el cliente».
+ */
+export function etapasVisiblesCliente<T extends { contratada: boolean; interna: boolean; etapa: Etapa }>(etapas: T[]): T[] {
   const orden = new Map(ETAPAS.map((e, i) => [e, i]));
   return etapas.filter((e) => e.contratada && !e.interna).sort((a, b) => (orden.get(a.etapa) ?? 0) - (orden.get(b.etapa) ?? 0));
 }
