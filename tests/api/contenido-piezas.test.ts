@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { LIMITES } from '@/contenido/schemas';
 
 /**
  * Alta, edición y borrado de piezas (B1). Como en `contenido-lotes.test.ts`,
@@ -21,7 +22,7 @@ const filaPieza = vi.hoisted(() => () => ({
   id: '00000000-0000-4000-8000-0000000000f1',
   loteId: '00000000-0000-4000-8000-0000000000e1',
   numero: 1, formato: 'post', plataforma: 'ambas',
-  fechaPublicacion: null, temaId: null, copy: '', cta: '', hashtags: '', arte: [],
+  fechaPublicacion: null, temaId: null, copy: '', cta: '', hashtags: '', briefVisual: '', arte: [],
   estadoCliente: 'pendiente', notaCliente: null, revisadoEn: null,
   creadoEn: new Date(0), actualizadoEn: new Date(0),
 }));
@@ -149,7 +150,7 @@ describe('POST /api/contenido/lotes/[id]/piezas', () => {
     expect(res.status).toBe(201);
     expect(espia.insertado).toMatchObject({
       loteId: LOTE, numero: 1, formato: 'carrusel', plataforma: 'instagram',
-      fechaPublicacion: null, temaId: null, copy: '', cta: '', hashtags: '', arte: [],
+      fechaPublicacion: null, temaId: null, copy: '', cta: '', hashtags: '', briefVisual: '', arte: [],
     });
     expect(espia.refrescados).toEqual([LOTE]);
     const cuerpo = await res.json();
@@ -172,11 +173,12 @@ describe('POST /api/contenido/lotes/[id]/piezas', () => {
   it('guarda planeación, texto y arte', async () => {
     await alta({
       ...PIEZA_MINIMA, fechaPublicacion: '2026-09-15', temaId: 'P2-S1-03',
-      copy: 'Hola', cta: 'Escríbenos', hashtags: '#agave #mx',
+      copy: 'Hola', cta: 'Escríbenos', hashtags: '#agave #mx', briefVisual: 'Foto del taller a contraluz.',
       arte: [{ tipo: 'imagen', fileId: ARCHIVO }, { tipo: 'video', url: 'https://ejemplo.mx/v.mp4' }],
     });
     expect(espia.insertado).toMatchObject({
       fechaPublicacion: '2026-09-15', temaId: 'P2-S1-03', copy: 'Hola', cta: 'Escríbenos', hashtags: '#agave #mx',
+      briefVisual: 'Foto del taller a contraluz.',
     });
     expect((espia.insertado?.arte as unknown[]).length).toBe(2);
   });
@@ -256,6 +258,23 @@ describe('PATCH /api/contenido/piezas/[id]', () => {
     expect(espia.actualizado).toMatchObject({ copy: 'Nuevo copy', cta: 'Escríbenos' });
     expect(espia.actualizado).not.toHaveProperty('formato');
     expect(espia.actualizado?.actualizadoEn).toBeInstanceOf(Date);
+  });
+
+  // El brief visual es la indicación para quien haga el arte (diseño §5).
+  // Hasta 0008 no tenía columna y se perdía al pedir otra tanda de propuestas.
+  it('guarda el brief visual, con el mismo tope que el esquema de la propuesta', async () => {
+    const res = await editar({ briefVisual: '  Foto del taller a contraluz, sin gente.  ' });
+    expect(res.status).toBe(200);
+    expect(espia.actualizado).toMatchObject({ briefVisual: 'Foto del taller a contraluz, sin gente.' });
+    expect((await res.json()).pieza).toHaveProperty('briefVisual');
+
+    // El tope se lee de donde vive, no se repite: si `LIMITES.briefVisual`
+    // cambiara y esta validación se quedara atrás, la prueba lo cantaría.
+    espia.actualizado = undefined;
+    const largo = await editar({ briefVisual: 'a'.repeat(LIMITES.briefVisual + 1) });
+    expect(largo.status).toBe(400);
+    expect((await largo.json()).errores[0]).toContain('brief visual');
+    expect(espia.actualizado).toBeUndefined();
   });
 
   it('un cuerpo vacío es «nada que actualizar»', async () => {

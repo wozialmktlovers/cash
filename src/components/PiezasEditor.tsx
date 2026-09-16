@@ -14,14 +14,15 @@
 //    haya confirmado, y lo que devuelve la API es lo que se guarda en el
 //    estado. Un 409 de número repetido se muestra tal cual.
 // 2. **Las propuestas del modelo nunca escriben en la pieza.** «Usar esta
-//    opción» llena el formulario y ahí se queda: el operador la edita y
-//    después guarda (diseño §5). Es también lo que hace la ruta, que no
-//    guarda nada.
+//    opción» llena el formulario —copy, llamado a la acción, hashtags y brief
+//    visual— y ahí se queda: el operador la edita y después guarda (diseño
+//    §5). Es también lo que hace la ruta, que no guarda nada.
 // 3. **Los artes se guardan solos.** Subir, enlazar o quitar un arte hace su
 //    propio `PATCH` en el momento, sin esperar al botón «Guardar»: el archivo
 //    ya viajó al servidor y dejarlo apuntado solo en la pantalla haría que
 //    cerrarla lo perdiera de vista. El resto del formulario —planeación, copy,
-//    llamado a la acción, hashtags— sí se guarda cuando el operador lo dice.
+//    llamado a la acción, hashtags, brief visual— sí se guarda cuando el
+//    operador lo dice.
 
 import { useState } from 'react';
 import {
@@ -47,6 +48,7 @@ export type PiezaUI = {
   copy: string;
   cta: string;
   hashtags: string;
+  briefVisual: string;
   arte: Arte[];
   estadoCliente: EstadoRevision;
   notaCliente: string | null;
@@ -64,6 +66,13 @@ export type ArchivoCliente = { id: string; nombreOriginal: string };
  * aplica la API y su error se muestra tal cual si este número se quedara atrás.
  */
 const MAX_ARTES = 10;
+
+/**
+ * Espeja `LIMITES.briefVisual` de `src/contenido/schemas.ts`, por lo mismo que
+ * `MAX_ARTES`: es el largo con que el agente escribe el brief y con el que la
+ * API lo valida, y aquí solo recorta el `<textarea>`.
+ */
+const MAX_BRIEF_VISUAL = 400;
 
 /** Tipos de arte del esquema (`TIPOS_ARTE`), con su nombre visible. */
 const TIPOS: { valor: TipoArte; texto: string }[] = [
@@ -318,7 +327,7 @@ function Propuestas({ opciones, costo, onUsar }: { opciones: OpcionCopy[]; costo
         </article>
       ))}
       <p className="ayuda">
-        El brief visual es para quien haga el arte: cópialo antes de pedir otras propuestas, porque la pieza no tiene dónde guardarlo.
+        El brief visual es para quien haga el arte: al elegir una opción se copia al formulario con el resto del texto y se guarda con la pieza.
       </p>
     </div>
   );
@@ -335,6 +344,7 @@ type Borrador = {
   copy: string;
   cta: string;
   hashtags: string;
+  briefVisual: string;
 };
 
 const aBorrador = (p: PiezaUI): Borrador => ({
@@ -346,6 +356,7 @@ const aBorrador = (p: PiezaUI): Borrador => ({
   copy: p.copy,
   cta: p.cta,
   hashtags: p.hashtags,
+  briefVisual: p.briefVisual,
 });
 
 function TarjetaPieza({
@@ -391,6 +402,7 @@ function TarjetaPieza({
         copy: borrador.copy,
         cta: borrador.cta,
         hashtags: borrador.hashtags,
+        briefVisual: borrador.briefVisual,
       }),
     });
     setOcupado(false);
@@ -439,7 +451,7 @@ function TarjetaPieza({
   }
 
   function usar(o: OpcionCopy) {
-    setBorrador((b) => ({ ...b, copy: o.copy, cta: o.cta, hashtags: o.hashtags.join(' ') }));
+    setBorrador((b) => ({ ...b, copy: o.copy, cta: o.cta, hashtags: o.hashtags.join(' '), briefVisual: o.briefVisual }));
     toast('Opción copiada al formulario. Edítala y guarda.');
   }
 
@@ -525,6 +537,12 @@ function TarjetaPieza({
               <label htmlFor={campo('hashtags')}>Hashtags</label>
               <input id={campo('hashtags')} type="text" maxLength={600} value={borrador.hashtags}
                 disabled={!operable} onChange={(e) => cambiar('hashtags', e.target.value)} />
+            </div>
+            <div className="campo ancho">
+              <label htmlFor={campo('briefVisual')}>Brief visual</label>
+              <textarea id={campo('briefVisual')} rows={3} maxLength={MAX_BRIEF_VISUAL} value={borrador.briefVisual}
+                disabled={!operable} onChange={(e) => cambiar('briefVisual', e.target.value)} />
+              <p className="ayuda">La indicación para quien haga el arte. No se publica: {borrador.briefVisual.length} de {MAX_BRIEF_VISUAL} caracteres.</p>
             </div>
           </div>
 

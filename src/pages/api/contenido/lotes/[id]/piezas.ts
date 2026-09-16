@@ -80,6 +80,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
           copy: v.datos.copy,
           cta: v.datos.cta,
           hashtags: v.datos.hashtags,
+          briefVisual: v.datos.briefVisual,
           arte: v.datos.arte,
         })
         .returning();

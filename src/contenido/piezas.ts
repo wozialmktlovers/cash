@@ -28,6 +28,10 @@
 import { z } from 'zod';
 import { ID_TEMA } from '@/pilares/schemas';
 import { FORMATOS, PLATAFORMAS, type EstadoRevision, type Formato, type Plataforma } from './reglas';
+// El tope del brief se importa, no se copia: es el mismo largo con que el
+// agente escribe la propuesta (`opcionCopySchema`), y dos números separados
+// dejarían guardar un brief que el modelo nunca podría producir, o al revés.
+import { LIMITES } from './schemas';
 
 /** Dónde se publica la pieza; el enum `plataforma_pieza` de la base. */
 
@@ -68,6 +72,10 @@ const campos = {
   copy: z.string().max(2200, 'El copy no puede pasar de 2200 caracteres.'),
   cta: z.string().trim().max(120, 'El llamado a la acción no puede pasar de 120 caracteres.'),
   hashtags: z.string().trim().max(600, 'Los hashtags no pueden pasar de 600 caracteres.'),
+  // La indicación para quien haga el arte, la que venía en la opción elegida
+  // (diseño §5). Se edita a mano como el resto del texto, así que aquí solo se
+  // mide; vacío es legítimo, igual que un copy todavía sin escribir.
+  briefVisual: z.string().trim().max(LIMITES.briefVisual, `El brief visual no puede pasar de ${LIMITES.briefVisual} caracteres.`),
   arte: z.array(arteSchema).max(MAX_ARTES, `Una pieza no lleva más de ${MAX_ARTES} artes.`),
 };
 
@@ -85,6 +93,7 @@ const altaSchema = z.object({
   copy: campos.copy.default(''),
   cta: campos.cta.default(''),
   hashtags: campos.hashtags.default(''),
+  briefVisual: campos.briefVisual.default(''),
   arte: campos.arte.default([]),
 });
 
@@ -98,6 +107,7 @@ const cambioSchema = z.object({
   copy: campos.copy.optional(),
   cta: campos.cta.optional(),
   hashtags: campos.hashtags.optional(),
+  briefVisual: campos.briefVisual.optional(),
   arte: campos.arte.optional(),
 });
 
@@ -162,6 +172,7 @@ export type FilaPieza = {
   copy: string;
   cta: string;
   hashtags: string;
+  briefVisual: string;
   arte: unknown;
   estadoCliente: EstadoRevision;
   notaCliente: string | null;
@@ -190,6 +201,7 @@ export function piezaVisibleJson(p: FilaPieza): PiezaVisible {
     copy: p.copy,
     cta: p.cta,
     hashtags: p.hashtags,
+    briefVisual: p.briefVisual,
     arte: (Array.isArray(p.arte) ? p.arte : []) as Arte[],
     estadoCliente: p.estadoCliente,
     notaCliente: p.notaCliente,

@@ -270,3 +270,25 @@ describe('0007: lotes y piezas del desarrollo mensual', () => {
     for (const c of ['paquete', 'dias_revision']) expect(cols[c].default).toBeUndefined();
   });
 });
+
+describe('0008: el brief visual de la pieza', () => {
+  const carpeta = path.resolve(__dirname, '../../drizzle');
+  const m0008 = () => leerMigraciones(carpeta).find((x: { tag: string }) => x.tag === '0008_brief_visual_pieza')!;
+
+  it('solo añade la columna, con cadena vacía por omisión y sin tocar datos', () => {
+    // Las piezas de hoy no tienen brief porque no había dónde guardarlo, y
+    // vacío es exactamente lo que son: no hay nada que rellenar.
+    const trozos: string[] = m0008().sql.map((t: string) => t.trim()).filter(Boolean);
+    expect(trozos).toEqual(['ALTER TABLE "contenido_piezas" ADD COLUMN "brief_visual" text DEFAULT \'\' NOT NULL;']);
+  });
+
+  it('la columna de la migración es la que declara el esquema (sin deriva con drizzle-kit)', () => {
+    const snapshot = JSON.parse(fs.readFileSync(path.join(carpeta, 'meta', '0008_snapshot.json'), 'utf8'));
+    const cols = snapshot.tables['public.contenido_piezas'].columns;
+    // Mismo trato que `copy`, `cta` y `hashtags`: texto no nulo con vacío por
+    // omisión, para que leer el brief no obligue a pensar en null.
+    for (const c of ['copy', 'cta', 'hashtags', 'brief_visual']) {
+      expect(cols[c]).toMatchObject({ type: 'text', notNull: true, default: "''" });
+    }
+  });
+});

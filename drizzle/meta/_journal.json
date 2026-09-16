@@ -57,6 +57,13 @@
       "when": 1789584963210,
       "tag": "0007_desarrollo_mensual",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789591777810,
+      "tag": "0008_brief_visual_pieza",
+      "breakpoints": true
     }
   ]
 }

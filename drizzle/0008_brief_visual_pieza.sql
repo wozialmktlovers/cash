@@ -1,0 +1,1 @@
+ALTER TABLE "contenido_piezas" ADD COLUMN "brief_visual" text DEFAULT '' NOT NULL;

@@ -332,6 +332,12 @@ export const contenidoPiezas = pgTable('contenido_piezas', {
   // Los hashtags tal como se copian, en una sola línea. Texto y no arreglo
   // porque el operador los edita y los copia en bloque; nadie los consulta.
   hashtags: text('hashtags').notNull().default(''),
+  // El brief visual que el agente escribió para la opción elegida: la
+  // indicación para quien haga el arte (diseño §5 y §8, el Studio no genera
+  // imágenes). Se guarda en la pieza y no en la propuesta porque las
+  // propuestas no se guardan —el operador elige una y la edita—, y sin esta
+  // columna el brief se perdía en cuanto se pedía otra tanda.
+  briefVisual: text('brief_visual').notNull().default(''),
   // Los artes de la pieza, en orden. El esquema no captura la forma, así que
   // queda escrita aquí: una lista de `{ tipo, fileId }` o `{ tipo, url }`,
   // donde `tipo` es `imagen | video | portada` y se usa `fileId` (un

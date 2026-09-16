@@ -15,9 +15,9 @@ const RESTRICCION_NUMERO = 'contenido_piezas_lote_id_numero';
 
 /**
  * `PATCH /api/contenido/piezas/[id]`: edita la planeación (número, formato,
- * plataforma, fecha, tema), el copy, el llamado a la acción, los hashtags y el
- * arte de una pieza (diseño §4). Todos los campos son sueltos; los que no
- * vengan no se tocan.
+ * plataforma, fecha, tema), el copy, el llamado a la acción, los hashtags, el
+ * brief visual y el arte de una pieza (diseño §4 y §5). Todos los campos son
+ * sueltos; los que no vengan no se tocan.
  *
  * Códigos:
  * - 404 la pieza no existe, el id no tiene forma de UUID, o es de un cliente
