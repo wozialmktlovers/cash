@@ -135,14 +135,26 @@ export function etapasVisiblesCliente<T extends { contratada: boolean; interna: 
 }
 
 /**
- * Dependencias para poder trabajar una etapa:
- * - investigacion: siempre ok.
- * - pilares y manual_campana: necesitan una investigación con datos; si la investigación
- *   está contratada (no interna), además debe estar aprobada.
- * - manual_campana: además necesita pilares aprobada, solo si pilares está contratada.
+ * Dependencias para poder trabajar una etapa (diseño 2026-09-16, §1):
+ * - investigacion: ninguna, es la fuente de la que sale todo lo demás.
+ * - pilares y manual_campana: solo necesitan una investigación CON DATOS.
  * - desarrollo_mensual: todavía no se puede iniciar (Próximamente).
+ *
+ * Antes cada etapa esperaba a la anterior: pilares exigía la investigación
+ * `aprobada` y el manual exigía además el mapa de pilares aprobado. Eso
+ * obligaba a ir en fila india aunque el equipo pueda trabajar en paralelo.
+ * La aprobación dejó de ser una puerta y volvió a ser lo que debía: control
+ * de calidad. Lo que NO se tocó son las reglas sobre la etapa misma
+ * (`en_revision` no se regenera, `aprobada` hay que reabrirla) — viven en
+ * `puedeGenerar`.
+ *
+ * `_etapas` ya no se consulta: al caer las dos reglas de aprobación no queda
+ * nada que mirar en las otras etapas. Se conserva en la firma porque quien
+ * llama ya tiene la lista a mano (`puedeGenerar` la necesita para sus propios
+ * bloqueos) y porque cualquier dependencia futura volvería a pedirla; quitarla
+ * obligaría a tocar las cuatro pantallas para nada.
  */
-export function dependenciasCumplidas(etapa: Etapa, etapas: EtapaCliente[], hayInvestigacionConDatos: boolean): { ok: boolean; razon: string } {
+export function dependenciasCumplidas(etapa: Etapa, _etapas: EtapaCliente[], hayInvestigacionConDatos: boolean): { ok: boolean; razon: string } {
   if (etapa === 'investigacion') return { ok: true, razon: '' };
 
   if (etapa === 'desarrollo_mensual') {
@@ -151,18 +163,6 @@ export function dependenciasCumplidas(etapa: Etapa, etapas: EtapaCliente[], hayI
 
   if (!hayInvestigacionConDatos) {
     return { ok: false, razon: 'Falta completar la investigación antes de continuar.' };
-  }
-
-  const investigacion = etapas.find((e) => e.etapa === 'investigacion');
-  if (investigacion && investigacion.contratada && !investigacion.interna && investigacion.estado !== 'aprobada') {
-    return { ok: false, razon: 'La investigación contratada debe estar aprobada antes de continuar.' };
-  }
-
-  if (etapa === 'manual_campana') {
-    const pilares = etapas.find((e) => e.etapa === 'pilares');
-    if (pilares && pilares.contratada && !pilares.interna && pilares.estado !== 'aprobada') {
-      return { ok: false, razon: 'El mapa de pilares debe estar aprobado antes de continuar.' };
-    }
   }
 
   return { ok: true, razon: '' };
@@ -179,8 +179,8 @@ export function dependenciasCumplidas(etapa: Etapa, etapas: EtapaCliente[], hayI
  *   deja pasar, porque alimenta a otra: investigación interna para pilares);
  * - `en_revision` o `aprobada`: hay que resolver la revisión o reabrir antes
  *   de reemplazar el documento;
- * - `dependenciasCumplidas`: sin la investigación (y, para el manual, sin
- *   pilares) no hay sobre qué generar.
+ * - `dependenciasCumplidas`: sin una investigación con datos no hay sobre qué
+ *   generar (ni el mapa de pilares ni el manual de campaña).
  */
 export function puedeGenerar(
   etapa: Etapa,

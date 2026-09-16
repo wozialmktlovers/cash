@@ -147,57 +147,60 @@ describe('etapasVisiblesCliente', () => {
   });
 });
 
+// Diseño 2026-09-16 §1: lo único que se exige para cualquier etapa distinta
+// de `investigacion` es que haya una investigación CON DATOS. Las dos reglas
+// viejas —investigación contratada aprobada, y mapa de pilares aprobado antes
+// del manual— se quitaron: aprobar es control de calidad, no una puerta.
 describe('dependenciasCumplidas', () => {
   it('investigacion siempre está ok', () => {
     expect(dependenciasCumplidas('investigacion', [], false).ok).toBe(true);
   });
 
-  it('pilares sin investigación con datos da no-ok mencionando "investigación"', () => {
-    const r = dependenciasCumplidas('pilares', [et('investigacion')], false);
-    expect(r.ok).toBe(false);
-    expect(r.razon.toLowerCase()).toContain('investigación');
+  it('sin investigación con datos no se puede ni pilares ni manual_campana', () => {
+    for (const etapa of ['pilares', 'manual_campana'] as const) {
+      const r = dependenciasCumplidas(etapa, [et('investigacion'), et('pilares')], false);
+      expect(r.ok).toBe(false);
+      expect(r.razon.toLowerCase()).toContain('investigación');
+    }
   });
 
-  it('pilares con investigación contratada no aprobada da no-ok', () => {
-    const etapas = [et('investigacion', { contratada: true, interna: false, estado: 'en_proceso' })];
-    const r = dependenciasCumplidas('pilares', etapas, true);
-    expect(r.ok).toBe(false);
-  });
-
-  it('pilares con investigación interna y datos da ok', () => {
-    const etapas = [et('investigacion', { contratada: false, interna: true, estado: 'en_proceso' })];
-    const r = dependenciasCumplidas('pilares', etapas, true);
-    expect(r.ok).toBe(true);
-  });
-
-  it('pilares con investigación contratada y aprobada da ok', () => {
-    const etapas = [et('investigacion', { contratada: true, interna: false, estado: 'aprobada' })];
-    const r = dependenciasCumplidas('pilares', etapas, true);
-    expect(r.ok).toBe(true);
-  });
-
-  it('manual_campana con pilares contratada no aprobada da no-ok', () => {
+  it('con investigación con datos pero SIN aprobar se puede pilares Y manual_campana', () => {
     const etapas = [
-      et('investigacion', { contratada: false, interna: true, estado: 'en_proceso' }),
+      et('investigacion', { contratada: true, interna: false, estado: 'en_proceso' }),
+      et('pilares', { contratada: true, interna: false, estado: 'no_iniciada' }),
+      et('manual_campana', { contratada: true, interna: false, estado: 'no_iniciada' }),
+    ];
+    expect(dependenciasCumplidas('pilares', etapas, true)).toEqual({ ok: true, razon: '' });
+    expect(dependenciasCumplidas('manual_campana', etapas, true)).toEqual({ ok: true, razon: '' });
+  });
+
+  it('el manual no espera al mapa de pilares: con pilares contratada y en proceso, sigue ok', () => {
+    const etapas = [
+      et('investigacion', { contratada: true, interna: false, estado: 'en_revision' }),
       et('pilares', { contratada: true, interna: false, estado: 'en_proceso' }),
     ];
-    const r = dependenciasCumplidas('manual_campana', etapas, true);
-    expect(r.ok).toBe(false);
+    expect(dependenciasCumplidas('manual_campana', etapas, true).ok).toBe(true);
   });
 
-  it('manual_campana con pilares interna no exige que esté aprobada', () => {
+  it('da igual que la investigación sea interna o contratada: solo cuentan los datos', () => {
+    const interna = [et('investigacion', { contratada: false, interna: true, estado: 'en_proceso' })];
+    const contratada = [et('investigacion', { contratada: true, interna: false, estado: 'aprobada' })];
+    expect(dependenciasCumplidas('pilares', interna, true).ok).toBe(true);
+    expect(dependenciasCumplidas('pilares', contratada, true).ok).toBe(true);
+    expect(dependenciasCumplidas('pilares', interna, false).ok).toBe(false);
+    expect(dependenciasCumplidas('pilares', contratada, false).ok).toBe(false);
+  });
+
+  it('desarrollo_mensual sigue bloqueada con "Próximamente", aun con todo aprobado', () => {
     const etapas = [
-      et('investigacion', { contratada: false, interna: true, estado: 'en_proceso' }),
-      et('pilares', { contratada: false, interna: true, estado: 'en_proceso' }),
+      et('investigacion', { estado: 'aprobada' }),
+      et('pilares', { estado: 'aprobada' }),
     ];
-    const r = dependenciasCumplidas('manual_campana', etapas, true);
-    expect(r.ok).toBe(true);
-  });
-
-  it('desarrollo_mensual siempre no-ok con "Próximamente"', () => {
-    const r = dependenciasCumplidas('desarrollo_mensual', [], true);
-    expect(r.ok).toBe(false);
-    expect(r.razon).toContain('Próximamente');
+    for (const lista of [[], etapas]) {
+      const r = dependenciasCumplidas('desarrollo_mensual', lista, true);
+      expect(r.ok).toBe(false);
+      expect(r.razon).toContain('Próximamente');
+    }
   });
 });
 
@@ -248,6 +251,43 @@ describe('puedeGenerar (I1 punto 1: 409 de POST /api/jobs)', () => {
   it('la etapa no existe en la lista: no-ok, no revienta', () => {
     const r = puedeGenerar('pilares', [], true);
     expect(r.ok).toBe(false);
+  });
+
+  it('pilares y manual con la investigación con datos pero sin aprobar: ok (la aprobación ya no es puerta)', () => {
+    const etapas = [
+      et('investigacion', { estado: 'en_proceso' }),
+      et('pilares', { estado: 'no_iniciada' }),
+      et('manual_campana', { estado: 'no_iniciada' }),
+    ];
+    expect(puedeGenerar('pilares', etapas, true).ok).toBe(true);
+    expect(puedeGenerar('manual_campana', etapas, true).ok).toBe(true);
+  });
+
+  it('sin investigación con datos: ni pilares ni manual se pueden generar', () => {
+    const etapas = [
+      et('investigacion', { estado: 'en_proceso' }),
+      et('pilares', { estado: 'no_iniciada' }),
+      et('manual_campana', { estado: 'no_iniciada' }),
+    ];
+    expect(puedeGenerar('pilares', etapas, false).ok).toBe(false);
+    expect(puedeGenerar('manual_campana', etapas, false).ok).toBe(false);
+  });
+
+  it('las reglas de la etapa misma no cambian: en_revision y aprobada siguen sin poder regenerarse', () => {
+    // Aflojar las dependencias no toca estos dos bloqueos, que son sobre la
+    // etapa y no sobre sus dependencias.
+    const investigacion = et('investigacion', { estado: 'en_proceso' });
+    for (const estado of ['en_revision', 'aprobada'] as const) {
+      const r = puedeGenerar('pilares', [investigacion, et('pilares', { estado })], true);
+      expect(r.ok).toBe(false);
+    }
+  });
+
+  it('desarrollo_mensual contratada: no-ok con "Próximamente"', () => {
+    const etapas = [et('investigacion', { estado: 'aprobada' }), et('desarrollo_mensual')];
+    const r = puedeGenerar('desarrollo_mensual', etapas, true);
+    expect(r.ok).toBe(false);
+    expect(r.razon).toContain('Próximamente');
   });
 });
 

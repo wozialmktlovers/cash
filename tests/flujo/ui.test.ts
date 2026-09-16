@@ -62,6 +62,21 @@ describe('botonesEtapa', () => {
     expect(idsDe(botones)).toEqual([]);
   });
 
+  it('pilares y manual con la investigación con datos pero sin aprobar: se pueden trabajar ya (diseño 2026-09-16 §1)', () => {
+    const etapasCliente = [
+      et('investigacion', { estado: 'en_proceso' }),
+      et('pilares'),
+      et('manual_campana'),
+    ];
+    for (const etapa of [et('pilares'), et('manual_campana')]) {
+      const botones = botonesEtapa({
+        etapa, rol: 'admin', esOperadorAsignado: false,
+        comentariosAbiertos: 0, hayInvestigacionConDatos: true, etapasCliente,
+      });
+      expect(idsDe(botones)).toEqual(['generar', 'iniciar']);
+    }
+  });
+
   it('en_revision: el admin ve Aprobar y Pedir cambios; el operador (asignado) no ve ninguno de los dos', () => {
     const etapa = et('investigacion', { estado: 'en_revision', documentoId: 'doc-1' });
     const etapasCliente = [etapa];
