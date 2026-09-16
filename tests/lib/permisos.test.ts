@@ -101,6 +101,13 @@ describe('rutaPublica', () => {
     }
   });
 
+  // Las imágenes del entregable cuelgan del mismo enlace y las pide un
+  // navegador sin sesión: si dejaran de ser públicas, el cliente vería el
+  // documento con los huecos del arte.
+  it('los archivos de un enlace público también están abiertos', () => {
+    expect(rutaPublica('/p/cafe-malinche/t0ken/archivo/00000000-0000-4000-8000-0000000000a1')).toBe(true);
+  });
+
   it('no abre nada más: el resto sigue exigiendo sesión', () => {
     for (const r of ['/', '/clientes', '/api/clientes', '/admin/usuarios', '/api/perfil', '/portal']) {
       expect(rutaPublica(r)).toBe(false);

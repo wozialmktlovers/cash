@@ -1,4 +1,4 @@
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, rm, readFile } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
@@ -41,6 +41,27 @@ export async function guardarArchivo(
   await mkdir(dirname(absoluta), { recursive: true });
   await writeFile(absoluta, buf);
   return { ruta: relativa };
+}
+
+/**
+ * Lee un archivo guardado, para servirlo.
+ *
+ * No inventa protección nueva: reusa las dos que ya tenía el módulo. Primero
+ * `rutaSegura`, que no deja salir de `DATA_DIR`. Después el candado de un solo
+ * segmento que puso `borrarCarpetaCliente`, aquí para lo contrario —no para no
+ * borrar de más, sino para no LEER de más—: el archivo tiene que caer dentro
+ * de la carpeta de SU cliente, que es como lo guarda `guardarArchivo`
+ * (`join(clientId, ...)`). Así, una fila cuya `ruta` apuntara a
+ * `../otro-cliente/arte.png` no entrega nada, aunque el destino siga estando
+ * dentro de `DATA_DIR` y `rutaSegura` lo dejaría pasar.
+ */
+export async function leerArchivo(clientId: string, relativa: string): Promise<Buffer> {
+  if (!/^[A-Za-z0-9-]+$/.test(clientId)) throw new Error('Id de cliente inválido para leer sus archivos');
+  const dataDir = process.env.DATA_DIR || './data';
+  const carpeta = rutaSegura(dataDir, clientId);
+  const absoluta = rutaSegura(dataDir, relativa);
+  if (!absoluta.startsWith(carpeta + '/')) throw new Error('El archivo no está en la carpeta de su cliente');
+  return readFile(absoluta);
 }
 
 export async function borrarArchivo(relativa: string): Promise<void> {
