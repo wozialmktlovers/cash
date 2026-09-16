@@ -1,57 +1,169 @@
 ---
-import { count, desc, inArray } from 'drizzle-orm';
+import { desc, inArray } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import TarjetaCliente from '@/components/TarjetaCliente.astro';
-import { db, clients, researchJobs, researchResults, growthResults, pilaresResults } from '@/db';
+import { db, clients, researchJobs } from '@/db';
+import { NOMBRE_ETAPA } from '@/flujo/reglas';
+import { etapasDeClientes } from '@/flujo/servicio';
+import { listarPendientes, type MotivoPendiente } from '@/lib/pendientes';
+import { nombreVisible } from '@/lib/usuarios';
 import { condicionClientes } from '@/lib/visibilidad';
-import { indicadores } from '@/lib/ui/tablero';
+import { gastoDelMes } from '@/lib/ui/tablero';
 import { resumirPorCliente, resumenDe } from '@/lib/ui/estado-cliente';
-import { porcentaje, etapasDe } from '@/lib/ui/progreso';
+import { porcentaje, etapasDe, resumenAvance } from '@/lib/ui/progreso';
+import { enlacePendiente } from '@/lib/ui/enlaces';
+import { fechaCorta, fechaLarga } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
 const cond = condicionClientes(usuario);
 const lista = await db.select().from(clients).where(cond).orderBy(desc(clients.updatedAt));
 
-// Jobs y entregables se filtran con los ids ya resueltos por `lista`, sin
-// otra consulta a clients. Con admin (sin condición) no hace falta filtrar.
+// Jobs se filtran con los ids ya resueltos por `lista`, sin otra consulta a
+// clients. Con admin (sin condición) no hace falta filtrar.
 const ids = cond ? lista.map((c) => c.id) : null;
 const sinClientes = ids !== null && ids.length === 0;
 
 const jobs = sinClientes
   ? []
   : await db.select().from(researchJobs).where(ids ? inArray(researchJobs.clientId, ids) : undefined).orderBy(desc(researchJobs.createdAt));
-const [{ n: nInvestigaciones } = { n: 0 }] = sinClientes
-  ? [{ n: 0 }]
-  : await db.select({ n: count() }).from(researchResults).where(ids ? inArray(researchResults.clientId, ids) : undefined);
-const [{ n: nManuales } = { n: 0 }] = sinClientes
-  ? [{ n: 0 }]
-  : await db.select({ n: count() }).from(growthResults).where(ids ? inArray(growthResults.clientId, ids) : undefined);
-const [{ n: nMapas } = { n: 0 }] = sinClientes
-  ? [{ n: 0 }]
-  : await db.select({ n: count() }).from(pilaresResults).where(ids ? inArray(pilaresResults.clientId, ids) : undefined);
 
-const ind = indicadores({ clientes: lista.length, jobs, entregables: nInvestigaciones + nManuales + nMapas, ahora: new Date() });
+// Lo que espera por quien mira. El criterio (rol, etapa contratada,
+// comentarios sin atender) vive en `listarPendientes` y aquí se pinta tal
+// cual: el número rojo de la barra lateral (`contarPendientes`) cuenta
+// exactamente eso, así que filtrar algo aquí dejaría al Inicio diciendo un
+// número distinto del que el usuario acaba de ver en el menú.
+const LIMITE_PENDIENTES = 8;
+const pendientes = await listarPendientes(usuario, { limite: LIMITE_PENDIENTES });
+// `limite` recorta etapas y comentarios por separado, así que lo que de
+// verdad se ve no es `LIMITE_PENDIENTES` sino la suma de las dos listas ya
+// recortadas. El enlace a `/pendientes` se ofrece cuando algo quedó fuera, no
+// cuando se cruza el límite: con 3 etapas y 6 comentarios se ven los nueve.
+const pendientesMostrados = pendientes.etapas.length + pendientes.comentarios.length;
+
+const ETIQUETA_MOTIVO: Record<MotivoPendiente, string> = {
+  en_revision: 'Espera tu autorización',
+  con_cambios: 'Cambios pedidos',
+  en_proceso: 'En preparación',
+};
+
+// Una sola consulta para las etapas de toda la lista (`etapasDeClientes`, no
+// `etapasDelCliente`, que iría cliente por cliente y además crearía las filas
+// que falten). Quien no tenga ninguna fila no viene en el Map: `resumenAvance`
+// de una lista vacía es el «Sin etapas contratadas» de la tarjeta.
+const etapasPorCliente = await etapasDeClientes(lista.map((c) => c.id));
+const avancePorCliente = new Map(lista.map((c) => [c.id, resumenAvance(etapasPorCliente.get(c.id) ?? [])] as const));
+const avanceDe = (clientId: string) => avancePorCliente.get(clientId)!;
+
+// El más atrasado primero (diseño §2). `sort` es estable, así que dos
+// clientes con el mismo porcentaje conservan el orden de la consulta, que es
+// por `updatedAt` descendente. Un cliente sin etapas contratadas vale 0 y cae
+// arriba; su tarjeta lo dice con todas sus letras.
+const clientesPorAvance = [...lista].sort((a, b) => avanceDe(a.id).porcentaje - avanceDe(b.id).porcentaje);
+
+// Las cuatro cifras de arriba (diseño §2).
+//
+// «Clientes activos» no sale de una columna: no existe `clients.activo`. Es el
+// cliente que tiene trabajo por delante — al menos una etapa contratada y
+// todavía sin aprobar, que es justo lo que señala `pasoActual`. Uno con todo
+// aprobado ya no pide atención, y uno sin nada contratado tampoco.
+//
+// El promedio se saca solo entre los que tienen etapas contratadas: contar a
+// los demás como 0% hundiría la cifra con clientes que ni siquiera empezaron.
+const conEtapas = lista.filter((c) => avanceDe(c.id).pasos.some((p) => p.contratada));
+const clientesActivos = conEtapas.filter((c) => avanceDe(c.id).pasoActual !== null).length;
+const avancePromedio = conEtapas.length === 0
+  ? 0
+  : Math.round(conEtapas.reduce((s, c) => s + avanceDe(c.id).porcentaje, 0) / conEtapas.length);
+
+const ahora = new Date();
+const gastoMes = gastoDelMes(jobs, ahora);
 const resumen = resumirPorCliente(jobs);
 const porId = new Map(lista.map((c) => [c.id, c]));
 const activos = jobs.filter((j) => j.estado === 'encolado' || j.estado === 'corriendo');
 
 const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
+
+// Nombre de pila; si no lo hay, `nombreVisible` cae en el correo (diseño §2).
+const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
 ---
 
 <Base titulo="Inicio" activo="inicio">
-  <p class="eyebrow">Hola</p>
-  <h1 class="display">Tu estudio hoy</h1>
+  <h1 class="display">Hola, {saludo}</h1>
+  <p class="sub">{fechaLarga(ahora)}</p>
 
   <button type="button" class="buscador-disparador grande" data-abrir-paleta>
     <Icono nombre="buscar" /><span>Busca un cliente por nombre, giro o ciudad…</span>
   </button>
 
   <section class="indicadores" aria-label="Indicadores">
-    <div class="indicador rosa"><Icono nombre="clientes" /><span class="valor cifra">{ind.clientes}</span><span class="nombre">Clientes</span></div>
-    <div class="indicador azul"><Icono nombre="reloj" /><span class="valor cifra">{ind.enCurso}</span><span class="nombre">En curso</span></div>
-    <div class="indicador verde"><Icono nombre="entregables" /><span class="valor cifra">{ind.entregables}</span><span class="nombre">Entregables</span></div>
-    <div class="indicador amarillo"><Icono nombre="dinero" /><span class="valor cifra">{dinero(ind.gastoMes)}</span><span class="nombre">Gasto del mes</span></div>
+    <div class="indicador rosa"><Icono nombre="clientes" /><span class="valor cifra">{clientesActivos}</span><span class="nombre">Clientes activos</span></div>
+    <div class="indicador azul"><Icono nombre="bandeja" /><span class="valor cifra">{pendientes.total}</span><span class="nombre">Esperan por ti</span></div>
+    <div class="indicador verde"><Icono nombre="grafica" /><span class="valor cifra">{avancePromedio}%</span><span class="nombre">Avance promedio</span></div>
+    <div class="indicador amarillo"><Icono nombre="dinero" /><span class="valor cifra">{dinero(gastoMes)}</span><span class="nombre">Gasto del mes</span></div>
+  </section>
+
+  <section class="seccion">
+    <div class="seccion-cabeza">
+      <h2>Te toca a ti</h2>
+      {pendientes.total > pendientesMostrados && (
+        <a href="/pendientes">Ver los {pendientes.total} pendientes</a>
+      )}
+    </div>
+    {pendientesMostrados === 0 ? (
+      <div class="tarjeta vacio">
+        <Icono nombre="check" />
+        <strong>Nada espera por ti</strong>
+        {usuario.rol === 'admin'
+          ? 'Aparece aquí en cuanto alguien solicite tu autorización.'
+          : 'Aparece aquí en cuanto te pidan cambios o un cliente deje un comentario.'}
+      </div>
+    ) : (
+      <div class="tarjeta">
+        <ul class="lista">
+          {pendientes.etapas.map((e) => (
+            <li class="renglon">
+              <div class="cuerpo">
+                <strong>{e.cliente}</strong>
+                <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · {ETIQUETA_MOTIVO[e.motivo]} · desde {fechaCorta(e.actualizadoEn)}</p>
+              </div>
+              <a href={enlacePendiente(e)} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
+            </li>
+          ))}
+          {pendientes.comentarios.map((c) => (
+            <li class="renglon">
+              <div class="cuerpo">
+                <strong>{c.cliente}</strong>
+                <p class="secundario">{NOMBRE_ETAPA[c.etapa]} · Comentario sin atender · {fechaCorta(c.creadoEn)}</p>
+                <p class="secundario comentario-texto">{c.texto}</p>
+              </div>
+              <a href={`/clientes/${c.clientId}`} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+  </section>
+
+  <section class="seccion">
+    <div class="seccion-cabeza">
+      <h2>Avance de los clientes</h2>
+      {lista.length > 0 && <a href="/clientes">Ver todos</a>}
+    </div>
+    {lista.length === 0 ? (
+      <div class="tarjeta vacio">
+        <Icono nombre="clientes" />
+        <strong>Sin clientes todavía</strong>
+        Da de alta el primero para poder lanzar una investigación.
+        <div><a href="/clientes/nuevo" class="btn">Registra tu primer cliente</a></div>
+      </div>
+    ) : (
+      <div class="rejilla tres">
+        {clientesPorAvance.map((c) => (
+          <TarjetaCliente cliente={c} resumen={resumenDe(resumen, c.id)} avance={avanceDe(c.id)} />
+        ))}
+      </div>
+    )}
   </section>
 
   {activos.length > 0 && (
@@ -75,25 +187,6 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
     </section>
   )}
 
-  <section class="seccion">
-    <div class="seccion-cabeza">
-      <h2>Clientes recientes</h2>
-      {lista.length > 0 && <a href="/clientes">Ver todos</a>}
-    </div>
-    {lista.length === 0 ? (
-      <div class="tarjeta vacio">
-        <Icono nombre="clientes" />
-        <strong>Sin clientes todavía</strong>
-        Da de alta el primero para poder lanzar una investigación.
-        <div><a href="/clientes/nuevo" class="btn">Registra tu primer cliente</a></div>
-      </div>
-    ) : (
-      <div class="rejilla tres">
-        {lista.slice(0, 6).map((c) => <TarjetaCliente cliente={c} resumen={resumenDe(resumen, c.id)} />)}
-      </div>
-    )}
-  </section>
-
   <form method="POST" action="/api/logout" class="salir-movil">
     <button type="submit" class="btn fantasma ancho-total">Salir</button>
   </form>
@@ -102,4 +195,9 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
 <style>
   .salir-movil { margin-top: 40px; }
   @media (min-width: 900px) { .salir-movil { display: none; } }
+
+  /* El texto del comentario es libre y puede ser un párrafo entero: aquí se
+     recorta a un renglón para que un solo pendiente no empuje al resto fuera
+     de la pantalla. Completo se lee en /pendientes. */
+  .comentario-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

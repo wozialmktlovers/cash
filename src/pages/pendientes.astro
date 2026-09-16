@@ -1,8 +1,9 @@
 ---
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
-import { NOMBRE_ETAPA, type TipoDocumento } from '@/flujo/reglas';
+import { NOMBRE_ETAPA } from '@/flujo/reglas';
 import { listarPendientes } from '@/lib/pendientes';
+import { enlacePendiente } from '@/lib/ui/enlaces';
 import { fechaCorta } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
@@ -11,15 +12,6 @@ const usuario = Astro.locals.usuario;
 // esta página se renderice (spec §6). Esta guarda es solo por si algún día
 // cambia esa regla y esta página queda huérfana de protección.
 if (usuario.rol === 'cliente') return Astro.redirect('/portal');
-
-function enlaceDocumento(tipo: TipoDocumento | null, documentoId: string | null, clientId: string): string {
-  if (tipo && documentoId) {
-    if (tipo === 'growth') return `/growth/${documentoId}`;
-    if (tipo === 'pilares') return `/pilares/${documentoId}`;
-    return `/resultados/${documentoId}`;
-  }
-  return `/clientes/${clientId}`;
-}
 
 // Fix menores, punto 2: fechas del Studio en hora de México, igual que el
 // portal (helper centralizado en src/lib/ui/fecha.ts).
@@ -87,7 +79,7 @@ const conteoPorEtapa = new Map<string, number>(pendientes.etapas.map((e) => [e.i
                   <td>{NOMBRE_ETAPA[e.etapa]}</td>
                   <td>{fecha(e.actualizadoEn)}</td>
                   <td>{e.operador ?? 'Sin asignar'}</td>
-                  <td><a class="btn fantasma chico" href={enlaceDocumento(e.documentoTipo, e.documentoId, e.clientId)}><Icono nombre="abrir" />Ver</a></td>
+                  <td><a class="btn fantasma chico" href={enlacePendiente(e)}><Icono nombre="abrir" />Ver</a></td>
                 </tr>
               ))}
             </tbody>
@@ -114,7 +106,7 @@ const conteoPorEtapa = new Map<string, number>(pendientes.etapas.map((e) => [e.i
                       <strong>{e.cliente}</strong>
                       <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · desde {fecha(e.actualizadoEn)}{n > 0 ? ` · ${n} ${n === 1 ? 'comentario abierto' : 'comentarios abiertos'}` : ''}</p>
                     </div>
-                    <a href={enlaceDocumento(e.documentoTipo, e.documentoId, e.clientId)} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
+                    <a href={enlacePendiente(e)} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
                   </li>
                 );
               })}

@@ -18,14 +18,16 @@ import { investigacionUtil } from '@/lib/precheck';
 import { clienteOperable, clienteVisible, esUuid } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
 import { nombreVisible } from '@/lib/usuarios';
+import { enlaceDocumento } from '@/lib/ui/enlaces';
 import { avisarJob, avisarTransicion, avisarComentarioCliente, avisarRespuestaCliente, avisarRespuestaDelCliente, type EventoAviso } from './avisos';
 
-/** Ruta interna para ver el documento vigente de una etapa (spec §3, Avisos: «enlace»). Exportada: la ficha (B5) la usa para el botón «Ver documento». */
-export function enlaceDocumento(tipo: TipoDocumento, documentoId: string): string {
-  if (tipo === 'growth') return `/growth/${documentoId}`;
-  if (tipo === 'pilares') return `/pilares/${documentoId}`;
-  return `/resultados/${documentoId}`;
-}
+/**
+ * Ruta interna para ver el documento vigente de una etapa (spec §3, Avisos:
+ * «enlace»). Se reexporta, no se redefine: la tabla de rutas vive en
+ * `@/lib/ui/enlaces`, que además sirve a las pantallas de pendientes. La
+ * ficha (B5) la sigue importando desde aquí para el botón «Ver documento».
+ */
+export { enlaceDocumento };
 
 /** Evento de aviso de cada acción que lo dispara; `iniciar` no avisa a nadie. */
 const EVENTO_POR_ACCION: Partial<Record<Accion, EventoAviso>> = {

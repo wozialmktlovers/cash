@@ -10,15 +10,26 @@ export function claveMes(d: Date, zona = 'America/Mexico_City'): string {
   return `${valor('year')}-${valor('month')}`;
 }
 
-export function indicadores(d: { clientes: number; jobs: JobIndicador[]; entregables: number; ahora: Date }) {
-  const mes = claveMes(d.ahora);
-  const gasto = d.jobs
+/**
+ * Lo gastado en jobs del mes en curso, en dólares y a dos decimales.
+ *
+ * Sale de `indicadores` porque el Inicio cambió sus cuatro cifras (diseño §2)
+ * y de las de aquí solo conserva esta: pedirle el paquete completo lo obligaba
+ * a seguir contando entregables con tres `count` que ya nadie enseña.
+ */
+export function gastoDelMes(jobs: JobIndicador[], ahora: Date): number {
+  const mes = claveMes(ahora);
+  const gasto = jobs
     .filter((j) => claveMes(j.createdAt) === mes)
     .reduce((s, j) => s + Number(j.costoUsd), 0);
+  return Math.round(gasto * 100) / 100;
+}
+
+export function indicadores(d: { clientes: number; jobs: JobIndicador[]; entregables: number; ahora: Date }) {
   return {
     clientes: d.clientes,
     enCurso: d.jobs.filter((j) => j.estado === 'encolado' || j.estado === 'corriendo').length,
     entregables: d.entregables,
-    gastoMes: Math.round(gasto * 100) / 100,
+    gastoMes: gastoDelMes(d.jobs, d.ahora),
   };
 }
