@@ -162,7 +162,14 @@ function instanteMX(anio: number, mes: number, dia: number, h: number, m: number
  *
  * `diasHabiles = 0` vence al cerrar el mismo día en que se comparte.
  */
-export function limiteRevision(compartidoEn: Date, diasHabiles = 2): Date {
+/**
+ * Días hábiles de revisión cuando el cliente no tiene los suyos (diseño §6).
+ * `clients.dias_revision` es nulo por omisión justamente para que el valor
+ * viva aquí y cambiarlo no obligue a migrar la base.
+ */
+export const DIAS_REVISION_POR_OMISION = 2;
+
+export function limiteRevision(compartidoEn: Date, diasHabiles = DIAS_REVISION_POR_OMISION): Date {
   if (Number.isNaN(compartidoEn.getTime())) throw new RangeError('La fecha de compartido no es válida.');
   if (!Number.isInteger(diasHabiles) || diasHabiles < 0) {
     throw new RangeError('Los días hábiles deben ser un entero no negativo.');

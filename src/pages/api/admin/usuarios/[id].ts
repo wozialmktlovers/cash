@@ -3,6 +3,7 @@ import { and, count, eq } from 'drizzle-orm';
 import { db, users, sessions } from '@/db';
 import { validarCambioUsuario, validarDatosUsuario, type DatosUsuario } from '@/lib/usuarios';
 import type { Rol } from '@/lib/permisos';
+import { violaRestriccionUnica } from '@/lib/unicidad';
 import { esUuid } from '@/lib/visibilidad';
 
 const json = (cuerpo: unknown, status = 200) =>
@@ -19,24 +20,12 @@ const RESTRICCION_CORREO = 'users_email_unique';
  * El 409 se decide con el error de Postgres y no con un `SELECT` previo: entre
  * la consulta y la escritura cabe otra petición con el mismo correo, así que la
  * restricción única de la base es la única comprobación libre de carreras.
- *
- * postgres.js lanza un error con los campos que mandó el servidor (`code`,
- * `constraint_name`) y Drizzle lo envuelve dejando el original en `cause`, de
- * modo que hay que recorrer la cadena. Además del código 23505 se exige que se
- * nombre la restricción del correo: cualquier otra unicidad se relanza, que es
- * lo prudente —no vaya a ser que un fallo distinto se disfrace de correo
- * ocupado y el admin corrija lo que no está mal.
+ * Cómo se reconoce ese error —recorrer la cadena de `cause` que arma Drizzle y
+ * exigir que se nombre esta restricción y no otra— vive en `violaRestriccionUnica`,
+ * que comparte con la API de lotes y piezas.
  */
 function esCorreoOcupado(error: unknown): boolean {
-  for (let actual: unknown = error, saltos = 0; actual && saltos < 5; saltos++) {
-    const e = actual as { code?: unknown; constraint_name?: unknown; message?: unknown; cause?: unknown };
-    const nombraLaRestriccion =
-      e.constraint_name === RESTRICCION_CORREO ||
-      (typeof e.message === 'string' && e.message.includes(RESTRICCION_CORREO));
-    if (e.code === '23505' && nombraLaRestriccion) return true;
-    actual = e.cause;
-  }
-  return false;
+  return violaRestriccionUnica(error, RESTRICCION_CORREO);
 }
 
 // La ruta ya es admin-only por el middleware (/api/admin/*), y aun así se

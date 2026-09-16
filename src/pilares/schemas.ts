@@ -78,8 +78,20 @@ export type PilarGenerado = { subcategorias: { nombre: string; temas: TemaGenera
 
 export type Tema = TemaGenerado & { id: string };
 
-// El número de tema va de 01 a 20: nada de 00 ni de 21 en adelante.
-const reemplazoTemaSchema = z.object({ id: z.string().regex(/^P[1-5]-S[1-3]-(0[1-9]|1\d|20)$/), ...temaGeneradoSchema.shape });
+/**
+ * Forma del id de un tema del mapa, tal como lo arma la numeración de
+ * `src/pilares/revision.ts`: `P{pilar}-S{subtema}-{nn}`. El número de tema va
+ * de 01 a 20: nada de 00 ni de 21 en adelante.
+ *
+ * Se exporta porque fuera de pilares también hace falta: una pieza de
+ * contenido guarda el tema del que salió en `contenido_piezas.tema_id`, sin
+ * clave foránea (ver el comentario de esa columna), así que lo único que se
+ * puede comprobar al recibirlo es la forma — y conviene que sea esta misma y
+ * no una copia que se quede atrás.
+ */
+export const ID_TEMA = /^P[1-5]-S[1-3]-(0[1-9]|1\d|20)$/;
+
+const reemplazoTemaSchema = z.object({ id: z.string().regex(ID_TEMA), ...temaGeneradoSchema.shape });
 
 /**
  * A diferencia de los esquemas de arriba, este es tolerante tema por tema:

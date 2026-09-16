@@ -22,6 +22,22 @@ describe('rutaPermitida', () => {
     expect(rutaPermitida('cliente', '/api/clientes')).toBe('prohibido');
     expect(rutaPermitida('cliente', '/portalx')).toBe('redirigir-portal');
   });
+  // La API de contenido (lotes y piezas, B1) es trabajo interno: la arma el
+  // operador y el cliente solo ve el resultado desde su portal (fase C). No
+  // está en RUTAS_CLIENTE, así que el middleware la corta con 403 antes de
+  // llegar a la ruta. Esta prueba fija ese candado: si alguien añade
+  // `/api/contenido` a las rutas del cliente, se entera aquí.
+  it('el rol cliente no entra a la API de contenido', () => {
+    for (const r of ['/api/contenido/lotes', '/api/contenido/lotes/abc/piezas', '/api/contenido/piezas/abc']) {
+      expect(rutaPermitida('cliente', r), r).toBe('prohibido');
+    }
+    // El personal sí, y la visibilidad por cliente la decide cada ruta.
+    for (const r of ['/api/contenido/lotes', '/api/contenido/piezas/abc']) {
+      expect(rutaPermitida('admin', r), r).toBe('ok');
+      expect(rutaPermitida('operador', r), r).toBe('ok');
+    }
+  });
+
   it('/api/perfil lo abren los tres roles', () => {
     expect(rutaPermitida('admin', '/api/perfil')).toBe('ok');
     expect(rutaPermitida('operador', '/api/perfil')).toBe('ok');

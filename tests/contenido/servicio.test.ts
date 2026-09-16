@@ -13,23 +13,36 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
  */
 const espia = vi.hoisted(() => ({
   lotes: [] as Record<string, unknown>[],
+  piezas: [] as Record<string, unknown>[],
   cambios: [] as Record<string, unknown>[],
+  cambiosLote: [] as Record<string, unknown>[],
   insertados: [] as Record<string, unknown>[],
 }));
 
 vi.mock('@/db', async (importarReal) => {
   const real = await importarReal<typeof import('@/db')>();
-  const lectura = {
-    from: () => lectura,
-    where: () => lectura,
-    orderBy: async () => espia.lotes,
+  // La consulta es «thenable» como la de Drizzle: se puede encadenar y se
+  // puede esperar en cualquier punto. `loteActivo` termina en `.orderBy()` y
+  // `refrescarLote` en `.where()`, así que las dos formas tienen que servir.
+  // Qué devuelve depende de si el `select` pidió columnas: los lotes se traen
+  // enteros (`select()`), las piezas por columnas.
+  let piezasPedidas = false;
+  const consulta = {
+    from: () => consulta,
+    where: () => consulta,
+    orderBy: () => consulta,
+    then: (resolver: (v: unknown) => unknown, rechazar: (e: unknown) => unknown) =>
+      Promise.resolve(piezasPedidas ? espia.piezas : espia.lotes).then(resolver, rechazar),
   };
-  const escritura = {
-    set(cambio: Record<string, unknown>) {
-      espia.cambios.push(cambio);
-      return escritura;
-    },
-    async where() {},
+  const escritura = (destino: Record<string, unknown>[]) => {
+    const w = {
+      set(cambio: Record<string, unknown>) {
+        destino.push(cambio);
+        return w;
+      },
+      async where() {},
+    };
+    return w;
   };
   const alta = {
     values(fila: Record<string, unknown>) {
@@ -38,10 +51,20 @@ vi.mock('@/db', async (importarReal) => {
     },
     async onConflictDoNothing() {},
   };
-  return { ...real, db: { select: () => lectura, update: () => escritura, insert: () => alta } };
+  return {
+    ...real,
+    db: {
+      select: (columnas?: unknown) => {
+        piezasPedidas = columnas !== undefined;
+        return consulta;
+      },
+      update: (tabla: unknown) => escritura(tabla === real.contenidoLotes ? espia.cambiosLote : espia.cambios),
+      insert: () => alta,
+    },
+  };
 });
 
-import { elegirLoteActivo, loteActivo, sincronizarEtapa } from '@/contenido/servicio';
+import { elegirLoteActivo, loteActivo, refrescarLote, sincronizarEtapa } from '@/contenido/servicio';
 
 const CLIENTE = '00000000-0000-4000-8000-0000000000c1';
 const lote = (periodo: string, estado: string) => ({ periodo, estado });
@@ -51,7 +74,9 @@ beforeEach(() => {
   urlPrevia = process.env.DATABASE_URL;
   delete process.env.DATABASE_URL;
   espia.lotes = [];
+  espia.piezas = [];
   espia.cambios = [];
+  espia.cambiosLote = [];
   espia.insertados = [];
 });
 afterEach(() => { if (urlPrevia !== undefined) process.env.DATABASE_URL = urlPrevia; });
@@ -152,5 +177,65 @@ describe('sincronizarEtapa', () => {
       { id: 'l2', periodo: '2026-10', estado: 'en_proceso' },
     ];
     expect(await sincronizarEtapa(CLIENTE)).toBe('en_proceso');
+  });
+});
+
+/**
+ * `refrescarLote` (B1): qué queda del lote después de dar de alta o borrar una
+ * pieza. El caso que más importa es el que el plan dejó abierto —borrar la
+ * última pieza— y por eso está probado en los dos bordes.
+ */
+describe('refrescarLote', () => {
+  const sinCompartir = { id: 'l1', clientId: CLIENTE, estado: 'en_proceso' as const, compartidoEn: null };
+  const compartido = { id: 'l1', clientId: CLIENTE, estado: 'en_revision' as const, compartidoEn: new Date('2026-09-10T18:00:00Z') };
+  const pieza = (estadoCliente: string) => ({ formato: 'post', estadoCliente });
+
+  it('el lote sin compartir no se deduce de sus piezas: se queda como está', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_proceso' }];
+    espia.piezas = [pieza('pendiente'), pieza('pendiente')];
+    expect(await refrescarLote(sinCompartir)).toBe('en_proceso');
+    expect(espia.cambiosLote).toEqual([]);
+  });
+
+  it('borrar la última pieza de un lote sin compartir lo deja en_proceso', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_proceso' }];
+    espia.piezas = [];
+    expect(await refrescarLote(sinCompartir)).toBe('en_proceso');
+    expect(espia.cambiosLote).toEqual([]);
+  });
+
+  it('borrar la última pieza de un lote compartido lo deja en_revision: vacío no es aprobado', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'aprobada' }];
+    espia.piezas = [];
+    expect(await refrescarLote({ ...compartido, estado: 'aprobada' })).toBe('en_revision');
+    expect(espia.cambiosLote[0]?.estado).toBe('en_revision');
+  });
+
+  it('una pieza nueva en un lote aprobado lo devuelve a revisión', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'aprobada' }];
+    espia.piezas = [pieza('aprobada'), pieza('pendiente')];
+    expect(await refrescarLote({ ...compartido, estado: 'aprobada' })).toBe('en_revision');
+    expect(espia.cambiosLote[0]?.estado).toBe('en_revision');
+  });
+
+  it('quitar la pieza con cambios puede completar el aprobado del mes', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'con_cambios' }];
+    espia.piezas = [pieza('aprobada'), pieza('aprobada')];
+    expect(await refrescarLote({ ...compartido, estado: 'con_cambios' })).toBe('aprobada');
+    expect(espia.cambiosLote[0]?.estado).toBe('aprobada');
+  });
+
+  it('si el estado no se mueve, no escribe el lote', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];
+    espia.piezas = [pieza('pendiente')];
+    expect(await refrescarLote(compartido)).toBe('en_revision');
+    expect(espia.cambiosLote).toEqual([]);
+  });
+
+  it('siempre deja la etapa al día, aunque el lote no se haya movido', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];
+    espia.piezas = [pieza('pendiente')];
+    await refrescarLote(compartido);
+    expect(espia.cambios[0]?.estado).toBe('en_revision');
   });
 });

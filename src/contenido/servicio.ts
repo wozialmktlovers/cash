@@ -9,8 +9,9 @@
 // ACTIVO, y quien lo mantiene al día es `sincronizarEtapa`.
 
 import { and, desc, eq } from 'drizzle-orm';
-import { db, clienteEtapas, contenidoLotes } from '@/db';
+import { db, clienteEtapas, contenidoLotes, contenidoPiezas } from '@/db';
 import type { Estado } from '@/flujo/reglas';
+import { estadoLoteSegunPiezas } from './reglas';
 
 /** Tipo del `tx` que entrega `db.transaction`; mismo truco que en `src/flujo/servicio.ts` para aceptar los dos ejecutores. */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -117,4 +118,60 @@ export async function sincronizarEtapa(clientId: string, ejecutor: Ejecutor = db
     .where(and(eq(clienteEtapas.clientId, clientId), eq(clienteEtapas.etapa, 'desarrollo_mensual')));
 
   return lote.estado;
+}
+
+/**
+ * Lo mínimo que hace falta de un lote para refrescarlo tras tocar sus piezas.
+ */
+export type LoteRefrescable = { id: string; clientId: string; estado: Estado; compartidoEn: Date | null };
+
+/**
+ * Deja el lote y la etapa al día después de dar de alta o borrar una pieza
+ * (B1). Devuelve el estado en que queda el lote.
+ *
+ * **Solo se deduce de las piezas un lote ya compartido.** Es el punto fino de
+ * esta función, así que queda escrito:
+ *
+ * - Mientras el lote se arma (`compartido_en` nulo, estado `en_proceso`), las
+ *   piezas van y vienen y ninguna de esas idas y venidas es una opinión del
+ *   cliente. Aplicarles `estadoLoteSegunPiezas` mandaría el lote a
+ *   `en_revision` —«esperando al cliente»— por el mero hecho de tener piezas
+ *   pendientes, y la ficha anunciaría una revisión que nadie pidió. Así que se
+ *   queda como está.
+ * - Ya compartido, sí: la pieza nueva entra `pendiente` y devuelve el lote a
+ *   `en_revision` aunque estuviera `aprobada`, que es lo correcto —hay
+ *   contenido que el cliente no ha visto—, y la pieza borrada puede completar
+ *   el `aprobada` que faltaba.
+ *
+ * **Borrar la última pieza** cae de ahí sin caso especial: un lote sin
+ * compartir se queda `en_proceso` (existe, se está armando, y un lote vacío es
+ * trabajo empezado, no aprobado); uno ya compartido queda `en_revision`, que es
+ * lo que `estadoLoteSegunPiezas` contesta para la lista vacía, con el mismo
+ * argumento: vacío no es aprobado. En ningún caso el lote se borra solo.
+ *
+ * `PATCH` de una pieza no pasa por aquí: los campos que edita el operador
+ * —planeación, copy, cta, hashtags, arte— no entran en `estadoLoteSegunPiezas`,
+ * que solo mira `estado_cliente`, así que no hay nada que recalcular.
+ */
+export async function refrescarLote(lote: LoteRefrescable, ejecutor: Ejecutor = db): Promise<Estado> {
+  let estado = lote.estado;
+
+  if (lote.compartidoEn !== null) {
+    const piezas = await ejecutor
+      .select({ formato: contenidoPiezas.formato, estadoCliente: contenidoPiezas.estadoCliente })
+      .from(contenidoPiezas)
+      .where(eq(contenidoPiezas.loteId, lote.id));
+    const deducido = estadoLoteSegunPiezas(piezas);
+    if (deducido !== estado) {
+      await ejecutor.update(contenidoLotes)
+        .set({ estado: deducido, actualizadoEn: new Date() })
+        .where(eq(contenidoLotes.id, lote.id));
+      estado = deducido;
+    }
+  }
+
+  // Siempre, aunque el estado del lote no se haya movido: el lote activo del
+  // cliente pudo cambiar por otra vía y `sincronizarEtapa` es barata.
+  await sincronizarEtapa(lote.clientId, ejecutor);
+  return estado;
 }

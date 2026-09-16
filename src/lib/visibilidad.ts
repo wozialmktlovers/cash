@@ -1,9 +1,11 @@
 import { eq } from 'drizzle-orm';
-import { db, clients, researchJobs, researchResults, growthResults, pilaresResults } from '@/db';
+import { db, clients, contenidoLotes, contenidoPiezas, researchJobs, researchResults, growthResults, pilaresResults } from '@/db';
 import { puedeVerCliente, puedeOperarCliente, type UsuarioSesion } from './permisos';
 
 export type Cliente = typeof clients.$inferSelect;
 export type Job = typeof researchJobs.$inferSelect;
+export type Lote = typeof contenidoLotes.$inferSelect;
+export type Pieza = typeof contenidoPiezas.$inferSelect;
 export type DocumentoTipo = 'research' | 'growth' | 'pilares';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -72,6 +74,54 @@ export async function jobVisible(u: UsuarioSesion, jobId: string): Promise<{ job
     .from(researchJobs)
     .innerJoin(clients, eq(clients.id, researchJobs.clientId))
     .where(eq(researchJobs.id, jobId))
+    .limit(1);
+  if (!fila || !puedeVerCliente(u, fila.cliente)) return null;
+  return fila;
+}
+
+/**
+ * El lote mensual de contenido y su cliente, si `u` puede verlo.
+ *
+ * Mismo molde que `documentoVisible` y `jobVisible`: se resuelve el permiso
+ * por el CLIENTE del lote, en una sola consulta con `innerJoin`, y se contesta
+ * `null` tanto si el id no tiene forma de UUID como si el lote no existe o el
+ * usuario no tiene nada que hacer ahí. Quien llama traduce ese `null` a un 404
+ * y nunca a un 403: un operador no debe poder averiguar, por el código de
+ * respuesta, qué lotes existen en clientes que no son suyos.
+ *
+ * Devuelve VISIBLE, no operable. El filtro de `puedeOperarCliente` lo pone la
+ * ruta —igual que en `PATCH /api/pilares/[id]/temas/[temaId]`—, porque el
+ * portal del cliente (fase C) va a necesitar ver este mismo lote sin poder
+ * editarlo.
+ */
+export async function loteVisible(u: UsuarioSesion, loteId: string): Promise<{ lote: Lote; cliente: Cliente } | null> {
+  if (!esUuid(loteId)) return null;
+  const [fila] = await db
+    .select({ lote: contenidoLotes, cliente: clients })
+    .from(contenidoLotes)
+    .innerJoin(clients, eq(clients.id, contenidoLotes.clientId))
+    .where(eq(contenidoLotes.id, loteId))
+    .limit(1);
+  if (!fila || !puedeVerCliente(u, fila.cliente)) return null;
+  return fila;
+}
+
+/**
+ * Una pieza, su lote y su cliente, si `u` puede verla. Mismo criterio que
+ * `loteVisible`; el lote viene de regreso porque toda operación sobre una
+ * pieza necesita después recalcular el estado de su lote.
+ */
+export async function piezaVisible(
+  u: UsuarioSesion,
+  piezaId: string,
+): Promise<{ pieza: Pieza; lote: Lote; cliente: Cliente } | null> {
+  if (!esUuid(piezaId)) return null;
+  const [fila] = await db
+    .select({ pieza: contenidoPiezas, lote: contenidoLotes, cliente: clients })
+    .from(contenidoPiezas)
+    .innerJoin(contenidoLotes, eq(contenidoLotes.id, contenidoPiezas.loteId))
+    .innerJoin(clients, eq(clients.id, contenidoLotes.clientId))
+    .where(eq(contenidoPiezas.id, piezaId))
     .limit(1);
   if (!fila || !puedeVerCliente(u, fila.cliente)) return null;
   return fila;
