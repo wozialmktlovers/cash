@@ -3,6 +3,20 @@ import { resolverDocumentoPublico } from '@/lib/documento-publico';
 
 const { slug, token } = Astro.params;
 
+// La barra final cambia cómo resuelve el navegador las rutas RELATIVAS de la
+// página, y el entregable del mes pide sus artes justo así
+// (`{token}/archivo/{fileId}`, ver `baseArchivosPublica`): servido en
+// `/p/negocio/TOKEN/`, cada imagen se buscaría en `/p/negocio/TOKEN/TOKEN/...`
+// y el mes entero saldría sin artes. Se redirige a la forma sin barra antes de
+// mirar nada más.
+//
+// Se recorta la ruta tal como llegó (`Astro.url.pathname`, todavía codificada)
+// en vez de rearmarla con `slug` y `token`, que Astro entrega ya decodificados:
+// un token con un salto de línea codificado partiría la cabecera `Location`.
+if (Astro.url.pathname.endsWith('/')) {
+  return Astro.redirect(Astro.url.pathname.replace(/\/+$/, ''), 301);
+}
+
 const r = await resolverDocumentoPublico(token!);
 if (r.tipo === 'no-encontrado') return new Response('No encontrado', { status: 404 });
 

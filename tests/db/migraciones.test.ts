@@ -292,3 +292,50 @@ describe('0008: el brief visual de la pieza', () => {
     }
   });
 });
+
+describe('0009: el lote tiene su propio tipo de enlace', () => {
+  const carpeta = path.resolve(__dirname, '../../drizzle');
+  const migraciones = () => leerMigraciones(carpeta) as Array<{ tag: string; sql: string[]; folderMillis: number }>;
+  const m0009 = () => migraciones().find((x) => x.tag === '0009_documento_tipo_contenido')!;
+
+  it('añade «contenido» a documento_tipo y no hace nada más', () => {
+    // La trampa que esta migración tenía que esquivar es la 55P04 de Postgres:
+    // un valor añadido con `ALTER TYPE ... ADD VALUE` no se puede USAR hasta
+    // que su transacción confirma. La forma de no caer en ella es no usarlo:
+    // esta migración solo lo añade, y quien lo escribe es el código en tiempo
+    // de ejecución, mucho después del COMMIT.
+    const trozos: string[] = m0009().sql.map((t) => t.trim()).filter(Boolean);
+    expect(trozos).toEqual(['ALTER TYPE "public"."documento_tipo" ADD VALUE \'contenido\';']);
+  });
+
+  it('y aunque se aplicara junto a migraciones anteriores, cada una va en su propia transacción', () => {
+    // La otra mitad de la red: el migrador. Una base atrasada que aplica 0009 y
+    // una hipotética 0010 que usara el valor nuevo no revienta, porque 0009 ya
+    // confirmó cuando 0010 empieza. Se comprueba con las migraciones REALES de
+    // la carpeta, no con un doble, para que valga sobre lo que se despliega.
+    const reales = migraciones();
+    const f = sqlFalso(null);
+    return aplicarMigraciones(f.sql, reales).then(() => {
+      expect(f.transacciones).toBe(reales.length);
+
+      const tx = f.consultas.find((c) => c.texto.includes("ADD VALUE 'contenido'"))?.tx;
+      expect(typeof tx).toBe('number');
+
+      // En esa transacción no corre nada más que el ADD VALUE y el registro de
+      // la propia migración: ni un UPDATE, ni un DEFAULT, ni un CHECK que
+      // mencione el valor recién añadido, que es lo que dispara el 55P04.
+      const acompanantes = f.consultas.filter((c) => c.tx === tx).map((c) => c.texto.trim());
+      expect(acompanantes).toHaveLength(2);
+      expect(acompanantes[0]).toContain("ADD VALUE 'contenido'");
+      expect(acompanantes[1]).toContain('INSERT INTO "drizzle"."__drizzle_migrations"');
+
+      // Y la transacción se confirmó, que es lo que libera el valor nuevo.
+      expect(f.confirmadas).toContain(tx);
+    });
+  });
+
+  it('el enum de la migración es el que declara el esquema (sin deriva con drizzle-kit)', () => {
+    const snapshot = JSON.parse(fs.readFileSync(path.join(carpeta, 'meta', '0009_snapshot.json'), 'utf8'));
+    expect(snapshot.enums['public.documento_tipo'].values).toEqual(['research', 'growth', 'pilares', 'contenido']);
+  });
+});

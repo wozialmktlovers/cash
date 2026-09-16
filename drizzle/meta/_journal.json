@@ -64,6 +64,13 @@
       "when": 1789591777810,
       "tag": "0008_brief_visual_pieza",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1789592964200,
+      "tag": "0009_documento_tipo_contenido",
+      "breakpoints": true
     }
   ]
 }

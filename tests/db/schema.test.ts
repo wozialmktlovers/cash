@@ -45,6 +45,12 @@ describe('esquema del Mapa de Pilares', () => {
     expect(schema.documentoTipo.enumValues).toContain('pilares');
   });
 
+  // El entregable del mes (C1) necesita su propio tipo de enlace: sin él,
+  // `share_links` no podía apuntar a un lote y el mes no se podía compartir.
+  it('documento_tipo admite contenido, para el enlace del lote mensual', () => {
+    expect(schema.documentoTipo.enumValues).toEqual(['research', 'growth', 'pilares', 'contenido']);
+  });
+
   it('existen pilares_results y pilares_temas', async () => {
     const { pilaresResults, pilaresTemas } = await import('@/db/schema');
     expect(pilaresResults).toBeDefined();

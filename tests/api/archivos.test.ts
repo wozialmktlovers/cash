@@ -25,7 +25,12 @@ const ids = vi.hoisted(() => ({
   ARTE_AJENO: '00000000-0000-4000-8000-0000000000a3',
   DOCUMENTO: '00000000-0000-4000-8000-0000000000d1',
   LOTE: '00000000-0000-4000-8000-0000000000e1',
+  LOTE_OTRO_MES: '00000000-0000-4000-8000-0000000000e2',
+  LOTE_AJENO: '00000000-0000-4000-8000-0000000000e3',
   PIEZA: '00000000-0000-4000-8000-0000000000f1',
+  PIEZA_OTRO_MES: '00000000-0000-4000-8000-0000000000f2',
+  PIEZA_AJENA: '00000000-0000-4000-8000-0000000000f3',
+  ARTE_OTRO_MES: '00000000-0000-4000-8000-0000000000a4',
 }));
 
 const espia = vi.hoisted(() => ({
@@ -68,16 +73,14 @@ vi.mock('@/db', async (importarReal) => {
   const filtrar = (tabla: string, valores: unknown[]) => {
     const filas = espia.datos[tabla] ?? [];
     if (tabla === 'contenidoPiezas') {
-      // Hace de `arte @> '[{"fileId": ...}]'` y del join con los lotes: la
-      // pieza cuenta si su lote es del cliente y su arte trae ese archivo.
+      // Hace de `arte @> '[{"fileId": ...}]'`: la pieza cuenta si es del LOTE
+      // que abre el token y su arte trae ese archivo. El filtro es por lote, no
+      // por cliente (ver `esArteDelLote`, src/lib/documento-publico.ts).
       const json = valores.find((v): v is string => typeof v === 'string' && v.startsWith('['));
       const fileId = json ? (JSON.parse(json)[0] as { fileId: string }).fileId : null;
-      const clientId = valores.find((v) => typeof v === 'string' && v !== json);
-      return filas.filter((p) => {
-        const lote = (espia.datos.contenidoLotes ?? []).find((l) => l.id === p.loteId);
-        return lote?.clientId === clientId
-          && ((p.arte ?? []) as { fileId?: string }[]).some((a) => a.fileId === fileId);
-      });
+      const loteId = valores.find((v) => typeof v === 'string' && v !== json);
+      return filas.filter((p) => p.loteId === loteId
+        && ((p.arte ?? []) as { fileId?: string }[]).some((a) => a.fileId === fileId));
     }
     return filas.filter((f) => valores.every((v) => Object.values(f).includes(v)));
   };
@@ -135,6 +138,10 @@ const usuarioOtroCliente = { ...usuarioCliente, id: '00000000-0000-4000-8000-000
 const TOKEN = 'token-del-entregable';
 const TOKEN_AJENO = 'token-de-otro-cliente';
 const TOKEN_REVOCADO = 'token-ya-revocado';
+/** Otro mes del MISMO cliente: prueba que el filtro es por lote, no por cliente. */
+const TOKEN_OTRO_MES = 'token-del-mes-pasado';
+/** Una investigación del mismo cliente: no incrusta archivos, así que no abre ninguno. */
+const TOKEN_INVESTIGACION = 'token-de-la-investigacion';
 
 /** La base tal como queda después de un mes de trabajo normal. */
 function poblarBase({ nombreArte = 'portada.png', mimeArte = 'image/png' } = {}) {
@@ -145,19 +152,32 @@ function poblarBase({ nombreArte = 'portada.png', mimeArte = 'image/png' } = {})
   espia.datos.clientFiles = [
     { id: ids.ARTE, clientId: ids.CLIENTE, nombreOriginal: nombreArte, mime: mimeArte, ruta: `${ids.CLIENTE}/arte.png` },
     { id: ids.BRIEF, clientId: ids.CLIENTE, nombreOriginal: 'brief del cliente.pdf', mime: 'application/pdf', ruta: `${ids.CLIENTE}/brief.pdf` },
+    { id: ids.ARTE_OTRO_MES, clientId: ids.CLIENTE, nombreOriginal: 'agosto.png', mime: 'image/png', ruta: `${ids.CLIENTE}/agosto.png` },
     { id: ids.ARTE_AJENO, clientId: ids.OTRO_CLIENTE, nombreOriginal: 'ajeno.png', mime: 'image/png', ruta: `${ids.OTRO_CLIENTE}/ajeno.png` },
   ];
+  // El enlace del entregable del mes apunta al LOTE, con su propio tipo de
+  // documento (`contenido`). Es lo que permite que el filtro de artes sea el
+  // lote y no el cliente entero.
   espia.datos.shareLinks = [
-    { token: TOKEN, documentoId: ids.DOCUMENTO, documentoTipo: 'research', revocado: false },
-    { token: TOKEN_AJENO, documentoId: 'd-ajeno', documentoTipo: 'research', revocado: false },
-    { token: TOKEN_REVOCADO, documentoId: ids.DOCUMENTO, documentoTipo: 'research', revocado: true },
+    { token: TOKEN, documentoId: ids.LOTE, documentoTipo: 'contenido', revocado: false },
+    { token: TOKEN_OTRO_MES, documentoId: ids.LOTE_OTRO_MES, documentoTipo: 'contenido', revocado: false },
+    { token: TOKEN_AJENO, documentoId: ids.LOTE_AJENO, documentoTipo: 'contenido', revocado: false },
+    { token: TOKEN_REVOCADO, documentoId: ids.LOTE, documentoTipo: 'contenido', revocado: true },
+    { token: TOKEN_INVESTIGACION, documentoId: ids.DOCUMENTO, documentoTipo: 'research', revocado: false },
   ];
   espia.datos.researchResults = [
     { id: ids.DOCUMENTO, clientId: ids.CLIENTE },
-    { id: 'd-ajeno', clientId: ids.OTRO_CLIENTE },
   ];
-  espia.datos.contenidoLotes = [{ id: ids.LOTE, clientId: ids.CLIENTE }];
-  espia.datos.contenidoPiezas = [{ id: ids.PIEZA, loteId: ids.LOTE, arte: [{ tipo: 'imagen', fileId: ids.ARTE }] }];
+  espia.datos.contenidoLotes = [
+    { id: ids.LOTE, clientId: ids.CLIENTE },
+    { id: ids.LOTE_OTRO_MES, clientId: ids.CLIENTE },
+    { id: ids.LOTE_AJENO, clientId: ids.OTRO_CLIENTE },
+  ];
+  espia.datos.contenidoPiezas = [
+    { id: ids.PIEZA, loteId: ids.LOTE, arte: [{ tipo: 'imagen', fileId: ids.ARTE }] },
+    { id: ids.PIEZA_OTRO_MES, loteId: ids.LOTE_OTRO_MES, arte: [{ tipo: 'imagen', fileId: ids.ARTE_OTRO_MES }] },
+    { id: ids.PIEZA_AJENA, loteId: ids.LOTE_AJENO, arte: [{ tipo: 'imagen', fileId: ids.ARTE_AJENO }] },
+  ];
 }
 
 let urlPrevia: string | undefined;
@@ -355,6 +375,28 @@ describe('GET archivo del enlace público', () => {
   it('pide el archivo con el cliente del documento, no con uno de la URL', async () => {
     await publico(ids.ARTE);
     expect(espia.leidos).toEqual([{ clientId: ids.CLIENTE, ruta: `${ids.CLIENTE}/arte.png` }]);
+  });
+
+  // El filtro es el LOTE del enlace, no el cliente: dos meses del mismo cliente
+  // compartidos por separado no se prestan las imágenes. Antes de que el lote
+  // tuviera su propio tipo de enlace esto no se podía comprobar, y estaba
+  // anotado como holgura conocida en `resolverArchivoPublico`.
+  it('el enlace de un mes no abre el arte de otro mes del mismo cliente', async () => {
+    expect((await publico(ids.ARTE_OTRO_MES)).status).toBe(404);
+    expect((await publico(ids.ARTE, TOKEN_OTRO_MES)).status).toBe(404);
+    expect(espia.leidos).toEqual([]);
+  });
+
+  it('cada mes sí abre lo suyo', async () => {
+    expect((await publico(ids.ARTE_OTRO_MES, TOKEN_OTRO_MES)).status).toBe(200);
+  });
+
+  // La investigación, el manual y el mapa de pilares se rinden desde su `datos`
+  // y no incrustan ningún archivo: su token no tiene nada que abrir aquí.
+  it('el enlace de una investigación no abre ningún archivo', async () => {
+    expect((await publico(ids.ARTE, TOKEN_INVESTIGACION)).status).toBe(404);
+    expect((await publico(ids.BRIEF, TOKEN_INVESTIGACION)).status).toBe(404);
+    expect(espia.leidos).toEqual([]);
   });
 
   it('si el disco se niega, responde 404 y lo deja en el registro', async () => {

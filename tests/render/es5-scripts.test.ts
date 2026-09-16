@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { SCRIPT_EDITORIAL } from '@/render/editorial/interaccion';
 import { SCRIPT_PILARES } from '@/render/pilares/script';
+import { SCRIPT_CONTENIDO } from '@/render/contenido/script';
 import { SCRIPT_CABECERA } from '@/render/editorial/cabecera';
 import { SCRIPT_FLUJO } from '@/render/editorial/flujo-cliente';
 import { NAVEGACION_GROWTH } from '@/render/growth/navegacion';
@@ -15,6 +16,7 @@ import { NAVEGACION_GROWTH } from '@/render/growth/navegacion';
 const SCRIPTS: Record<string, string> = {
   SCRIPT_EDITORIAL,
   SCRIPT_PILARES,
+  SCRIPT_CONTENIDO,
   SCRIPT_CABECERA,
   SCRIPT_FLUJO,
   NAVEGACION_GROWTH,

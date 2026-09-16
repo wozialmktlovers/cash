@@ -4,8 +4,18 @@ import { pgTable, uuid, text, timestamp, date, integer, boolean, jsonb, numeric,
 export const jobEstado = pgEnum('job_estado', ['encolado','corriendo','completado','fallido','cancelado']);
 export const linkTipo = pgEnum('link_tipo', ['sitio','instagram','facebook','tiktok','youtube','ventas','otro']);
 export const extraccionEstado = pgEnum('extraccion_estado', ['pendiente','ok','fallo','no_aplica']);
-/** Los documentos que produce el sistema. Un job y un link saben cuál es el suyo. */
-export const documentoTipo = pgEnum('documento_tipo', ['research','growth','pilares']);
+/**
+ * Los documentos que produce el sistema. Un job y un link saben cuál es el suyo.
+ *
+ * `contenido` es el entregable del mes (diseño §7) y es distinto de los otros
+ * tres: no vive en una tabla `*_results` con su `datos`, sino que se arma al
+ * vuelo desde `contenido_lotes` + `contenido_piezas`. Por eso solo lo usa
+ * `share_links.documento_tipo`, donde `documento_id` es el id del LOTE; las
+ * otras columnas que comparten este enum (`research_jobs.tipo`,
+ * `documento_versiones`, `comentarios`, `cliente_etapas`) no lo van a ver
+ * mientras el lote no tenga versiones ni se genere con un job.
+ */
+export const documentoTipo = pgEnum('documento_tipo', ['research','growth','pilares','contenido']);
 /** Admin crea, modifica, autoriza y asigna; operador crea y modifica; cliente solo ve y comenta lo suyo. */
 export const usuarioRol = pgEnum('usuario_rol', ['admin', 'operador', 'cliente']);
 /** Las cuatro etapas del flujo de trabajo por cliente. */

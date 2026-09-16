@@ -4,7 +4,7 @@ import { db, shareLinks } from '@/db';
 import { slugificar } from '@/lib/slug';
 import { crearShareLink, revocarShareLink } from '@/lib/share';
 import { puedeOperarCliente } from '@/lib/permisos';
-import { documentoVisible, type DocumentoTipo } from '@/lib/visibilidad';
+import { documentoVisible, loteVisible, type DocumentoTipo } from '@/lib/visibilidad';
 import { permisoCompartir } from '@/flujo/servicio';
 import { baseUrlPublica } from '@/lib/base-url';
 
@@ -62,8 +62,15 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   const [link] = await db.select().from(shareLinks).where(eq(shareLinks.token, token)).limit(1);
   if (!link) return json({ ok: false, errores: ['El link no existe'] }, 404);
 
-  const doc = await documentoVisible(locals.usuario, link.documentoTipo as DocumentoTipo, link.documentoId);
-  if (!doc || !puedeOperarCliente(locals.usuario, doc.cliente)) {
+  // El entregable del mes no es una fila de resultados con `datos`: su
+  // `documento_id` es el del LOTE, así que el permiso se resuelve por el lote
+  // (`loteVisible`) y no por `documentoVisible`. Sin esta rama, un link de
+  // contenido caía al SELECT de `research_results`, no encontraba nada y
+  // quedaba imposible de revocar.
+  const cliente = link.documentoTipo === 'contenido'
+    ? (await loteVisible(locals.usuario, link.documentoId))?.cliente
+    : (await documentoVisible(locals.usuario, link.documentoTipo as DocumentoTipo, link.documentoId))?.cliente;
+  if (!cliente || !puedeOperarCliente(locals.usuario, cliente)) {
     return json({ ok: false, errores: ['El link no existe'] }, 404);
   }
 

@@ -6,7 +6,17 @@ export function generarTokenShare(): string {
   return randomBytes(32).toString('base64url');
 }
 
-export type DocumentoTipo = 'research' | 'growth' | 'pilares';
+/**
+ * Lo que puede haber al otro lado de un token público.
+ *
+ * `contenido` (el entregable del mes, diseño §7) no es como los otros tres: no
+ * apunta a una fila de `research_results` / `growth_results` / `pilares_results`
+ * con su `datos`, sino al **lote** (`contenido_lotes.id`), y el documento se
+ * arma al vuelo con sus piezas. Por eso `src/lib/visibilidad.ts` mantiene su
+ * propio `DocumentoTipo` con solo los tres de siempre: ahí «documento» quiere
+ * decir «fila con datos y versiones», y el lote no lo es.
+ */
+export type DocumentoTipo = 'research' | 'growth' | 'pilares' | 'contenido';
 
 export async function crearShareLink(
   documentoId: string,
