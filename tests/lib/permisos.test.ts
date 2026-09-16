@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rutaPermitida, puedeVerCliente, puedeOperarCliente, destinoTrasLogin, type UsuarioSesion } from '@/lib/permisos';
+import { rutaPermitida, puedeVerCliente, puedeOperarCliente, destinoTrasLogin, type UsuarioSesion , rutaPublica } from '@/lib/permisos';
 
 const u = (rol: UsuarioSesion['rol'], extra: Partial<UsuarioSesion> = {}): UsuarioSesion =>
   ({ id: 'u1', email: 'a@b.c', nombre: null, apellido: null, rol, clientId: null, activo: true, ...extra });
@@ -64,5 +64,37 @@ describe('visibilidad', () => {
   it('destino tras login', () => {
     expect(destinoTrasLogin('cliente')).toBe('/portal');
     expect(destinoTrasLogin('operador')).toBe('/');
+  });
+});
+
+
+/**
+ * Cerrar sesión no puede depender de tener una sesión válida: cuando vencía,
+ * «Salir» respondía «No autorizado» y dejaba a esa persona atrapada, sin poder
+ * entrar ni salir. La protección contra peticiones de otros sitios no se apoya
+ * en esta lista, sino en la comprobación de origen que el middleware hace antes.
+ */
+describe('rutaPublica', () => {
+  it('salir funciona sin sesión', () => {
+    expect(rutaPublica('/api/logout')).toBe(true);
+  });
+
+  it('entrar y las páginas de invitación y enlaces públicos siguen abiertas', () => {
+    for (const r of ['/login', '/api/login', '/invitacion/abc', '/api/invitacion/aceptar', '/p/slug/token']) {
+      expect(rutaPublica(r)).toBe(true);
+    }
+  });
+
+  it('no abre nada más: el resto sigue exigiendo sesión', () => {
+    for (const r of ['/', '/clientes', '/api/clientes', '/admin/usuarios', '/api/perfil', '/portal']) {
+      expect(rutaPublica(r)).toBe(false);
+    }
+  });
+
+  // Las expresiones van ancladas: un prefijo parecido no debe colarse.
+  it('rutas parecidas no se cuelan', () => {
+    for (const r of ['/api/logout/otro', '/api/logouts', '/loginx', '/api/login/extra']) {
+      expect(rutaPublica(r)).toBe(false);
+    }
   });
 });

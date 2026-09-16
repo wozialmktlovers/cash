@@ -1,12 +1,10 @@
 import { defineMiddleware } from 'astro:middleware';
 import { validarSesion } from '@/lib/auth';
 import { mismoOrigen, requiereVerificacion } from '@/lib/csrf';
-import { rutaPermitida } from '@/lib/permisos';
+import { rutaPermitida, rutaPublica } from '@/lib/permisos';
 import { arrancarWorker } from '@/research/worker';
 
 arrancarWorker();
-
-const PUBLICAS = [/^\/login$/, /^\/api\/login$/, /^\/p\//, /^\/invitacion\//, /^\/api\/invitacion\//];
 
 export const onRequest = defineMiddleware(async (ctx, next) => {
   const ruta = ctx.url.pathname;
@@ -16,7 +14,7 @@ export const onRequest = defineMiddleware(async (ctx, next) => {
     return new Response('Origen no permitido', { status: 403 });
   }
 
-  if (PUBLICAS.some((r) => r.test(ruta))) return next();
+  if (rutaPublica(ruta)) return next();
 
   const token = ctx.cookies.get('sesion')?.value ?? '';
   const sesion = await validarSesion(token);

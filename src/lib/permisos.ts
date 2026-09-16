@@ -8,6 +8,23 @@ export type UsuarioSesion = { id: string; email: string; nombre: string | null; 
 const RUTAS_CLIENTE = [/^\/portal(\/|$)/, /^\/api\/portal(\/|$)/, /^\/api\/comentarios(\/|$)/, /^\/api\/notificaciones(\/|$)/, /^\/perfil$/, /^\/api\/perfil$/, /^\/api\/logout$/, /^\/p\//];
 const RUTAS_ADMIN = [/^\/admin(\/|$)/, /^\/api\/admin(\/|$)/];
 
+/**
+ * Rutas que no exigen sesión. Vivían dentro del middleware; están aquí para
+ * poder probarlas.
+ *
+ * `/api/logout` es pública a propósito: cerrar sesión no puede depender de
+ * tener una sesión válida. Cuando la de alguien vencía, el botón «Salir»
+ * respondía «No autorizado» y dejaba a esa persona sin poder entrar ni salir.
+ * La ruta sigue protegida contra peticiones de otros sitios, porque la
+ * comprobación de origen del middleware corre antes que esta lista, y el
+ * endpoint borra la cookie y lleva a /login aunque no hubiera sesión.
+ */
+const RUTAS_PUBLICAS = [/^\/login$/, /^\/api\/login$/, /^\/api\/logout$/, /^\/p\//, /^\/invitacion\//, /^\/api\/invitacion\//];
+
+export function rutaPublica(ruta: string): boolean {
+  return RUTAS_PUBLICAS.some((r) => r.test(ruta));
+}
+
 /** Reglas de ruta por rol. La visibilidad por cliente se decide después, en cada página. */
 export function rutaPermitida(rol: Rol, ruta: string): 'ok' | 'redirigir-portal' | 'prohibido' {
   if (rol === 'admin') return 'ok';
