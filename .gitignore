@@ -9,3 +9,6 @@ dist/
 .env
 data/
 .claude/settings.local.json
+
+# Basura del Finder, que aparece al abrir carpetas en el disco externo.
+.DS_Store
