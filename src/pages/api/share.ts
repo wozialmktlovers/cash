@@ -3,9 +3,10 @@ import { eq } from 'drizzle-orm';
 import { db, shareLinks } from '@/db';
 import { slugificar } from '@/lib/slug';
 import { crearShareLink, revocarShareLink } from '@/lib/share';
-import { puedeOperarCliente } from '@/lib/permisos';
+import { puedeOperarCliente, type UsuarioSesion } from '@/lib/permisos';
 import { documentoVisible, loteVisible, type DocumentoTipo } from '@/lib/visibilidad';
 import { permisoCompartir } from '@/flujo/servicio';
+import { compartirLote } from '@/contenido/servicio';
 import { baseUrlPublica } from '@/lib/base-url';
 
 const json = (cuerpo: unknown, status = 200) =>
@@ -13,6 +14,52 @@ const json = (cuerpo: unknown, status = 200) =>
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+
+/**
+ * Compartir el entregable del mes (diseño §6, §7). No pasa por el mismo molde
+ * que los otros tres, y por dos razones que conviene dejar dichas:
+ *
+ * 1. **El `resultId` es el id del LOTE**, no el de una fila de resultados con
+ *    `datos`: el documento se arma al vuelo con sus piezas (ver
+ *    `src/lib/share.ts`). Por eso el permiso se resuelve con `loteVisible` y no
+ *    con `documentoVisible`, igual que ya hacía el DELETE de aquí abajo.
+ * 2. **No se le aplica `permisoCompartir`.** Esa regla exige que la etapa esté
+ *    `aprobada` antes de publicar, y aquí sería al revés: compartir es
+ *    justamente lo que manda el mes a revisión, así que exigirlo aprobado haría
+ *    imposible compartir ninguno. Lo que la etapa 3 muestra es el estado de su
+ *    lote activo (`sincronizarEtapa`), no una versión que un admin autorizó;
+ *    aquí el filtro es `puedeOperarCliente`, como en el resto de la API de
+ *    contenido: admin o el operador asignado.
+ *
+ * Además de crear el enlace, **estampa el plazo**: `compartido_en`,
+ * `limite_revision` y el lote `en_revision`. Sin eso la auto-aprobación (C3) no
+ * encuentra nunca un candidato, porque busca exactamente esos campos. Qué pasa
+ * si el mismo lote se comparte dos veces está decidido y argumentado en
+ * `compartirLote` (src/contenido/servicio.ts).
+ */
+async function compartirEntregableDelMes(
+  usuario: UsuarioSesion,
+  loteId: string,
+  request: Request,
+): Promise<Response> {
+  const visible = await loteVisible(usuario, loteId);
+  if (!visible || !puedeOperarCliente(usuario, visible.cliente)) {
+    return json({ ok: false, errores: ['El resultado no existe'] }, 404);
+  }
+
+  const resultado = await compartirLote(visible.lote, visible.cliente.diasRevision);
+  const token = await crearShareLink(loteId, 'contenido');
+  const slug = slugificar(visible.cliente.nombre);
+
+  return json({
+    ok: true,
+    token,
+    url: `${baseUrlPublica(request)}/p/${slug}/${token}`,
+    estadoLote: resultado.estado,
+    limiteRevision: resultado.limiteRevision?.toISOString() ?? null,
+    arrancoElPlazo: resultado.arrancoElPlazo,
+  }, 201);
+}
 
 export const POST: APIRoute = async ({ request, locals }) => {
   let crudo: { resultId?: string; tipo?: string };
@@ -24,6 +71,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
   const resultId = String(crudo.resultId ?? '').trim();
   if (!resultId) return json({ ok: false, errores: ['Falta resultId'] }, 400);
+
+  if (crudo.tipo === 'contenido') return compartirEntregableDelMes(locals.usuario, resultId, request);
 
   const tipo: DocumentoTipo = crudo.tipo === 'growth' ? 'growth' : crudo.tipo === 'pilares' ? 'pilares' : 'research';
 

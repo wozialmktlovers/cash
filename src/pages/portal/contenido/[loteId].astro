@@ -1,0 +1,122 @@
+---
+// El contenido del mes en el portal del cliente, **con los controles de
+// revisión** (diseño §6 y §7, tarea C2).
+//
+// Es el mismo entregable que sale por el enlace público `/p/…`; lo único que
+// cambia es que aquí hay una sesión detrás, así que aquí —y solo aquí— se
+// pintan «Aprobar» y «Solicitar cambios». El porqué está escrito en el tipo
+// `Revision` (src/render/contenido/datos.ts) y se repite en una línea: una
+// aprobación tiene que quedar atribuida a una persona, y un enlace compartido
+// no identifica a nadie.
+//
+// La URL va por el id del LOTE y no por el periodo, a diferencia de la
+// pantalla interna: así el permiso lo resuelve `loteVisible` de una sola forma
+// para los tres roles —el cliente dueño, el admin y el operador asignado que
+// previsualizan— y la ruta de los artes que cuelga de aquí
+// (`[loteId]/archivo/[fileId].ts`) sabe de qué lote son sin arrastrar
+// `?cliente=` en cada imagen.
+import { asc, eq } from 'drizzle-orm';
+import PortalBase from '@/layouts/PortalBase.astro';
+import Icono from '@/components/Icono.astro';
+import { db, contenidoLotes, contenidoPiezas } from '@/db';
+import { DIAS_REVISION_POR_OMISION } from '@/contenido/reglas';
+import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
+import { loteVisible } from '@/lib/visibilidad';
+import { nombrePeriodo } from '@/lib/ui/periodo';
+import { renderizarContenido, type PiezaEntregable } from '@/render/contenido/documento';
+import type { Arte } from '@/contenido/piezas';
+
+const usuario = Astro.locals.usuario;
+const { loteId } = Astro.params;
+
+// El lote y su cliente, con el permiso resuelto. `loteVisible` ya contesta
+// `null` si el id no tiene forma de UUID, si el lote no existe o si quien
+// pregunta no tiene nada que hacer ahí: los tres se traducen al mismo 404 en
+// blanco, para no confirmarle a nadie qué lotes existen.
+const visible = loteId ? await loteVisible(usuario, loteId) : null;
+if (!visible) return new Response(null, { status: 404 });
+
+const { cliente } = visible;
+
+// Antes de leer las piezas (C3, diseño §6): si el plazo ya venció, el mes se
+// auto-aprueba ahora y el cliente ve «Aprobada», no un «en revisión» con la
+// cuenta regresiva en cero. Es la pantalla donde más caro sale enseñar un
+// estado viejo, porque es justo donde el cliente iba a decidir.
+await asegurarLotesAlDia(cliente.id);
+
+// Se relee el lote: el barrido de arriba pudo cambiarle el estado y arrastrar
+// sus piezas a `aprobada`.
+const [lote] = await db.select().from(contenidoLotes).where(eq(contenidoLotes.id, visible.lote.id)).limit(1);
+if (!lote) return new Response(null, { status: 404 });
+
+// Un mes que todavía no se le compartió al cliente no es suyo para verlo: se
+// está armando. 404 en blanco, igual que un lote ajeno — el cliente no tiene
+// por qué enterarse de que existe un borrador de octubre.
+if (!lote.compartidoEn) return new Response(null, { status: 404 });
+
+const vistaPrevia = usuario.rol !== 'cliente';
+const volverHref = `/portal${vistaPrevia ? `?cliente=${cliente.id}` : ''}`;
+
+const filas = await db.select().from(contenidoPiezas)
+  .where(eq(contenidoPiezas.loteId, lote.id))
+  .orderBy(asc(contenidoPiezas.numero));
+
+// Campo por campo, como en el enlace público: así una columna nueva de
+// `contenido_piezas` nunca se cuela sola al documento que ve el cliente. El
+// brief visual se queda fuera a propósito: es la indicación para quien hace el
+// arte, trabajo interno.
+const piezas: PiezaEntregable[] = filas.map((p) => ({
+  id: p.id,
+  numero: p.numero,
+  formato: p.formato,
+  plataforma: p.plataforma,
+  fechaPublicacion: p.fechaPublicacion,
+  copy: p.copy,
+  cta: p.cta,
+  hashtags: p.hashtags,
+  arte: (Array.isArray(p.arte) ? p.arte : []) as Arte[],
+  estadoCliente: p.estadoCliente,
+  notaCliente: p.notaCliente,
+}));
+
+let html: string | null = null;
+try {
+  html = renderizarContenido(piezas, {
+    cliente: cliente.nombre,
+    periodo: lote.periodo,
+    fecha: lote.compartidoEn.toISOString().slice(0, 10),
+    compartidoEn: lote.compartidoEn,
+    limiteRevision: lote.limiteRevision,
+    diasRevision: cliente.diasRevision ?? DIAS_REVISION_POR_OMISION,
+  }, {
+    // Absoluta y no relativa al documento (a diferencia del enlace público):
+    // esta página no depende de que la URL termine sin barra, así que no hace
+    // falta el redirect canónico que cuida `/p/[slug]/[token].astro`.
+    baseArchivos: `/portal/contenido/${encodeURIComponent(lote.id)}/archivo/`,
+    volver: { href: volverHref, texto: '← Mi portal', vistaPrevia },
+    // Los controles, que es lo único que esta página añade al enlace público.
+    // En vista previa interna se apagan: admin y operador miran lo que vería el
+    // cliente, no aprueban en su nombre — y la API los rechazaría igual, porque
+    // solo admite al rol `cliente`.
+    revision: { controles: !vistaPrevia, accesoHref: '/portal' },
+  });
+} catch (e) {
+  console.error('[portal/contenido] no se pudo rendir el mes:', e);
+  Astro.response.status = 500;
+}
+
+const titulo = `${nombrePeriodo(lote.periodo)} · ${cliente.nombre}`;
+---
+
+{html ? (
+  <Fragment set:html={html} />
+) : (
+  <PortalBase titulo={titulo} nombreEmpresa={cliente.nombre} vistaPrevia={vistaPrevia ? { clienteId: cliente.id } : undefined}>
+    <div class="tarjeta vacio">
+      <Icono nombre="alerta" />
+      <strong>No pudimos mostrar tu contenido del mes</strong>
+      <p>Intenta de nuevo en unos minutos. Si el problema sigue, escríbenos.</p>
+      <a class="btn suave chico" href={volverHref}>← Mi portal</a>
+    </div>
+  </PortalBase>
+)}

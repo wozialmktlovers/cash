@@ -45,6 +45,32 @@ export type MetaContenido = {
   diasRevision: number;
 };
 
+/**
+ * Si el documento trae los controles de revisión o es de solo lectura
+ * (diseño §6, tarea C2).
+ *
+ * **La decisión, para que no se deshaga por descuido: los botones de aprobar y
+ * de pedir cambios existen únicamente en el portal, con el cliente
+ * identificado.** El enlace público `/p/…` rinde el mismo documento sin ellos y
+ * lo dice en la portada, con el camino para entrar.
+ *
+ * El motivo es que una aprobación tiene que quedar atribuida a una persona
+ * —`contenido_piezas.revisado_en` y el comentario anclado llevan autor—, y un
+ * enlace compartido no identifica a nadie: lo reenvía quien sea a quien sea, y
+ * quien lo abre no tiene sesión. Aprobar desde ahí sería registrar «alguien con
+ * el enlace aprobó el mes», que no sirve de nada el día que alguien pregunte
+ * quién aprobó qué.
+ */
+export type Revision = {
+  /** `true` solo en el portal del cliente autenticado. */
+  controles: boolean;
+  /** A dónde mandar a quien abrió el enlace público y quiere aprobar. */
+  accesoHref: string;
+};
+
+/** Lo que recibe el enlace público: se lee todo, no se decide nada. */
+export const REVISION_SOLO_LECTURA: Revision = { controles: false, accesoHref: '/portal' };
+
 const ICONO_POST = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9" r="1.6"/><path d="M4 17.5 9.5 12l4 4 2.5-2.5 4 4"/></svg>';
 const ICONO_CARRUSEL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="7" height="12" rx="1.5"/><rect x="8.5" y="4" width="7" height="16" rx="1.5"/><rect x="15" y="6" width="7" height="12" rx="1.5"/></svg>';
 const ICONO_REEL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M3 9h18M8.5 3 11 9M15 3l2.5 6"/><path d="m11 13 4 2.2-4 2.2z"/></svg>';
@@ -169,7 +195,13 @@ export function diaLargo(fecha: string): string {
     .toLocaleDateString('es-MX', { day: 'numeric', month: 'long', timeZone: 'UTC' });
 }
 
-/** Etiqueta de estado, lista para pegar en cualquier sección. */
+/**
+ * Etiqueta de estado, lista para pegar en cualquier sección.
+ *
+ * `data-estado-chip` es para el portal: cuando el cliente decide sobre una
+ * pieza, el script repinta su chip sin recargar la página (C2). En el enlace
+ * público el atributo sobra y no estorba.
+ */
 export function chipEstado(estado: EstadoRevision): string {
-  return `<span class="estado-pieza ${estado}">${escapar(ESTADO[estado])}</span>`;
+  return `<span class="estado-pieza ${estado}" data-estado-chip>${escapar(ESTADO[estado])}</span>`;
 }

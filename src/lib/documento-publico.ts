@@ -3,6 +3,7 @@ import { db, researchResults, growthResults, pilaresResults, clients, clientLink
 import { leerShareLink, resolverShareLink, type DocumentoTipo } from '@/lib/share';
 import { esUuid } from '@/lib/visibilidad';
 import { DIAS_REVISION_POR_OMISION } from '@/contenido/reglas';
+import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
 import { renderizarInvestigacion } from '@/render/investigacion/documento';
 import { renderizarManual } from '@/render/growth/manual';
 import { renderizarPilares } from '@/render/pilares/documento';
@@ -69,8 +70,31 @@ async function piezasDelLote(loteId: string): Promise<PiezaEntregable[]> {
   }));
 }
 
-/** El entregable del mes de un lote compartido por su token. */
+/**
+ * El entregable del mes de un lote compartido por su token.
+ *
+ * **De solo lectura, siempre** (C2): aquí no hay sesión —el enlace lo reenvía
+ * quien sea a quien sea— así que una aprobación hecha desde esta página no
+ * quedaría atribuida a nadie. El documento lo dice en la portada y manda al
+ * portal; el argumento completo está en el tipo `Revision`
+ * (src/render/contenido/datos.ts). Los controles los pone solo
+ * `/portal/contenido/[loteId]`, con el cliente identificado.
+ *
+ * Antes de leer nada se resuelven los vencimientos del cliente (C3, diseño §6):
+ * si no, podría abrir su enlace y encontrarse un mes «en revisión» con la
+ * cuenta regresiva ya en cero, es decir, el mismo documento diciéndole dos
+ * cosas distintas. En el caso normal es una consulta sin filas y ninguna
+ * escritura, y `asegurarLotesAlDia` nunca lanza.
+ */
 async function entregableDelLote(loteId: string, token: string): Promise<{ html: string; slug: string } | null> {
+  // Una lectura mínima primero, solo para saber de qué cliente resolver los
+  // vencimientos; el lote se vuelve a leer después porque el barrido pudo
+  // cambiarle el estado y las piezas.
+  const [duenio] = await db.select({ clientId: contenidoLotes.clientId })
+    .from(contenidoLotes).where(eq(contenidoLotes.id, loteId)).limit(1);
+  if (!duenio) return null;
+  await asegurarLotesAlDia(duenio.clientId);
+
   const [lote] = await db.select().from(contenidoLotes).where(eq(contenidoLotes.id, loteId)).limit(1);
   if (!lote) return null;
 
@@ -174,14 +198,38 @@ export async function resolverDocumentoPublico(token: string): Promise<
 export async function resolverArchivoPublico(
   token: string,
   fileId: string,
-): Promise<{ clientId: string; archivo: { nombreOriginal: string; mime: string; ruta: string } } | null> {
+): Promise<ArchivoDeLote | null> {
+  // La forma del id se mira antes de ir a la base: un `fileId` que no es UUID
+  // nunca va a existir, así que ni siquiera hace falta resolver el token.
   if (!esUuid(fileId)) return null;
 
   const link = await leerShareLink(token);
   if (!link || link.documentoTipo !== 'contenido') return null;
+  return resolverArchivoDelLote(link.documentoId, fileId);
+}
+
+/** Un archivo listo para servirse, y de qué cliente sacarlo del disco. */
+export type ArchivoDeLote = { clientId: string; archivo: { nombreOriginal: string; mime: string; ruta: string } };
+
+/**
+ * Los puntos 3 y 4 de `resolverArchivoPublico`, sin el token: el archivo tiene
+ * que ser del cliente del lote **y** estar puesto como arte de alguna pieza de
+ * ESE lote.
+ *
+ * Aparte porque el portal del cliente (C2) pide sus artes por otra puerta
+ * —tiene sesión, no token— y tiene que aplicar exactamente el mismo filtro. Es
+ * el punto fino: un usuario cliente autenticado NO debe poder pedir cualquier
+ * archivo de su propia ficha por su id. En la ficha se suben briefs, contratos y
+ * material de trabajo que se guarda para trabajar, no para repartirlo; lo que el
+ * mes autoriza son los artes del mes. Con una sola función, abrir un hueco de
+ * más en el portal exigiría cambiar también el enlace público, que es donde más
+ * se cuida.
+ */
+export async function resolverArchivoDelLote(loteId: string, fileId: string): Promise<ArchivoDeLote | null> {
+  if (!esUuid(fileId) || !esUuid(loteId)) return null;
 
   const [lote] = await db.select({ id: contenidoLotes.id, clientId: contenidoLotes.clientId })
-    .from(contenidoLotes).where(eq(contenidoLotes.id, link.documentoId)).limit(1);
+    .from(contenidoLotes).where(eq(contenidoLotes.id, loteId)).limit(1);
   if (!lote) return null;
 
   const [archivo] = await db

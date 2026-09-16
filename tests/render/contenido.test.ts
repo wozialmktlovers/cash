@@ -216,3 +216,70 @@ describe('entregable del mes · escapado', () => {
     expect(html).toContain('&lt;img src=x');
   });
 });
+
+/**
+ * Los controles de revisión (C2, diseño §6). La decisión que fijan estas
+ * pruebas es la del reparto: **solo el portal aprueba**, el enlace público lee.
+ */
+describe('entregable del mes · revisión del cliente', () => {
+  const conControles = () =>
+    renderizarContenido(piezasFalsas(), metaFalsa(), { baseArchivos: BASE, revision: { controles: true, accesoHref: '/portal' } });
+
+  it('por omisión NO trae controles: es lo que ve el enlace público', () => {
+    const html = render();
+    expect(marcado(html)).not.toContain('data-revision');
+    expect(marcado(html)).not.toContain('Solicitar cambios');
+  });
+
+  it('el enlace público dice que es de solo lectura y a dónde ir para aprobar', () => {
+    const html = render();
+    expect(html).toContain('class="como-decidir solo-lectura"');
+    expect(html).toContain('href="/portal"');
+    expect(html).toContain('queda registrado quién aprobó qué y cuándo');
+  });
+
+  it('el enlace público no lleva ni una línea que hable de la API de revisión', () => {
+    expect(render()).not.toContain('/api/contenido/piezas/');
+  });
+
+  it('con controles, cada pieza trae Aprobar y Solicitar cambios con su id', () => {
+    const html = conControles();
+    for (const p of piezasFalsas()) {
+      expect(html, `pieza ${p.numero}`).toContain(`data-revision data-pieza="${p.id}"`);
+    }
+    // Las historias también: los mismos controles (diseño §7).
+    expect(html).toContain('data-pieza="p5"');
+    expect(html.match(/data-decision="aprobar"/g)?.length).toBe(6);
+  });
+
+  it('con controles, el script de la revisión sí viaja', () => {
+    expect(conControles()).toContain('/api/contenido/piezas/');
+  });
+
+  it('la nota anterior del cliente vuelve dentro de la caja de texto', () => {
+    // La pieza 2 del fixture quedó con cambios y su nota.
+    expect(conControles()).toContain('Cambiar el color del segundo slide.</textarea>');
+  });
+
+  it('con controles, la portada explica dónde están los botones', () => {
+    const html = conControles();
+    expect(html).toContain('class="como-decidir"');
+    // `marcado` quita <style>: la regla `.como-decidir.solo-lectura` vive ahí
+    // aunque esta vista no la use.
+    expect(marcado(html)).not.toContain('solo-lectura');
+  });
+
+  it('la barra de avance y los chips quedan marcados para repintarse sin recargar', () => {
+    const html = conControles();
+    expect(html).toContain('data-avance-cuenta');
+    expect(html).toContain('data-avance-relleno');
+    expect(html).toContain('data-estado-chip');
+  });
+
+  it('sin JS los botones se esconden y se dice por qué', () => {
+    const html = conControles();
+    expect(html).toContain('.revision-botones{display:none');
+    expect(html).toContain('html.js .revision-botones{display:flex;}');
+    expect(html).toContain('hace falta tener JavaScript activado');
+  });
+});

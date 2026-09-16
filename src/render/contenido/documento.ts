@@ -16,13 +16,13 @@ import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
 import { envolverDocumento } from '@/render/editorial/comunes';
 import { nombrePeriodo } from '@/lib/ui/periodo';
 import { ESTILOS_CONTENIDO } from './estilos';
-import { nombreMes, type MetaContenido, type PiezaEntregable } from './datos';
+import { REVISION_SOLO_LECTURA, nombreMes, type MetaContenido, type PiezaEntregable, type Revision } from './datos';
 import { seccionPortada, seccionFeedVista, seccionCalendario } from './secciones';
 import { seccionFeed, seccionHistorias } from './tarjetas';
-import { SCRIPT_CONTENIDO } from './script';
+import { SCRIPT_CONTENIDO, SCRIPT_REVISION } from './script';
 
-export { SCRIPT_CONTENIDO };
-export type { MetaContenido, PiezaEntregable };
+export { SCRIPT_CONTENIDO, SCRIPT_REVISION };
+export type { MetaContenido, PiezaEntregable, Revision };
 
 export type OpcionesContenido = {
   /**
@@ -41,6 +41,15 @@ export type OpcionesContenido = {
   flujo?: FlujoDatos;
   /** Enlace «← Mi portal» — solo en el portal del cliente. */
   volver?: { href: string; texto: string; vistaPrevia?: boolean };
+  /**
+   * Si el documento trae los controles de revisión del cliente (diseño §6).
+   *
+   * **Sin esto se rinde de solo lectura**, que es lo que corresponde al enlace
+   * público `/p/…`: ahí no hay sesión, así que una aprobación no podría quedar
+   * atribuida a nadie. Solo el portal del cliente identificado los pasa. El
+   * argumento completo está en el tipo `Revision` (./datos.ts).
+   */
+  revision?: Revision;
 };
 
 const INDICE: [string, string, string][] = [
@@ -65,13 +74,14 @@ export function renderizarContenido(
   opciones: OpcionesContenido,
 ): string {
   const base = opciones.baseArchivos;
+  const revision = opciones.revision ?? REVISION_SOLO_LECTURA;
 
   const cuerpo = [
-    seccionPortada(piezas, meta),
+    seccionPortada(piezas, meta, revision),
     seccionFeedVista(piezas, base),
     seccionCalendario(piezas, meta.periodo),
-    seccionFeed(piezas, base),
-    seccionHistorias(piezas, base),
+    seccionFeed(piezas, base, revision),
+    seccionHistorias(piezas, base, revision),
   ].join('\n');
 
   return envolverDocumento({
@@ -82,7 +92,9 @@ export function renderizarContenido(
     estilos: ESTILOS_CONTENIDO,
     indice: INDICE,
     cuerpo,
-    scriptsExtra: SCRIPT_CONTENIDO,
+    // El script de la revisión solo viaja con los controles: al enlace público
+    // no le llega ni una línea que hable de la API de revisión.
+    scriptsExtra: revision.controles ? `${SCRIPT_CONTENIDO}\n${SCRIPT_REVISION}` : SCRIPT_CONTENIDO,
     flujo: opciones.flujo,
     volver: opciones.volver,
   });

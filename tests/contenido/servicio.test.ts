@@ -64,7 +64,8 @@ vi.mock('@/db', async (importarReal) => {
   };
 });
 
-import { elegirLoteActivo, loteActivo, refrescarLote, sincronizarEtapa } from '@/contenido/servicio';
+import { compartirLote, elegirLoteActivo, loteActivo, refrescarLote, sincronizarEtapa } from '@/contenido/servicio';
+import { DIAS_REVISION_POR_OMISION, limiteRevision } from '@/contenido/reglas';
 
 const CLIENTE = '00000000-0000-4000-8000-0000000000c1';
 const lote = (periodo: string, estado: string) => ({ periodo, estado });
@@ -237,5 +238,85 @@ describe('refrescarLote', () => {
     espia.piezas = [pieza('pendiente')];
     await refrescarLote(compartido);
     expect(espia.cambios[0]?.estado).toBe('en_revision');
+  });
+});
+
+/**
+ * Compartir el lote (C2). Lo que se comprueba es la decisión —cuándo arranca el
+ * plazo y cuándo no— y que el plazo estampado sea exactamente `limiteRevision`,
+ * no una fecha calculada aquí otra vez.
+ */
+describe('compartirLote', () => {
+  const VIERNES = new Date('2026-09-11T23:00:00.000Z');
+  const base = { id: 'l1', clientId: CLIENTE, compartidoEn: null, limiteRevision: null };
+
+  it('un lote en proceso queda en revisión, con su compartido y su fecha límite', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];
+    const r = await compartirLote({ ...base, estado: 'en_proceso' }, 2, VIERNES);
+
+    expect(r.arrancoElPlazo).toBe(true);
+    expect(r.estado).toBe('en_revision');
+    expect(r.compartidoEn).toEqual(VIERNES);
+    expect(r.limiteRevision).toEqual(limiteRevision(VIERNES, 2));
+    expect(espia.cambiosLote[0]).toMatchObject({
+      estado: 'en_revision', compartidoEn: VIERNES, limiteRevision: limiteRevision(VIERNES, 2),
+    });
+  });
+
+  it('sin días de revisión del cliente usa los de la casa', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];
+    const r = await compartirLote({ ...base, estado: 'en_proceso' }, null, VIERNES);
+    expect(r.limiteRevision).toEqual(limiteRevision(VIERNES, DIAS_REVISION_POR_OMISION));
+  });
+
+  it('un `dias_revision` imposible no impide compartir: cae al de la casa', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];
+    const r = await compartirLote({ ...base, estado: 'en_proceso' }, -3, VIERNES);
+    expect(r.limiteRevision).toEqual(limiteRevision(VIERNES, DIAS_REVISION_POR_OMISION));
+  });
+
+  it('deja la etapa al día cuando el plazo arranca', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];
+    await compartirLote({ ...base, estado: 'en_proceso' }, 2, VIERNES);
+    expect(espia.cambios[0]?.estado).toBe('en_revision');
+  });
+
+  // La decisión sobre compartir dos veces, fijada con pruebas para que no se
+  // deshaga por descuido: ver el porqué en `compartirLote`.
+  it('volver a compartir un lote ya en revisión NO mueve la fecha límite', async () => {
+    const compartidoEn = new Date('2026-09-10T20:00:00.000Z');
+    const limite = limiteRevision(compartidoEn, 2);
+    const r = await compartirLote(
+      { ...base, estado: 'en_revision', compartidoEn, limiteRevision: limite }, 2, VIERNES,
+    );
+
+    expect(r.arrancoElPlazo).toBe(false);
+    expect(r.estado).toBe('en_revision');
+    expect(r.limiteRevision).toEqual(limite);
+    expect(espia.cambiosLote).toEqual([]);
+    expect(espia.cambios).toEqual([]);
+  });
+
+  it('compartir un lote aprobado no lo reabre ni le pone plazo nuevo', async () => {
+    const compartidoEn = new Date('2026-09-01T20:00:00.000Z');
+    const r = await compartirLote(
+      { ...base, estado: 'aprobada', compartidoEn, limiteRevision: limiteRevision(compartidoEn, 2) }, 2, VIERNES,
+    );
+
+    expect(r.arrancoElPlazo).toBe(false);
+    expect(r.estado).toBe('aprobada');
+    expect(espia.cambiosLote).toEqual([]);
+  });
+
+  it('un lote con cambios SÍ reinicia el plazo: es una ronda nueva', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];
+    const viejo = new Date('2026-09-01T20:00:00.000Z');
+    const r = await compartirLote(
+      { ...base, estado: 'con_cambios', compartidoEn: viejo, limiteRevision: limiteRevision(viejo, 2) }, 2, VIERNES,
+    );
+
+    expect(r.arrancoElPlazo).toBe(true);
+    expect(r.compartidoEn).toEqual(VIERNES);
+    expect(r.limiteRevision).toEqual(limiteRevision(VIERNES, 2));
   });
 });

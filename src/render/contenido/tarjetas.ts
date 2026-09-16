@@ -9,10 +9,57 @@
 
 import { escapar, encabezadoSeccion } from '@/render/editorial/comunes';
 import {
-  ESTADO, FORMATO, PLATAFORMA, ICONO_COPIAR, ICONO_ENLACE, ICONO_SIN_ARTE,
+  ESTADO, FORMATO, PLATAFORMA, ICONO_COPIAR, ICONO_ENLACE, ICONO_SIN_ARTE, REVISION_SOLO_LECTURA,
   chipEstado, diaLargo, esDeFeed, imagenesDe, portadaDe, porFecha, rutaArte, videoDe,
-  type EstadoRevision, type Formato, type PiezaEntregable,
+  type EstadoRevision, type Formato, type PiezaEntregable, type Revision,
 } from './datos';
+
+const ICONO_APROBAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12.5 5 5L20 6.5"/></svg>';
+const ICONO_CAMBIOS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h8"/><path d="M15.5 4.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/></svg>';
+
+/**
+ * Los controles de revisión de UNA pieza (diseño §6): «Aprobar» y «Solicitar
+ * cambios» con su nota.
+ *
+ * Solo se pintan con `revision.controles`, es decir, solo en el portal del
+ * cliente identificado; el enlace público rinde la misma tarjeta sin ellos (ver
+ * el tipo `Revision`, ./datos.ts). Quien decide de verdad es el servidor:
+ * `POST /api/contenido/piezas/[id]/revision` vuelve a comprobar el rol, el
+ * dueño de la pieza y el plazo, así que esconder el bloque es cortesía de la
+ * pantalla, nunca el candado.
+ *
+ * El bloque entero depende de JS —se manda la decisión por `fetch`—, así que
+ * sin JS se esconde y en su lugar queda una línea que lo dice, con la misma
+ * regla de `html.js` que ya usan los filtros de la sección 03. Un botón que no
+ * hace nada sería peor que no tenerlo: el plazo corre igual.
+ *
+ * `data-nota` empieza con la nota anterior dentro: si el cliente vuelve a pedir
+ * cambios sobre algo que ya devolvió, ve lo que escribió la vez pasada en vez
+ * de una caja en blanco.
+ */
+function controlesRevision(p: PiezaEntregable, revision: Revision): string {
+  if (!revision.controles) return '';
+
+  const idNota = `nota-pieza-${p.numero}`;
+  const nombre = `${FORMATO[p.formato].texto.toLowerCase()} ${p.numero}`;
+
+  return `<div class="revision" data-revision data-pieza="${escapar(p.id)}">
+    <p class="revision-sin-js">Para aprobar esta pieza o pedirnos cambios hace falta tener JavaScript activado. Si no puedes, escríbele a tu equipo y lo registramos nosotros.</p>
+    <div class="revision-botones">
+      <button class="btn-revision aprobar" type="button" data-decision="aprobar" aria-label="${escapar(`Aprobar el ${nombre}`)}">${ICONO_APROBAR}Aprobar</button>
+      <button class="btn-revision cambios" type="button" data-abrir-nota aria-expanded="false" aria-controls="${escapar(idNota)}" aria-label="${escapar(`Solicitar cambios en el ${nombre}`)}">${ICONO_CAMBIOS}Solicitar cambios</button>
+    </div>
+    <div class="revision-nota" id="${escapar(idNota)}" hidden>
+      <label for="${escapar(`${idNota}-texto`)}">¿Qué cambiamos?</label>
+      <textarea id="${escapar(`${idNota}-texto`)}" data-nota rows="3" maxlength="2000" placeholder="Por ejemplo: cambien la foto por una del consultorio nuevo.">${escapar(p.notaCliente ?? '')}</textarea>
+      <div class="revision-botones">
+        <button class="btn-revision cambios" type="button" data-decision="cambios">Enviar</button>
+        <button class="btn-revision suave" type="button" data-cancelar-nota>Cancelar</button>
+      </div>
+    </div>
+    <p class="revision-aviso" role="status" data-revision-aviso></p>
+  </div>`;
+}
 
 /** Hueco con forma de arte para la pieza que todavía no lo tiene. */
 function artePendiente(): string {
@@ -81,7 +128,7 @@ function bloqueTexto(titulo: string, texto: string, clase: string, etiquetaBoton
 }
 
 /** Los datos de la pieza: cabecera, meta, copy, CTA, hashtags y la nota del cliente. */
-function bloqueDatos(p: PiezaEntregable): string {
+function bloqueDatos(p: PiezaEntregable, revision: Revision): string {
   const fecha = p.fechaPublicacion ? diaLargo(p.fechaPublicacion) : 'Sin fecha todavía';
   const copy = p.copy.trim()
     ? bloqueTexto('Copy', p.copy, 'copy-texto', `Copiar el copy de la pieza ${p.numero}`)
@@ -113,6 +160,7 @@ function bloqueDatos(p: PiezaEntregable): string {
     ${copy}
     ${hashtags}
     ${nota}
+    ${controlesRevision(p, revision)}
   </div>`;
 }
 
@@ -121,10 +169,10 @@ function bloqueDatos(p: PiezaEntregable): string {
  * los filtros de la sección; el `id` es a donde llevan el calendario y la
  * cuadrícula del feed.
  */
-function tarjetaFeed(p: PiezaEntregable, base: string): string {
+function tarjetaFeed(p: PiezaEntregable, base: string, revision: Revision): string {
   return `<article class="pieza-tarjeta aparece" id="pieza-${p.numero}" data-pieza data-formato="${escapar(p.formato)}" data-estado="${escapar(p.estadoCliente)}">
     ${bloqueArte(p, base)}
-    ${bloqueDatos(p)}
+    ${bloqueDatos(p, revision)}
   </article>`;
 }
 
@@ -154,7 +202,7 @@ function filtros(formatos: Formato[], total: number): string {
  * 03 · Contenido de feed: posts, carruseles y reels del mes, en orden de
  * publicación (diseño §7). Las historias tienen su propia sección.
  */
-export function seccionFeed(piezas: PiezaEntregable[], base: string): string {
+export function seccionFeed(piezas: PiezaEntregable[], base: string, revision: Revision = REVISION_SOLO_LECTURA): string {
   const feed = piezas.filter(esDeFeed).sort(porFecha);
   if (!feed.length) {
     return `<section class="seccion" id="feed" data-seccion>
@@ -170,12 +218,12 @@ export function seccionFeed(piezas: PiezaEntregable[], base: string): string {
   return `<section class="seccion" id="feed" data-seccion data-lista-piezas>
     ${encabezadoSeccion('03', 'Contenido de feed', 'El arte, el copy y los datos de cada publicación del mes.')}
     ${filtros(formatos, feed.length)}
-    <div class="piezas-lista">${feed.map((p) => tarjetaFeed(p, base)).join('')}</div>
+    <div class="piezas-lista">${feed.map((p) => tarjetaFeed(p, base, revision)).join('')}</div>
   </section>`;
 }
 
 /** Una historia: tarjeta vertical 9:16 dentro de la tira. */
-function tarjetaHistoria(p: PiezaEntregable, base: string): string {
+function tarjetaHistoria(p: PiezaEntregable, base: string, revision: Revision): string {
   const fecha = p.fechaPublicacion ? diaLargo(p.fechaPublicacion) : 'Sin fecha';
   const copy = p.copy.trim()
     ? `<p class="historia-copy">${escapar(p.copy)}</p>
@@ -195,6 +243,7 @@ function tarjetaHistoria(p: PiezaEntregable, base: string): string {
     ${chipEstado(p.estadoCliente)}
     ${copy}
     ${nota}
+    ${controlesRevision(p, revision)}
   </li>`;
 }
 
@@ -205,7 +254,7 @@ function tarjetaHistoria(p: PiezaEntregable, base: string): string {
  * un párrafo oculto solo para el botón «Copiar»: una historia se revisa por el
  * arte, y un copy largo estiraría todas las tarjetas de la tira.
  */
-export function seccionHistorias(piezas: PiezaEntregable[], base: string): string {
+export function seccionHistorias(piezas: PiezaEntregable[], base: string, revision: Revision = REVISION_SOLO_LECTURA): string {
   const historias = piezas.filter((p) => p.formato === 'historia').sort(porFecha);
   if (!historias.length) {
     return `<section class="seccion alterna" id="historias" data-seccion>
@@ -216,6 +265,6 @@ export function seccionHistorias(piezas: PiezaEntregable[], base: string): strin
 
   return `<section class="seccion alterna" id="historias" data-seccion>
     ${encabezadoSeccion('04', 'Historias', 'Las adaptaciones verticales del mes. Deslízalas de lado.')}
-    <ul class="historias-tira">${historias.map((p) => tarjetaHistoria(p, base)).join('')}</ul>
+    <ul class="historias-tira">${historias.map((p) => tarjetaHistoria(p, base, revision)).join('')}</ul>
   </section>`;
 }

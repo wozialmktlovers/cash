@@ -7,7 +7,9 @@ import Icono from '@/components/Icono.astro';
 import { etapasDelCliente } from '@/flujo/servicio';
 import { clientePortal, resumenPortal, actividadPortal, type EtapaClientePortal } from '@/lib/portal';
 import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
+import { loteActivo } from '@/contenido/servicio';
 import { fechaCorta } from '@/lib/ui/fecha';
+import { nombrePeriodo } from '@/lib/ui/periodo';
 
 const usuario = Astro.locals.usuario;
 const resultado = await clientePortal(usuario, Astro.url.searchParams);
@@ -43,7 +45,14 @@ if (resultado) {
   // todo lo que se pinta.
   await asegurarLotesAlDia(resultado.cliente.id);
   const etapas = await etapasDelCliente(resultado.cliente.id);
-  const resumen = resumenPortal(etapas as EtapaClientePortal[]);
+  // El lote activo es el mes del que habla la etapa 3 (diseño §2). Se lee aquí
+  // y se le pasa a `resumenPortal`, que es pura: `cliente_etapas` guarda el
+  // ESTADO del lote activo, no cuál es, así que la tarjeta no sabría a qué mes
+  // enlazar sin esto.
+  const lote = await loteActivo(resultado.cliente.id);
+  const resumen = resumenPortal(etapas as EtapaClientePortal[], lote
+    ? { id: lote.id, periodo: lote.periodo, compartido: lote.compartidoEn !== null }
+    : null);
   // Sin etapas visibles no puede haber actividad que mostrar (ni aprobaciones
   // ni respuestas): se evita la consulta.
   const actividad = resumen.tarjetas.length > 0
@@ -71,6 +80,13 @@ const hrefDocumento = (etapaId: string, hash?: string) => {
   const params = datos?.vistaPrevia ? `?cliente=${datos.cliente.id}` : '';
   return `/portal/documentos/${etapaId}${params}${hash ?? ''}`;
 };
+
+// El contenido del mes va por su propia ruta y por el id del LOTE, no por la
+// etapa: esa etapa se repite cada mes y su entregable no es una versión
+// aprobada, sino el lote (C2, diseño §2). Sin `?cliente=`: `loteVisible`
+// resuelve el permiso por el lote, así que la vista previa interna funciona
+// igual sin arrastrar el parámetro.
+const hrefMes = (loteId: string) => `/portal/contenido/${loteId}`;
 
 // Anillo de avance: SVG con stroke-dasharray/stroke-dashoffset según el
 // porcentaje (ruling C1 #7).
@@ -138,10 +154,20 @@ const desplazamiento = Math.round(CIRCUNFERENCIA * (1 - avance / 100) * 100) / 1
                     <p class="secundario">{t.estadoCliente} · actualizado el {fecha(t.actualizadoEn)}</p>
                   </div>
                 </div>
-                <div class="acciones">
-                  {t.listo && <a class="btn suave chico" href={hrefDocumento(t.etapaId)}>Ver documento</a>}
-                  {t.listo && t.puedeComentar && (
-                    <a class="btn fantasma chico" href={hrefDocumento(t.etapaId, '#observaciones')}>Dejar observaciones</a>
+<div class="acciones">
+                  {/* El contenido del mes tiene su propio botón y NO el de
+                      «Dejar observaciones»: aquí las observaciones no son del
+                      documento entero, son de cada pieza, y viven en sus
+                      controles de Aprobar / Solicitar cambios (diseño §6). */}
+                  {t.lote ? (
+                    <a class="btn suave chico" href={hrefMes(t.lote.id)}>Ver el contenido de {nombrePeriodo(t.lote.periodo)}</a>
+                  ) : (
+                    <>
+                      {t.listo && <a class="btn suave chico" href={hrefDocumento(t.etapaId)}>Ver documento</a>}
+                      {t.listo && t.puedeComentar && (
+                        <a class="btn fantasma chico" href={hrefDocumento(t.etapaId, '#observaciones')}>Dejar observaciones</a>
+                      )}
+                    </>
                   )}
                   {t.proximamente && <span class="etiqueta marca">Próximamente</span>}
                 </div>

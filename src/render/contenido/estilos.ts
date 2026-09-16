@@ -157,6 +157,43 @@ html.js .filtros-contenido{display:flex;flex-wrap:wrap;align-items:center;gap:8p
 .nota-cliente span{font:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--rosa);}
 .vacio-seccion{padding:26px;border-radius:var(--r);border:1px dashed var(--linea);color:var(--suave);}
 
+/* Revisión del cliente (diseño §6, tarea C2) ----------------------------- */
+/* Todo este bloque depende de JS —la decisión se manda al servidor— así que
+   sin JS se esconde y queda en su lugar la línea que lo explica. Misma regla
+   que los filtros de la sección 03: un botón que no hace nada engaña, y aquí
+   el plazo sigue corriendo mientras el cliente cree que aprobó. */
+.revision{display:grid;gap:10px;padding-top:16px;border-top:1px solid var(--linea);}
+.revision-sin-js{font:var(--t-small);color:var(--suave);}
+html.js .revision-sin-js{display:none;}
+.revision-botones{display:none;flex-wrap:wrap;gap:8px;}
+html.js .revision-botones{display:flex;}
+.btn-revision{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;
+  border-radius:var(--r-pill);border:1px solid transparent;font:var(--t-small);font-weight:600;cursor:pointer;}
+.btn-revision svg{width:15px;height:15px;flex-shrink:0;}
+.btn-revision[disabled]{opacity:.55;cursor:default;}
+.btn-revision.aprobar{background:var(--verde);color:var(--fondo);}
+.btn-revision.aprobar:hover:not([disabled]){filter:brightness(1.06);}
+.btn-revision.cambios{background:transparent;border-color:var(--linea);color:var(--texto);}
+.btn-revision.cambios:hover:not([disabled]){border-color:var(--rosa);color:var(--rosa);}
+.btn-revision.suave{background:transparent;color:var(--suave);}
+.btn-revision.suave:hover:not([disabled]){color:var(--tinta);}
+.revision-nota{display:grid;gap:8px;padding:14px;border-radius:var(--r-sm);background:var(--gris);}
+.revision-nota label{font:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--suave);}
+.revision-nota textarea{width:100%;padding:10px 12px;border-radius:var(--r-sm);border:1px solid var(--linea);
+  background:var(--tarjeta);color:var(--texto);font:var(--t-small);font-family:inherit;resize:vertical;}
+/* Vacío no ocupa renglón: el aviso solo aparece cuando hay algo que decir. */
+.revision-aviso{font:var(--t-small);}
+.revision-aviso:empty{display:none;}
+.revision-aviso.bien{color:var(--verde);}
+.revision-aviso.mal{color:var(--rojo);}
+/* En la tira de historias la tarjeta mide 230px: los dos botones no caben de
+   lado y se apilan. */
+.historia-tarjeta .revision-botones{flex-direction:column;align-items:stretch;}
+
+/* Portada · qué se puede hacer en esta copia del mes y qué no. */
+.como-decidir{max-width:62ch;}
+.como-decidir.solo-lectura a{color:var(--rosa);text-decoration:underline;text-underline-offset:3px;}
+
 /* 04 · Historias --------------------------------------------------------- */
 /* Tira horizontal de tarjetas verticales (diseño §7). Es una lista con scroll
    propio, no una rejilla que envuelve: las historias se leen en orden y se
@@ -173,7 +210,7 @@ html.js .filtros-contenido{display:flex;flex-wrap:wrap;align-items:center;gap:8p
 .historia-copy{font:var(--t-small);white-space:pre-wrap;max-height:7.6em;overflow:hidden;}
 
 @media print{
-  .filtros-contenido,.btn-copiar,.pieza-miniaturas,.cuenta-regresiva{display:none!important;}
+  .filtros-contenido,.btn-copiar,.pieza-miniaturas,.cuenta-regresiva,.revision{display:none!important;}
   .pieza-tarjeta,.historia-tarjeta{box-shadow:none;break-inside:avoid;}
   .historias-tira{grid-auto-flow:row;grid-auto-columns:auto;grid-template-columns:repeat(3,minmax(0,1fr));overflow:visible;}
   .dia{break-inside:avoid;}

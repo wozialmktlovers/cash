@@ -160,3 +160,161 @@ export const SCRIPT_CONTENIDO = `(function () {
     })(botonesFiltro[i]);
   }
 })();`;
+
+/**
+ * Los botones de revisión del portal: aprobar una pieza o pedir cambios con
+ * nota, contra `POST /api/contenido/piezas/{id}/revision` (C2, diseño §6).
+ *
+ * Solo viaja cuando el documento se rinde CON controles, es decir, en el portal
+ * del cliente identificado: al enlace público no se le manda ni esta cadena, así
+ * que en el HTML que sale por `/p/…` no hay ninguna referencia a la API de
+ * revisión, aunque tampoco estuvieran los botones para activarla. Es el mismo
+ * criterio con el que `envolverDocumento` omite `SCRIPT_CABECERA_COMPARTIR`
+ * fuera de la vista interna.
+ *
+ * Lo que la pantalla hace tras una respuesta buena es repintar: el chip de la
+ * pieza, el `data-estado` que leen los filtros de la sección 03, el punto de
+ * color del calendario y la barra de «14 de 22 aprobadas» de la portada. No
+ * recarga: el cliente está a media lectura de un documento largo.
+ *
+ * Los errores se dicen tal cual los manda el servidor —el 409 del plazo vencido
+ * es un texto escrito para leerse, no un código—, y los botones se vuelven a
+ * habilitar para poder reintentar.
+ *
+ * En ES5 y sin dependencias, como el resto de los scripts en línea; lo vigila
+ * `tests/render/es5-scripts.test.ts`.
+ */
+export const SCRIPT_REVISION = `(function () {
+  var bloques = document.querySelectorAll('[data-revision]');
+  if (!bloques.length) return;
+
+  var ESTADO = { pendiente: 'Pendiente de revisión', aprobada: 'Aprobada', cambios: 'Con cambios' };
+
+  // La barra de la portada y el punto de color del calendario viven fuera de
+  // la tarjeta, así que se buscan por documento cuando hace falta.
+  function pintarAvance(avance) {
+    if (!avance) return;
+    var caja = document.querySelector('[data-avance]');
+    if (!caja) return;
+    var cuenta = caja.querySelector('[data-avance-cuenta]');
+    var pista = caja.querySelector('[data-avance-pista]');
+    var relleno = caja.querySelector('[data-avance-relleno]');
+    if (cuenta) {
+      cuenta.textContent = avance.aprobadas + ' de ' + avance.total + ' ' + (avance.total === 1 ? 'aprobada' : 'aprobadas');
+    }
+    if (pista) pista.setAttribute('aria-valuenow', String(avance.porcentaje));
+    if (relleno) relleno.style.width = avance.porcentaje + '%';
+  }
+
+  function pintarPieza(bloque, estado) {
+    // La tarjeta de la pieza: la que lleva data-pieza, subiendo desde el bloque.
+    var tarjeta = bloque.parentNode;
+    while (tarjeta && tarjeta.getAttribute && !tarjeta.hasAttribute('data-pieza')) tarjeta = tarjeta.parentNode;
+    if (tarjeta && tarjeta.setAttribute) {
+      tarjeta.setAttribute('data-estado', estado);
+      var chip = tarjeta.querySelector('[data-estado-chip]');
+      if (chip) {
+        chip.className = 'estado-pieza ' + estado;
+        chip.textContent = ESTADO[estado] || estado;
+      }
+      // El mismo número de pieza en el calendario y en la cuadrícula del feed.
+      var ancla = tarjeta.getAttribute('id');
+      if (ancla) {
+        var enlaces = document.querySelectorAll('a.dia-pieza[href="#' + ancla + '"]');
+        var i;
+        for (i = 0; i < enlaces.length; i++) {
+          enlaces[i].className = 'dia-pieza ' + estado;
+        }
+      }
+    }
+  }
+
+  function preparar(bloque) {
+    var aviso = bloque.querySelector('[data-revision-aviso]');
+    var caja = bloque.querySelector('.revision-nota');
+    var abrir = bloque.querySelector('[data-abrir-nota]');
+    var cancelar = bloque.querySelector('[data-cancelar-nota]');
+    var nota = bloque.querySelector('[data-nota]');
+    var botones = bloque.querySelectorAll('[data-decision]');
+    var piezaId = bloque.getAttribute('data-pieza');
+
+    function decir(texto, mal) {
+      if (!aviso) return;
+      aviso.textContent = texto;
+      aviso.className = mal ? 'revision-aviso mal' : 'revision-aviso bien';
+    }
+
+    function habilitar(puede) {
+      var i;
+      for (i = 0; i < botones.length; i++) botones[i].disabled = !puede;
+      if (abrir) abrir.disabled = !puede;
+    }
+
+    if (abrir && caja) {
+      abrir.addEventListener('click', function () {
+        caja.hidden = false;
+        abrir.setAttribute('aria-expanded', 'true');
+        if (nota) nota.focus();
+      });
+    }
+    if (cancelar && caja) {
+      cancelar.addEventListener('click', function () {
+        caja.hidden = true;
+        if (abrir) {
+          abrir.setAttribute('aria-expanded', 'false');
+          abrir.focus();
+        }
+      });
+    }
+
+    var k;
+    for (k = 0; k < botones.length; k++) {
+      (function (boton) {
+        boton.addEventListener('click', function () {
+          var decision = boton.getAttribute('data-decision');
+          var texto = nota ? nota.value : '';
+          if (decision === 'cambios' && !texto.replace(/^\\s+|\\s+$/g, '')) {
+            decir('Escribe qué quieres que cambiemos.', true);
+            if (nota) nota.focus();
+            return;
+          }
+          habilitar(false);
+          decir(decision === 'aprobar' ? 'Guardando tu aprobación…' : 'Enviando tus cambios…', false);
+
+          var peticion = new XMLHttpRequest();
+          peticion.open('POST', '/api/contenido/piezas/' + encodeURIComponent(piezaId) + '/revision', true);
+          peticion.setRequestHeader('Content-Type', 'application/json');
+          peticion.onreadystatechange = function () {
+            if (peticion.readyState !== 4) return;
+            habilitar(true);
+            var cuerpo = null;
+            try { cuerpo = JSON.parse(peticion.responseText); } catch (e) { cuerpo = null; }
+            if (!cuerpo || !cuerpo.ok) {
+              var razon = cuerpo && cuerpo.errores && cuerpo.errores[0];
+              decir(razon || 'No se pudo guardar. Inténtalo otra vez en un momento.', true);
+              return;
+            }
+            pintarPieza(bloque, cuerpo.pieza.estadoCliente);
+            pintarAvance(cuerpo.avance);
+            if (caja) caja.hidden = true;
+            if (abrir) abrir.setAttribute('aria-expanded', 'false');
+            decir(
+              cuerpo.pieza.estadoCliente === 'aprobada'
+                ? 'Listo, la aprobaste. Gracias.'
+                : 'Ya le avisamos a tu equipo. Te escriben en cuanto lo tengan.',
+              false
+            );
+          };
+          peticion.onerror = function () {
+            habilitar(true);
+            decir('No pudimos conectarnos. Revisa tu internet e inténtalo otra vez.', true);
+          };
+          peticion.send(JSON.stringify({ decision: decision, nota: texto }));
+        });
+      })(botones[k]);
+    }
+  }
+
+  var n;
+  for (n = 0; n < bloques.length; n++) preparar(bloques[n]);
+})();`;

@@ -6,10 +6,26 @@ import { avanceRevision } from '@/contenido/reglas';
 import { fechaHora } from '@/lib/ui/fecha';
 import { nombrePeriodo } from '@/lib/ui/periodo';
 import {
-  ESTADO, FORMATO, ICONO_SIN_ARTE,
+  ESTADO, FORMATO, ICONO_SIN_ARTE, REVISION_SOLO_LECTURA,
   diaLargo, esDeFeed, nombreMes, partesPeriodo, porFecha, portadaDe, rutaArte,
-  type EstadoRevision, type Formato, type MetaContenido, type PiezaEntregable,
+  type EstadoRevision, type Formato, type MetaContenido, type PiezaEntregable, type Revision,
 } from './datos';
+
+/**
+ * Cómo se decide sobre este mes, dicho arriba de todo.
+ *
+ * En el portal es una instrucción: los botones están abajo, en cada pieza. En
+ * el enlace público es lo contrario —aquí no se aprueba— y hay que decirlo con
+ * claridad y con el camino, no dejar que el cliente busque unos botones que no
+ * existen y concluya que el plazo corre sin que él pueda hacer nada. El porqué
+ * de que no existan está en el tipo `Revision` (./datos.ts).
+ */
+function avisoComoDecidir(revision: Revision): string {
+  if (revision.controles) {
+    return `<p class="como-decidir">Abajo, en cada pieza, tienes <strong>Aprobar</strong> y <strong>Solicitar cambios</strong>. No hace falta que lo hagas todo de una sentada: cada decisión se guarda al momento y puedes volver cuando quieras.</p>`;
+  }
+  return `<p class="como-decidir solo-lectura">Este enlace es para leer el mes con calma y enseñárselo a quien quieras. <strong>Para aprobar o pedirnos cambios, entra a <a href="${escapar(revision.accesoHref)}">tu portal</a> con tu acceso</strong>: así queda registrado quién aprobó qué y cuándo. Si no tienes tu acceso, pídenoslo y te lo mandamos.</p>`;
+}
 
 /** Cifra grande con su etiqueta: el mismo componente que la portada de los otros documentos. */
 function cifraTarjeta(valor: string, etiqueta: string): string {
@@ -27,15 +43,17 @@ function cifraTarjeta(valor: string, etiqueta: string): string {
  * que se comparte, no desde que se crea—, así que el mensaje lo dice en vez de
  * inventar una fecha.
  */
-function mensajeAlCliente(meta: MetaContenido): string {
+function mensajeAlCliente(meta: MetaContenido, revision: Revision): string {
   const dias = `${meta.diasRevision} ${meta.diasRevision === 1 ? 'día hábil' : 'días hábiles'}`;
   const mes = nombreMes(meta.periodo);
+  const comoDecidir = avisoComoDecidir(revision);
 
   if (!meta.compartidoEn || !meta.limiteRevision) {
     return `<section class="mensaje-cliente aparece">
       <h2>Tu contenido de ${escapar(mes)} está en camino.</h2>
       <p>Aquí vas a poder revisar pieza por pieza: el arte, el copy, el llamado a la acción y los hashtags de cada publicación del mes.</p>
       <p>El plazo de ${escapar(dias)} para revisarlo empieza a correr cuando te compartamos el mes, no antes. En cuanto eso pase, verás aquí mismo la fecha límite y el tiempo que te queda.</p>
+      ${comoDecidir}
     </section>`;
   }
 
@@ -43,6 +61,7 @@ function mensajeAlCliente(meta: MetaContenido): string {
     <h2>¡Hola! Tu contenido de ${escapar(mes)} está listo.</h2>
     <p>Terminamos el calendario de publicaciones de ${escapar(mes)} para ${escapar(meta.cliente)}. Revísalo con calma: cada pieza trae su arte, su copy listo para copiar, su llamado a la acción y sus hashtags.</p>
     <p>Tienes <strong>${escapar(dias)}</strong> desde que te lo compartimos para aprobarlo o pedirnos cambios. Si no recibimos respuesta antes de la fecha límite, damos el mes por aprobado y seguimos con la programación, para no retrasar tus publicaciones.</p>
+    ${comoDecidir}
     <div class="plazo">
       <div class="plazo-dato">
         <span>Compartido</span>
@@ -64,7 +83,7 @@ function mensajeAlCliente(meta: MetaContenido): string {
  * Portada: de quién es el mes, el mensaje con el plazo, las cifras por formato
  * y la barra de «14 de 22 aprobadas» (diseño §7).
  */
-export function seccionPortada(piezas: PiezaEntregable[], meta: MetaContenido): string {
+export function seccionPortada(piezas: PiezaEntregable[], meta: MetaContenido, revision: Revision = REVISION_SOLO_LECTURA): string {
   const avance = avanceRevision(piezas.map((p) => ({ formato: p.formato, estadoCliente: p.estadoCliente })));
   const cuenta = (f: Formato) => piezas.filter((p) => p.formato === f).length;
   // Solo los formatos que este mes trae: una cifra en cero no dice nada y
@@ -82,15 +101,15 @@ export function seccionPortada(piezas: PiezaEntregable[], meta: MetaContenido): 
       </div>
       <p class="resumen">${piezas.length} ${piezas.length === 1 ? 'pieza' : 'piezas'} para Facebook e Instagram, listas para revisar y programar.</p>
     </div>
-    ${mensajeAlCliente(meta)}
+    ${mensajeAlCliente(meta, revision)}
     <div class="cifras">
       ${cifraTarjeta(String(piezas.length), piezas.length === 1 ? 'Pieza en total' : 'Piezas en total')}
       ${porFormato}
     </div>
-    <div class="avance-revision aparece">
-      <p class="cuenta">${avance.aprobadas} de ${avance.total} ${avance.total === 1 ? 'aprobada' : 'aprobadas'}</p>
-      <div class="progreso-pista" role="progressbar" aria-valuenow="${avance.porcentaje}" aria-valuemin="0" aria-valuemax="100" aria-label="Piezas aprobadas">
-        <div class="progreso-relleno" style="width:${avance.porcentaje}%"></div>
+    <div class="avance-revision aparece" data-avance>
+      <p class="cuenta" data-avance-cuenta>${avance.aprobadas} de ${avance.total} ${avance.total === 1 ? 'aprobada' : 'aprobadas'}</p>
+      <div class="progreso-pista" role="progressbar" aria-valuenow="${avance.porcentaje}" aria-valuemin="0" aria-valuemax="100" aria-label="Piezas aprobadas" data-avance-pista>
+        <div class="progreso-relleno" style="width:${avance.porcentaje}%" data-avance-relleno></div>
       </div>
     </div>
     <nav class="accesos" aria-label="Ir a">

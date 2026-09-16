@@ -38,6 +38,34 @@ describe('rutaPermitida', () => {
     }
   });
 
+  // La única excepción (C2, diseño §6): el cliente revisa sus piezas. Se abre
+  // esa ruta y nada más; las pruebas de aquí abajo son el candado de que la
+  // excepción siga siendo una y no una puerta a `/api/contenido`.
+  const PIEZA = '11111111-2222-4333-8444-555555555555';
+
+  it('el rol cliente sí entra a la revisión de una pieza', () => {
+    expect(rutaPermitida('cliente', `/api/contenido/piezas/${PIEZA}/revision`)).toBe('ok');
+    // Y el personal también: la ruta rechaza por rol, no por middleware.
+    expect(rutaPermitida('admin', `/api/contenido/piezas/${PIEZA}/revision`)).toBe('ok');
+    expect(rutaPermitida('operador', `/api/contenido/piezas/${PIEZA}/revision`)).toBe('ok');
+  });
+
+  it('abrir la revisión no abre ninguna otra ruta de contenido', () => {
+    const cerradas = [
+      `/api/contenido/piezas/${PIEZA}`,
+      `/api/contenido/piezas/${PIEZA}/propuestas`,
+      `/api/contenido/piezas/${PIEZA}/revision/algo`,
+      `/api/contenido/piezas/${PIEZA}/revisiones`,
+      '/api/contenido/piezas/revision',
+      `/api/contenido/lotes/${PIEZA}/piezas`,
+      // Un id que no es UUID no casa: el patrón no es un comodín con
+      // «/revision» detrás.
+      '/api/contenido/piezas/../revision',
+      '/api/contenido/piezas/cualquiera/revision',
+    ];
+    for (const r of cerradas) expect(rutaPermitida('cliente', r), r).toBe('prohibido');
+  });
+
   it('/api/perfil lo abren los tres roles', () => {
     expect(rutaPermitida('admin', '/api/perfil')).toBe('ok');
     expect(rutaPermitida('operador', '/api/perfil')).toBe('ok');

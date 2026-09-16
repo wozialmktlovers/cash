@@ -29,7 +29,20 @@ export type TarjetaPortal = {
   listo: boolean;
   puedeComentar: boolean;
   proximamente: boolean;
+  /**
+   * Solo en `desarrollo_mensual`: el lote que el cliente puede abrir. Es lo que
+   * esa etapa tiene en vez de una versión aprobada, porque su entregable no es
+   * una fila con `datos` sino un lote con sus piezas (diseño §2).
+   */
+  lote?: { id: string; periodo: string };
 };
+
+/**
+ * El lote mensual que la portada del portal necesita saber, si lo hay
+ * (C2). `compartido` es lo que decide si el cliente puede abrirlo: el mes que
+ * todavía se arma no es suyo para verlo.
+ */
+export type LotePortal = { id: string; periodo: string; compartido: boolean };
 
 export type ResumenPortal = { avance: number; tarjetas: TarjetaPortal[] };
 
@@ -37,23 +50,40 @@ export type ResumenPortal = { avance: number; tarjetas: TarjetaPortal[] };
  * Avance y tarjetas de la portada: solo las etapas contratadas y no internas
  * (spec §4), en el orden de ETAPAS. Pura: usa `etapasVisiblesCliente`,
  * `avanceCliente`, `ESTADO_CLIENTE` y `puedeComentar('cliente', false, etapa)`.
- * `listo` = hay `versionAprobadaId`; `proximamente` = `desarrollo_mensual`.
+ *
+ * `listo` = hay `versionAprobadaId`… **salvo en `desarrollo_mensual`**, que no
+ * tiene versiones: su entregable es el lote del mes, así que ahí «listo» quiere
+ * decir que hay un lote y que ya se le compartió al cliente (C2, diseño §2).
+ * Por lo mismo, `proximamente` deja de ser «esta etapa siempre» y pasa a ser
+ * «esta etapa todavía no tiene un mes compartido»: desde C2 el cliente sí entra,
+ * revisa y aprueba, y seguir anunciándole «Próximamente» sobre un mes que ya
+ * tiene en la mano sería mentirle mientras le corre el plazo.
+ *
+ * `lote` se pasa aparte y no sale de `etapas` porque `cliente_etapas` no lo
+ * guarda: la fila de esta etapa refleja el ESTADO del lote activo, no cuál es
+ * (ver `sincronizarEtapa`, src/contenido/servicio.ts). Quien llama lo lee de
+ * `contenido_lotes` y esta función sigue siendo pura.
  */
-export function resumenPortal(etapas: EtapaClientePortal[]): ResumenPortal {
+export function resumenPortal(etapas: EtapaClientePortal[], lote: LotePortal | null = null): ResumenPortal {
   const avance = avanceCliente(etapas);
   const visibles = etapasVisiblesCliente(etapas) as EtapaClientePortal[];
+  const mesListo = Boolean(lote?.compartido);
 
-  const tarjetas: TarjetaPortal[] = visibles.map((e) => ({
-    etapaId: e.id,
-    numero: NUMERO_ETAPA[e.etapa],
-    etapa: e.etapa,
-    nombre: NOMBRE_ETAPA[e.etapa],
-    estadoCliente: ESTADO_CLIENTE[e.estado],
-    actualizadoEn: e.actualizadoEn,
-    listo: Boolean(e.versionAprobadaId),
-    puedeComentar: puedeComentar('cliente', false, e.etapa),
-    proximamente: e.etapa === 'desarrollo_mensual',
-  }));
+  const tarjetas: TarjetaPortal[] = visibles.map((e) => {
+    const esMensual = e.etapa === 'desarrollo_mensual';
+    return {
+      etapaId: e.id,
+      numero: NUMERO_ETAPA[e.etapa],
+      etapa: e.etapa,
+      nombre: NOMBRE_ETAPA[e.etapa],
+      estadoCliente: ESTADO_CLIENTE[e.estado],
+      actualizadoEn: e.actualizadoEn,
+      listo: esMensual ? mesListo : Boolean(e.versionAprobadaId),
+      puedeComentar: puedeComentar('cliente', false, e.etapa),
+      proximamente: esMensual && !mesListo,
+      ...(esMensual && lote && lote.compartido ? { lote: { id: lote.id, periodo: lote.periodo } } : {}),
+    };
+  });
 
   return { avance, tarjetas };
 }

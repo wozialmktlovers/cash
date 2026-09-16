@@ -112,11 +112,46 @@ describe('resumenPortal', () => {
     expect(por.get('manual_campana')).toBe(true);
   });
 
-  it('proximamente solo en desarrollo_mensual', () => {
+  it('proximamente solo en desarrollo_mensual, y solo mientras no haya mes compartido', () => {
     const r = resumenPortal([et('desarrollo_mensual'), et('manual_campana')]);
     const por = new Map(r.tarjetas.map((t) => [t.etapa, t.proximamente]));
     expect(por.get('desarrollo_mensual')).toBe(true);
     expect(por.get('manual_campana')).toBe(false);
+  });
+
+  // C2: desde que el cliente revisa su mes en el portal, «Próximamente» deja de
+  // ser verdad en cuanto hay un lote compartido — y seguir diciéndolo sería
+  // mentirle mientras le corre el plazo.
+  describe('el mes de desarrollo_mensual', () => {
+    const LOTE = { id: 'lote-1', periodo: '2026-09' };
+
+    it('con un mes compartido, la etapa queda lista y con su lote', () => {
+      const r = resumenPortal([et('desarrollo_mensual')], { ...LOTE, compartido: true });
+      const t = r.tarjetas.find((x) => x.etapa === 'desarrollo_mensual')!;
+      expect(t.proximamente).toBe(false);
+      expect(t.listo).toBe(true);
+      expect(t.lote).toEqual(LOTE);
+    });
+
+    it('un lote que todavía se arma no es del cliente: sigue en próximamente', () => {
+      const r = resumenPortal([et('desarrollo_mensual')], { ...LOTE, compartido: false });
+      const t = r.tarjetas.find((x) => x.etapa === 'desarrollo_mensual')!;
+      expect(t.proximamente).toBe(true);
+      expect(t.listo).toBe(false);
+      expect(t.lote).toBeUndefined();
+    });
+
+    it('sin lote se comporta como antes', () => {
+      const t = resumenPortal([et('desarrollo_mensual')]).tarjetas[0];
+      expect(t.proximamente).toBe(true);
+      expect(t.listo).toBe(false);
+      expect(t.lote).toBeUndefined();
+    });
+
+    it('el lote no se le pega a ninguna otra etapa', () => {
+      const r = resumenPortal([et('investigacion'), et('manual_campana')], { ...LOTE, compartido: true });
+      for (const t of r.tarjetas) expect(t.lote, t.etapa).toBeUndefined();
+    });
   });
 
   it('numero sigue la posición fija de la etapa (1–4), no el índice entre las visibles', () => {

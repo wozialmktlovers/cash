@@ -5,7 +5,33 @@ export type UsuarioSesion = { id: string; email: string; nombre: string | null; 
 // así que el cliente también necesita llegar a ella desde el portal. Y con la
 // API no basta: `/perfil` es la página desde donde se llama, así que va aparte
 // en la lista (la API y la página son dos rutas distintas).
-const RUTAS_CLIENTE = [/^\/portal(\/|$)/, /^\/api\/portal(\/|$)/, /^\/api\/comentarios(\/|$)/, /^\/api\/notificaciones(\/|$)/, /^\/perfil$/, /^\/api\/perfil$/, /^\/api\/logout$/, /^\/p\//];
+/**
+ * La única puerta del cliente a `/api/contenido/…` (C2, diseño §6): decir lo
+ * que opina de UNA pieza de su mes.
+ *
+ * El patrón está escrito lo más estrecho posible a propósito. La API de
+ * contenido es trabajo interno —abrir el lote, dar de alta y editar piezas,
+ * pedirle propuestas de copy al agente— y sigue cerrada al rol `cliente`; lo
+ * que se abre es este camino exacto y nada más. Por eso:
+ *
+ * - va anclado por los dos extremos, así que ni `/api/contenido/piezas` ni
+ *   `/api/contenido/piezas/<id>/revision/otra-cosa` casan;
+ * - el id solo admite la forma de un UUID, en vez de un `[^/]+` que aceptaría
+ *   cualquier cosa con tal de llevar `/revision` detrás;
+ * - `rutaPermitida` no distingue métodos, así que el archivo de esa ruta
+ *   exporta **solo** `POST`: no hay ahí ningún GET, PATCH ni DELETE que esto
+ *   pudiera estar abriendo de paso.
+ *
+ * De quién es esa pieza lo decide la ruta (`piezaVisible` + rol `cliente`), no
+ * esta lista: aquí solo se dice que el cliente puede llamar a la puerta.
+ */
+const RUTA_REVISION_PIEZA = /^\/api\/contenido\/piezas\/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\/revision$/;
+
+// `/api/perfil` sirve a los tres roles: cada quien edita su nombre y apellido,
+// así que el cliente también necesita llegar a ella desde el portal. Y con la
+// API no basta: `/perfil` es la página desde donde se llama, así que va aparte
+// en la lista (la API y la página son dos rutas distintas).
+const RUTAS_CLIENTE = [/^\/portal(\/|$)/, /^\/api\/portal(\/|$)/, /^\/api\/comentarios(\/|$)/, /^\/api\/notificaciones(\/|$)/, /^\/perfil$/, /^\/api\/perfil$/, /^\/api\/logout$/, /^\/p\//, RUTA_REVISION_PIEZA];
 const RUTAS_ADMIN = [/^\/admin(\/|$)/, /^\/api\/admin(\/|$)/];
 
 /**

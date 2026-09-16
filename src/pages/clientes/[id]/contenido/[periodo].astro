@@ -154,12 +154,33 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
 
   {lote ? (
     <>
-      {lote.compartidoEn && (
-        <p class="aviso" style="margin-bottom:18px">
-          Compartido con el cliente el {fechaHora(lote.compartidoEn)}
-          {lote.limiteRevision && <> · vence el {fechaHora(lote.limiteRevision)}</>}
-        </p>
-      )}
+      <section class="compartir-mes" data-lote={lote.id}>
+        <div class="compartir-texto">
+          <strong>Compartir con el cliente</strong>
+          {lote.compartidoEn ? (
+            <p class="secundario">
+              Compartido el {fechaHora(lote.compartidoEn)}
+              {/* `fechaHora` ya termina en punto («11:59 p.m.»), así que la frase no le añade otro. */}
+              {lote.limiteRevision && <> · el plazo vence el {fechaHora(lote.limiteRevision)}</>}
+              {lote.estado === 'con_cambios'
+                ? ' Al volver a compartirlo, el plazo empieza de nuevo: es una ronda nueva de revisión.'
+                : ' Volver a compartirlo crea otro enlace, pero no mueve la fecha límite.'}
+            </p>
+          ) : (
+            <p class="secundario">
+              Crea el enlace del mes y arranca el plazo de {diasRevision} {diasRevision === 1 ? 'día hábil' : 'días hábiles'}:
+              el lote pasa a revisión y, si el cliente no contesta antes de la fecha límite, se da por aprobado.
+            </p>
+          )}
+        </div>
+        <button type="button" class="btn" id="compartir-lote" disabled={!operable}>
+          {lote.compartidoEn ? 'Crear otro enlace' : 'Compartir el mes'}
+        </button>
+        <div class="link-publico" id="link-lote" hidden>
+          <input type="text" id="url-lote" readonly aria-label="Enlace del mes para el cliente" />
+          <button type="button" class="btn suave chico" id="copiar-lote">Copiar</button>
+        </div>
+      </section>
       <PiezasEditor
         client:load
         clientId={cliente.id}
@@ -193,6 +214,20 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
      igual viaja solo en esta página, que es la única que lo carga. */
 
   .mes-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+
+  /* Compartir el mes: es la acción que arranca el plazo de revisión, así que
+     se explica al lado del botón y no se esconde en un panel flotante como en
+     los otros entregables — aquí no solo publica, también mueve el estado. */
+  .compartir-mes {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 16px; margin-bottom: 18px; border: 1px solid var(--linea);
+    border-radius: var(--r); background: var(--tarjeta);
+  }
+  .compartir-texto { flex: 1; min-width: 240px; }
+  .compartir-texto strong { display: block; color: var(--tinta); }
+  .compartir-texto p { margin-top: 2px; max-width: 70ch; }
+  .link-publico { display: flex; gap: 8px; width: 100%; max-width: 520px; }
+  .link-publico input { min-height: 44px; padding: 6px 12px; font-size: 13px; }
 
   /* El indicador de global.css es de dos renglones (valor y nombre); aquí lleva
      un tercero con lo que pide el paquete, y sin esto se pegaría al nombre. */
@@ -254,6 +289,49 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
 
 <script>
   import { toast } from '@/scripts/toast';
+  import { copiar } from '@/scripts/copiar';
+
+  // Compartir el mes. Además de crear el enlace público, el servidor le estampa
+  // al lote `compartido_en` y `limite_revision` y lo pone en revisión: es lo
+  // que arranca el plazo (diseño §6). Qué pasa al compartir dos veces lo decide
+  // `compartirLote` (src/contenido/servicio.ts), no esta pantalla.
+  const compartir = document.getElementById('compartir-lote') as HTMLButtonElement | null;
+  const seccionCompartir = compartir?.closest('.compartir-mes') as HTMLElement | null;
+  const cajaLink = document.getElementById('link-lote') as HTMLElement | null;
+  const campoLink = document.getElementById('url-lote') as HTMLInputElement | null;
+
+  document.getElementById('copiar-lote')?.addEventListener('click', () => copiar(campoLink?.value ?? '', campoLink));
+
+  compartir?.addEventListener('click', async () => {
+    compartir.disabled = true;
+    const original = compartir.textContent;
+    compartir.textContent = 'Compartiendo…';
+    try {
+      const res = await fetch('/api/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resultId: seccionCompartir?.dataset.lote, tipo: 'contenido' }),
+      });
+      const cuerpo = await res.json();
+      if (!cuerpo.ok) throw new Error((cuerpo.errores ?? []).join(' · '));
+      if (campoLink) campoLink.value = cuerpo.url;
+      if (cajaLink) cajaLink.hidden = false;
+      await copiar(cuerpo.url, campoLink);
+      // Solo se recarga cuando el plazo arrancó: es lo que cambia el estado del
+      // lote y la fecha que muestra la pantalla. Un segundo enlace no mueve
+      // nada, y recargar borraría de la vista el enlace recién creado.
+      if (cuerpo.arrancoElPlazo) {
+        toast('Mes compartido · el plazo empezó a correr');
+        setTimeout(() => location.reload(), 1200);
+      } else {
+        toast('Enlace creado');
+      }
+    } catch (e) {
+      toast(e instanceof Error && e.message ? e.message : 'No se pudo compartir el mes.', 'error');
+    }
+    compartir.disabled = false;
+    compartir.textContent = original;
+  });
 
   // Abrir el lote del mes. Es lo único que esta página hace por su cuenta: en
   // cuanto el lote existe, manda la isla.

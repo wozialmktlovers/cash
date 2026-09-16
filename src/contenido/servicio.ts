@@ -11,7 +11,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { db, clienteEtapas, contenidoLotes, contenidoPiezas } from '@/db';
 import type { Estado } from '@/flujo/reglas';
-import { estadoLoteSegunPiezas } from './reglas';
+import { DIAS_REVISION_POR_OMISION, estadoLoteSegunPiezas, limiteRevision } from './reglas';
 
 /** Tipo del `tx` que entrega `db.transaction`; mismo truco que en `src/flujo/servicio.ts` para aceptar los dos ejecutores. */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -174,4 +174,94 @@ export async function refrescarLote(lote: LoteRefrescable, ejecutor: Ejecutor = 
   // cliente pudo cambiar por otra vía y `sincronizarEtapa` es barata.
   await sincronizarEtapa(lote.clientId, ejecutor);
   return estado;
+}
+
+/** Lo mínimo que hace falta de un lote para compartirlo con el cliente. */
+export type LoteCompartible = {
+  id: string;
+  clientId: string;
+  estado: Estado;
+  compartidoEn: Date | null;
+  limiteRevision: Date | null;
+};
+
+/** Cómo quedó el lote después de compartirlo. */
+export type ResultadoCompartir = {
+  estado: Estado;
+  compartidoEn: Date | null;
+  limiteRevision: Date | null;
+  /** `true` solo si ESTA llamada arrancó el plazo de revisión. */
+  arrancoElPlazo: boolean;
+};
+
+/**
+ * Deja el lote listo para que el cliente lo revise: le estampa `compartido_en`
+ * y `limite_revision` y lo pone `en_revision` (diseño §6, «el plazo cuenta
+ * desde que el lote se comparte, no desde que se crea»).
+ *
+ * Es la mitad que faltaba de la auto-aprobación: `autoAprobarVencidos` busca
+ * lotes `en_revision` con `limite_revision` pasada, y sin este paso no existe
+ * ninguno, así que el plazo nunca vencía porque nunca empezaba.
+ *
+ * ── Compartir dos veces el mismo lote ─────────────────────────────────────
+ *
+ * **El plazo arranca solo cuando el mes está del lado del operador**
+ * (`en_proceso`, el lote que se estaba armando, o `con_cambios`, el que vuelve
+ * corregido). En los otros dos casos se crea el enlace pero no se toca ninguna
+ * fecha:
+ *
+ * - **`en_revision`** (ya compartido, plazo corriendo): el segundo enlace casi
+ *   siempre es el mismo mes reenviado a otra persona del cliente. Reiniciar el
+ *   plazo movería una fecha límite que el cliente ya leyó en el propio
+ *   entregable —y que ahí viene con cuenta regresiva—, y dejaría la
+ *   auto-aprobación a merced de cuántas veces se pulse «Compartir»: bastaría
+ *   con recompartir cada dos días para que el mes no venza nunca. El plazo lo
+ *   arranca el reparto del mes, no cada copia del enlace.
+ * - **`aprobada`**: compartir entrega una copia de lectura de un mes cerrado.
+ *   Reabrir en silencio una aprobación —del cliente o por vencimiento— desde un
+ *   botón que solo dice «Compartir» sería lo contrario de lo que espera quien
+ *   lo pulsa. Si hay que rehacer un mes aprobado, se abre trabajo nuevo, no se
+ *   recomparte.
+ *
+ * `con_cambios` sí reinicia, y es el caso que justifica la regla: el cliente ya
+ * contestó, el operador rehízo lo que le pidieron y lo que se comparte es una
+ * ronda nueva sobre contenido que el cliente no ha visto. Sin reiniciar, el mes
+ * arrastraría el límite vencido de la ronda anterior y se auto-aprobaría en
+ * cuanto alguien lo mirara.
+ *
+ * `diasRevision` es `clients.dias_revision`. Un valor imposible (negativo, o no
+ * entero porque alguien tocó la columna a mano) cae a
+ * `DIAS_REVISION_POR_OMISION` en vez de tumbar la petición: `limiteRevision`
+ * lanza `RangeError` ante eso, y quedarse sin compartir el mes por un dato
+ * sucio de la ficha es peor que usar el plazo de la casa.
+ */
+export async function compartirLote(
+  lote: LoteCompartible,
+  diasRevision: number | null,
+  ahora: Date = new Date(),
+  ejecutor: Ejecutor = db,
+): Promise<ResultadoCompartir> {
+  const arranca = lote.estado === 'en_proceso' || lote.estado === 'con_cambios';
+  if (!arranca) {
+    return {
+      estado: lote.estado,
+      compartidoEn: lote.compartidoEn,
+      limiteRevision: lote.limiteRevision,
+      arrancoElPlazo: false,
+    };
+  }
+
+  const dias = Number.isInteger(diasRevision) && (diasRevision as number) >= 0
+    ? (diasRevision as number)
+    : DIAS_REVISION_POR_OMISION;
+  const limite = limiteRevision(ahora, dias);
+
+  await ejecutor.update(contenidoLotes)
+    .set({ estado: 'en_revision', compartidoEn: ahora, limiteRevision: limite, actualizadoEn: ahora })
+    .where(eq(contenidoLotes.id, lote.id));
+
+  // El estado del lote se movió, así que la etapa tiene que decir lo mismo.
+  await sincronizarEtapa(lote.clientId, ejecutor);
+
+  return { estado: 'en_revision', compartidoEn: ahora, limiteRevision: limite, arrancoElPlazo: true };
 }

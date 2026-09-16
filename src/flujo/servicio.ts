@@ -604,8 +604,17 @@ async function observacionesRecientes(usuarioId: string): Promise<{ enUltimaHora
   return { enUltimaHora: fila?.enUltimaHora ?? 0, enUltimoDia: fila?.enUltimoDia ?? 0 };
 }
 
-/** `limiteObservacionesCliente` con el conteo de la base: `null` si puede escribir, o el 429 con la razón. */
-async function rechazoPorLimite(usuarioId: string): Promise<{ ok: false; status: 429; razon: string } | null> {
+/**
+ * `limiteObservacionesCliente` con el conteo de la base: `null` si puede
+ * escribir, o el 429 con la razón.
+ *
+ * Exportada porque la revisión pieza por pieza (C2,
+ * `src/contenido/revision.ts`) escribe en la misma tabla y tiene que contar
+ * contra el mismo tope: «solicitar cambios» deja un comentario anclado y
+ * dispara un aviso al operador, exactamente como una observación del portal.
+ * Dos topes distintos serían dos formas de llenar el buzón del mismo operador.
+ */
+export async function rechazoPorLimite(usuarioId: string): Promise<{ ok: false; status: 429; razon: string } | null> {
   const limite = limiteObservacionesCliente(await observacionesRecientes(usuarioId));
   return limite.ok ? null : { ok: false, status: 429, razon: limite.razon };
 }
