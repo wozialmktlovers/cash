@@ -1,6 +1,32 @@
 import { describe, it, expect } from 'vitest';
-import { decidirEtapasPendientes, superaTope, repartirPorTope, ETAPAS, hayDatosParaLectura, entradaLectura } from '@/research/pipeline';
+import { APIError } from '@anthropic-ai/sdk';
+import {
+  decidirEtapasPendientes, superaTope, repartirPorTope, ETAPAS, hayDatosParaLectura,
+  entradaLectura, marcarDetenidas, razonDeVacio,
+} from '@/research/pipeline';
 import { MENSAJE_JSON_INVALIDO, MENSAJE_DECLINO } from '@/research/claude';
+import { CorteDeTrabajo, MENSAJE_SALDO, nuevaCaja } from '@/lib/errores-agentes';
+
+/** El 400 de saldo agotado tal como lo construye el SDK. No sale a la red. */
+const errorSinSaldo = () => APIError.generate(
+  400,
+  {
+    type: 'error',
+    error: {
+      type: 'invalid_request_error',
+      message: 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.',
+    },
+  },
+  undefined,
+  new Headers(),
+);
+
+const errorRateLimit = () => APIError.generate(
+  429,
+  { type: 'error', error: { type: 'rate_limit_error', message: 'Number of requests has exceeded your rate limit.' } },
+  undefined,
+  new Headers(),
+);
 
 describe('reanudación', () => {
   it('omite las etapas ya completadas', () => {
@@ -75,6 +101,56 @@ describe('reparto con freno de costo', () => {
     expect(estado.audiencia).toBe('ok');
   });
 
+  it('sin saldo: lanza el corte, no deja arrancar nada nuevo y conserva lo que ya salió bien', async () => {
+    const estado: Record<string, string> = {};
+    const corte = nuevaCaja();
+    const corridas: string[] = [];
+    // `competencia` termina bien antes de que `audiencia` choque con el 400.
+    // Se corren en dos tandas para que la segunda vea la caja ya marcada, que
+    // es lo que pasa con las etapas que aún no han arrancado.
+    await expect(repartirPorTope(['competencia', 'audiencia'], 15, { valor: 0 }, estado, async (etapa) => {
+      corridas.push(etapa);
+      if (etapa === 'audiencia') throw errorSinSaldo();
+    }, () => {}, corte)).rejects.toThrow(MENSAJE_SALDO);
+
+    expect(estado.competencia).toBe('ok');   // datos buenos: no se tiran
+    expect(estado.audiencia).toBe('abortado'); // no es «el agente falló»
+
+    // Segunda tanda con la misma caja: ni se intenta.
+    await expect(repartirPorTope(['canales', 'mercado'], 15, { valor: 0 }, estado, async (etapa) => {
+      corridas.push(etapa);
+    }, () => {}, corte)).rejects.toThrow(MENSAJE_SALDO);
+
+    expect(corridas).toEqual(['competencia', 'audiencia']);
+    expect(estado.canales).toBe('abortado');
+    expect(estado.mercado).toBe('abortado');
+  });
+
+  it('el corte lanzado es un CorteDeTrabajo con su motivo y el error original', async () => {
+    const corte = nuevaCaja();
+    const lanzado = await repartirPorTope(['competencia'], 15, { valor: 0 }, {}, async () => {
+      throw errorSinSaldo();
+    }, () => {}, corte).catch((e) => e);
+    expect(lanzado).toBeInstanceOf(CorteDeTrabajo);
+    expect(lanzado.motivo).toBe('saldo');
+    expect((lanzado.causa as any).status).toBe(400);
+  });
+
+  it('un 429 NO aborta: la etapa falla y las demás siguen su camino', async () => {
+    const estado: Record<string, string> = {};
+    const corte = nuevaCaja();
+    const corridas: string[] = [];
+    await expect(repartirPorTope(['competencia', 'audiencia'], 15, { valor: 0 }, estado, async (etapa) => {
+      corridas.push(etapa);
+      if (etapa === 'competencia') throw errorRateLimit();
+    }, () => {}, corte)).resolves.toBeUndefined();
+
+    expect(corridas).toEqual(['competencia', 'audiencia']);
+    expect(estado.competencia).toBe('fallo');
+    expect(estado.audiencia).toBe('ok');
+    expect(corte.valor).toBeNull();
+  });
+
   it('publica el avance en cada cambio de estado, no solo al final', async () => {
     const estado: Record<string, string> = {};
     let publicaciones = 0;
@@ -117,6 +193,10 @@ describe('entradaLectura: qué se guarda en datos.lectura', () => {
     });
   });
 
+  it('abortado por el corte: se omite la clave, la lectura se reintenta cuando haya saldo', () => {
+    expect(entradaLectura('abortado', undefined, new CorteDeTrabajo('saldo'))).toBeUndefined();
+  });
+
   it('fallo transitorio (saldo, red, 5xx): se omite la clave para reintentar', () => {
     expect(entradaLectura('fallo', undefined, new Error('400 credit balance is too low'))).toBeUndefined();
     expect(entradaLectura('fallo', undefined, new Error('fetch failed'))).toBeUndefined();
@@ -126,5 +206,27 @@ describe('entradaLectura: qué se guarda en datos.lectura', () => {
     expect(entradaLectura(undefined, undefined, undefined)).toEqual({
       estado: 'vacio', razon: 'Esta etapa no se ejecutó.',
     });
+  });
+});
+
+describe('marcarDetenidas: qué queda de las etapas que el corte no dejó correr', () => {
+  it('marca abortado lo que no tiene desenlace propio', () => {
+    const estado: Record<string, string> = { competencia: 'corriendo' };
+    marcarDetenidas(['competencia', 'sintesis', 'lectura'], estado);
+    expect(estado).toEqual({ competencia: 'abortado', sintesis: 'abortado', lectura: 'abortado' });
+  });
+
+  it('no pisa lo que ya se resolvió: ok, fallo y omitido_por_costo se respetan', () => {
+    const estado: Record<string, string> = { competencia: 'ok', audiencia: 'fallo', canales: 'omitido_por_costo' };
+    marcarDetenidas(['competencia', 'audiencia', 'canales'], estado);
+    expect(estado).toEqual({ competencia: 'ok', audiencia: 'fallo', canales: 'omitido_por_costo' });
+  });
+});
+
+describe('razón del hueco de una etapa detenida', () => {
+  it('no la confunde con un fallo del agente ni con el tope de costo', () => {
+    expect(razonDeVacio('abortado')).toMatch(/se detuvo/i);
+    expect(razonDeVacio('abortado')).toMatch(/vuelve a lanzarlo/i);
+    expect(razonDeVacio('abortado')).not.toMatch(/dos intentos|tope de costo/i);
   });
 });

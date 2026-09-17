@@ -68,6 +68,10 @@ export const ETIQUETA_ETAPA: Record<string, string> = {
   corriendo: 'Corriendo',
   fallo: 'Falló',
   omitido_por_costo: 'Omitida por costo',
+  // El trabajo se cortó por un error de cuenta (sin saldo, llave inválida) y
+  // esta etapa se quedó sin ejecutar. El porqué lo cuenta el aviso rojo de
+  // arriba, con el campo `error` del job; aquí basta con decir que se detuvo.
+  abortado: 'Detenida',
 };
 
 // ---------------------------------------------------------------------------

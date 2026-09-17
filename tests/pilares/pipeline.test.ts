@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ETAPAS_PILARES, armarPilares } from '@/pilares/pipeline';
+import { ETAPAS_PILARES, armarPilares, razon } from '@/pilares/pipeline';
 import { puedeGenerarPilares } from '@/lib/precheck';
 import { estrategiaFalsa, pilarFalso } from '../fixtures/pilares';
 
@@ -16,6 +16,14 @@ describe('pipeline de pilares', () => {
     expect((p[3] as any).razon).toContain('tope de costo');
     expect((p[4] as any).razon).toContain('no se ejecutó');
   });
+  it('un pilar detenido por un corte de cuenta declara que el trabajo se paró, no que el agente falló', () => {
+    const est = estrategiaFalsa();
+    const p = armarPilares(est, { 1: pilarFalso(1, est) }, { pilar2: 'abortado' });
+    expect((p[1] as any).razon).toMatch(/se detuvo/i);
+    expect((p[1] as any).razon).not.toMatch(/dos intentos/i);
+    expect(razon('abortado')).toMatch(/vuelve a lanzarlo/i);
+  });
+
   it('precheck como Growth', () => {
     expect(puedeGenerarPilares({ etapasConDatos: 0 }).ok).toBe(false);
     expect(puedeGenerarPilares({ etapasConDatos: 0 }).razon).toContain('investigación');

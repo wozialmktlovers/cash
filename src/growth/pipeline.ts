@@ -2,7 +2,8 @@ import { eq } from 'drizzle-orm';
 import { db, researchJobs, researchResults, growthResults, clients } from '@/db';
 import { calcularCosto, leerTopeUsd } from '@/lib/cost';
 import { investigacionUtil } from '@/lib/precheck';
-import { repartirPorTope, superaTope } from '@/research/pipeline';
+import { repartirPorTope, superaTope, marcarDetenidas } from '@/research/pipeline';
+import { CorteDeTrabajo, motivoDeCorte, cortar, nuevaCaja } from '@/lib/errores-agentes';
 import { registrarEntregable } from '@/flujo/servicio';
 import { armarContextoGrowth } from './contexto';
 import { correrEstructura } from './agents/estructura';
@@ -25,6 +26,7 @@ export function decidirPendientesGrowth(estado: Record<string, string>): EtapaGr
 export function razonDeVacioGrowth(estado: string | undefined): string {
   if (estado === 'fallo') return 'El agente no devolvió datos válidos tras dos intentos.';
   if (estado === 'omitido_por_costo') return 'Se alcanzó el tope de costo antes de ejecutar esta etapa.';
+  if (estado === 'abortado') return 'El trabajo se detuvo antes de terminar esta etapa. Vuelve a lanzarlo.';
   return 'Esta etapa no se ejecutó.';
 }
 
@@ -62,9 +64,13 @@ export async function ejecutarGrowth(jobId: string): Promise<void> {
     .set({ estado: 'corriendo', startedAt: job.startedAt ?? new Date() })
     .where(eq(researchJobs.id, jobId));
 
+  // Misma caja que en investigación: un error de cuenta corta el manual entero
+  // y, mientras tanto, frena las reanudaciones de las etapas que siguen vivas.
+  const corte = nuevaCaja();
+
   const vigilar = (e: number, s: number) => {
     gasto.valor += calcularCosto(modelo, e, s);
-    return !superaTope(gasto.valor, tope);
+    return !corte.valor && !superaTope(gasto.valor, tope);
   };
 
   const guardarProgreso = async () => {
@@ -86,31 +92,38 @@ export async function ejecutarGrowth(jobId: string): Promise<void> {
   const pendientes = decidirPendientesGrowth(estado);
   const paralelas = decidirParalelas(pendientes);
 
-  await repartirPorTope(paralelas, tope, gasto, estado, async (etapa) => {
-    const r = await corredores[etapa]();
-    resultados[etapa] = r.datos;
-    tIn += r.tokensEntrada; tOut += r.tokensSalida;
-  }, publicar);
-  await guardarProgreso();
+  try {
+    await repartirPorTope(paralelas, tope, gasto, estado, async (etapa) => {
+      const r = await corredores[etapa]();
+      resultados[etapa] = r.datos;
+      tIn += r.tokensEntrada; tOut += r.tokensSalida;
+    }, publicar, corte);
+    await guardarProgreso();
 
-  // Los prompts esperan a los creativos: sin la lista de piezas no hay nada que ilustrar.
-  if (pendientes.includes('prompts')) {
-    if (superaTope(gasto.valor, tope)) {
-      estado.prompts = 'omitido_por_costo';
-    } else {
-      estado.prompts = 'corriendo';
-      await db.update(researchJobs)
-        .set({ etapaActual: 'prompts', etapas: estado }).where(eq(researchJobs.id, jobId));
-      try {
-        const r = await corredores.prompts();
-        resultados.prompts = r.datos;
-        tIn += r.tokensEntrada; tOut += r.tokensSalida;
-        estado.prompts = 'ok';
-      } catch (e) {
-        estado.prompts = 'fallo';
-        console.error(`[${jobId}] prompts:`, e);
+    // Los prompts esperan a los creativos: sin la lista de piezas no hay nada que ilustrar.
+    if (pendientes.includes('prompts')) {
+      if (superaTope(gasto.valor, tope)) {
+        estado.prompts = 'omitido_por_costo';
+      } else {
+        estado.prompts = 'corriendo';
+        await db.update(researchJobs)
+          .set({ etapaActual: 'prompts', etapas: estado }).where(eq(researchJobs.id, jobId));
+        try {
+          const r = await corredores.prompts();
+          resultados.prompts = r.datos;
+          tIn += r.tokensEntrada; tOut += r.tokensSalida;
+          estado.prompts = 'ok';
+        } catch (e) {
+          estado.prompts = motivoDeCorte(e) ? 'abortado' : 'fallo';
+          console.error(`[${jobId}] prompts:`, e);
+          cortar(corte, e);
+        }
       }
     }
+  } catch (e) {
+    if (!(e instanceof CorteDeTrabajo)) throw e;
+    marcarDetenidas(pendientes, estado);
+    console.error(`[${jobId}] trabajo cortado (${e.motivo}):`, e.causa);
   }
 
   // Se aplana en un solo objeto: cada agente devuelve su trozo del esquema y
@@ -132,7 +145,8 @@ export async function ejecutarGrowth(jobId: string): Promise<void> {
 
   // Igual que research: el pipeline inserta el resultado aunque las cuatro
   // etapas hayan fallado, para dejar constancia del intento. Esa fila vacía
-  // (puro `_huecos`) no debe mover la etapa a en_proceso.
+  // (puro `_huecos`) no debe mover la etapa a en_proceso. Lo que un corte
+  // consiguió antes de saltar sí cuenta como entregable: está pagado y sirve.
   if (!todasFallaron) {
     try {
       await registrarEntregable(job.clientId, 'growth', resultado.id, job.creadoPor);
@@ -140,10 +154,12 @@ export async function ejecutarGrowth(jobId: string): Promise<void> {
       console.error('[flujo] registrarEntregable growth:', e);
     }
   }
+  // El corte manda sobre el desenlace: aunque alguna etapa trajera datos, el
+  // manual no está terminado y hay que volver a lanzarlo con saldo.
   await db.update(researchJobs).set({
-    estado: todasFallaron ? 'fallido' : 'completado',
+    estado: corte.valor || todasFallaron ? 'fallido' : 'completado',
     etapas: estado, etapaActual: null, finishedAt: new Date(),
     tokensEntrada: tIn, tokensSalida: tOut, costoUsd: String(gasto.valor),
-    error: todasFallaron ? 'Ninguna etapa produjo datos' : null,
+    error: corte.valor ? corte.valor.message : todasFallaron ? 'Ninguna etapa produjo datos' : null,
   }).where(eq(researchJobs.id, jobId));
 }

@@ -28,6 +28,7 @@ const TRAZO: Record<string, string> = {
   ok: 'm5 12.5 4.5 4.5L19 7',
   fallo: 'M6 6l12 12M18 6 6 18',
   omitido_por_costo: 'M5 12h14',
+  abortado: 'M5 12h14',
   corriendo: 'M12 7v5l3 2',
 };
 

@@ -29,8 +29,13 @@ describe('razón de los huecos', () => {
     expect(razonDeVacioGrowth(undefined)).toMatch(/no se ejecutó/i);
   });
 
+  it('la etapa detenida por un corte de cuenta no se confunde con un fallo del agente', () => {
+    expect(razonDeVacioGrowth('abortado')).toMatch(/se detuvo/i);
+    expect(razonDeVacioGrowth('abortado')).not.toMatch(/dos intentos|tope de costo/i);
+  });
+
   it('nunca devuelve cadena vacía: un hueco sin razón es peor que el hueco', () => {
-    for (const e of ['fallo', 'omitido_por_costo', 'corriendo', undefined, '']) {
+    for (const e of ['fallo', 'omitido_por_costo', 'abortado', 'corriendo', undefined, '']) {
       expect(razonDeVacioGrowth(e as any).length).toBeGreaterThan(10);
     }
   });

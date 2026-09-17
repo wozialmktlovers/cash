@@ -1,7 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { db, researchJobs, researchResults, pilaresResults, clients, clientLinks, clientFiles } from '@/db';
 import { armarContexto } from '@/research/contexto';
-import { repartirPorTope, superaTope } from '@/research/pipeline';
+import { repartirPorTope, superaTope, marcarDetenidas } from '@/research/pipeline';
+import { CorteDeTrabajo, motivoDeCorte, cortar, nuevaCaja } from '@/lib/errores-agentes';
 import { calcularCosto, leerTopeUsd } from '@/lib/cost';
 import { investigacionUtil } from '@/lib/precheck';
 import { registrarEntregable } from '@/flujo/servicio';
@@ -13,9 +14,10 @@ import type { Estrategia, PilarGenerado, PilarMapa, Tema } from './schemas';
 
 export const ETAPAS_PILARES = ['estrategia', 'pilar1', 'pilar2', 'pilar3', 'pilar4', 'pilar5', 'revision'] as const;
 
-function razon(estado: string | undefined): string {
+export function razon(estado: string | undefined): string {
   if (estado === 'fallo') return 'El agente no devolvió datos válidos tras dos intentos.';
   if (estado === 'omitido_por_costo') return 'Se alcanzó el tope de costo antes de ejecutar este pilar.';
+  if (estado === 'abortado') return 'El trabajo se detuvo antes de terminar este pilar. Vuelve a lanzarlo.';
   return 'Este pilar no se ejecutó.';
 }
 
@@ -63,9 +65,13 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
   const gasto = { valor: Number(job.costoUsd) };
   let tIn = job.tokensEntrada, tOut = job.tokensSalida;
 
+  // Misma caja que en investigación y growth: un error de cuenta corta el mapa
+  // entero y frena las reanudaciones de los pilares que sigan en vuelo.
+  const corte = nuevaCaja();
+
   const vigilar = (modelo: string) => (e: number, s: number) => {
     gasto.valor += calcularCosto(modelo, e, s);
-    return !superaTope(gasto.valor, tope);
+    return !corte.valor && !superaTope(gasto.valor, tope);
   };
   const guardar = () => db.update(researchJobs).set({
     etapas: estado, tokensEntrada: tIn, tokensSalida: tOut, costoUsd: String(gasto.valor),
@@ -85,9 +91,13 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
     estado.estrategia = 'ok';
   } catch (e) {
     console.error(`[${jobId}] estrategia:`, e);
-    estado.estrategia = 'fallo';
+    // Un error de cuenta no es «el agente no supo»: el job se cierra con el
+    // mensaje que le dice a la persona qué hacer, no con el genérico.
+    const motivo = motivoDeCorte(e);
+    estado.estrategia = motivo ? 'abortado' : 'fallo';
+    marcarDetenidas(ETAPAS_PILARES, estado);
     await guardar();
-    await fallar('No se pudo definir la estrategia del mapa.');
+    await fallar(motivo ? new CorteDeTrabajo(motivo, e).message : 'No se pudo definir la estrategia del mapa.');
     return;
   }
   await guardar();
@@ -95,22 +105,33 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
   // 2 · Los cinco pilares en paralelo, con freno de costo.
   const generados: Record<number, PilarGenerado> = {};
   const pilaresEtapas = ['pilar1', 'pilar2', 'pilar3', 'pilar4', 'pilar5'];
-  await repartirPorTope(pilaresEtapas, tope, gasto, estado, async (etapa) => {
-    const n = Number(etapa.slice(-1));
-    const r = await correrPilar(ctx, estrategia, n, vigilar(modeloInv));
-    generados[n] = r.datos;
-    tIn += r.tokensEntrada; tOut += r.tokensSalida;
-  }, publicar);
+  let pilares: PilarMapa[] = [];
+  let reescritos = 0;
+
+  try {
+    await repartirPorTope(pilaresEtapas, tope, gasto, estado, async (etapa) => {
+      const n = Number(etapa.slice(-1));
+      const r = await correrPilar(ctx, estrategia, n, vigilar(modeloInv));
+      generados[n] = r.datos;
+      tIn += r.tokensEntrada; tOut += r.tokensSalida;
+    }, publicar, corte);
+  } catch (e) {
+    if (!(e instanceof CorteDeTrabajo)) throw e;
+    marcarDetenidas(pilaresEtapas, estado);
+    console.error(`[${jobId}] trabajo cortado (${e.motivo}):`, e.causa);
+  }
   await guardar();
 
   // 3 · Revisión en código y una sola ronda de corrección de duplicados.
+  // La revisión en sí no habla con el modelo, así que se hace igual tras un
+  // corte: describe honestamente el mapa parcial que sí se consiguió. Lo que
+  // se salta es la corrección, que sí gastaría.
   estado.revision = 'corriendo';
   await db.update(researchJobs).set({ etapaActual: 'revision', etapas: estado }).where(eq(researchJobs.id, jobId));
-  let pilares = armarPilares(estrategia, generados, estado);
-  let reescritos = 0;
+  pilares = armarPilares(estrategia, generados, estado);
   const duplicados = buscarDuplicados(todosLosTemas(pilares));
 
-  if (duplicados.length && !superaTope(gasto.valor, tope)) {
+  if (duplicados.length && !corte.valor && !superaTope(gasto.valor, tope)) {
     const temas = todosLosTemas(pilares);
     const porId = new Map(temas.map((t) => [t.id, t]));
     const repetidos = [...new Set(duplicados.map(([, b]) => b))];
@@ -120,7 +141,7 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
       porPilar.set(n, [...(porPilar.get(n) ?? []), porId.get(id)!]);
     }
     for (const [n, aReescribir] of porPilar) {
-      if (superaTope(gasto.valor, tope)) break;
+      if (corte.valor || superaTope(gasto.valor, tope)) break;
       try {
         const ids = new Set(aReescribir.map((t) => t.id));
         const evitar = temas.filter((t) => !ids.has(t.id)).map((t) => t.texto);
@@ -132,6 +153,10 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
         reescritos += validos.length;
       } catch (e) {
         console.error(`[${jobId}] corrección pilar ${n}:`, e);
+        // Un error de cuenta aquí no tira el mapa ya generado: se anota el
+        // corte, se deja de corregir y el job se cierra abajo con su mensaje.
+        const motivo = motivoDeCorte(e);
+        if (motivo) { corte.valor ??= new CorteDeTrabajo(motivo, e); break; }
       }
     }
   }
@@ -165,9 +190,13 @@ export async function ejecutarPilares(jobId: string): Promise<void> {
 
   await db.update(researchJobs).set({
     // Sin un solo tema el mapa no sirve: el job cuenta como fallido para que
-    // quien lo lanzó reciba el aviso en lugar de un «completado» vacío.
-    estado: finales.length > 0 ? 'completado' : 'fallido', etapas: estado, etapaActual: null, finishedAt: new Date(),
+    // quien lo lanzó reciba el aviso en lugar de un «completado» vacío. Un
+    // corte por saldo o credenciales también, aunque haya pilares: el mapa
+    // quedó a medias y hay que volver a lanzarlo.
+    estado: corte.valor || finales.length === 0 ? 'fallido' : 'completado',
+    etapas: estado, etapaActual: null, finishedAt: new Date(),
     tokensEntrada: tIn, tokensSalida: tOut, costoUsd: String(gasto.valor),
-    error: finales.length > 0 ? null : 'Ningún pilar se pudo generar. Intenta de nuevo.',
+    error: corte.valor ? corte.valor.message
+      : finales.length > 0 ? null : 'Ningún pilar se pudo generar. Intenta de nuevo.',
   }).where(eq(researchJobs.id, jobId));
 }

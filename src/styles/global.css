@@ -516,6 +516,9 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--r
 .linea-tiempo .corriendo .marca-etapa { background: var(--azul-s); color: var(--azul); border-color: var(--azul); animation: latido 1.4s ease-in-out infinite; }
 .linea-tiempo .fallo .marca-etapa { background: var(--rojo-s); color: var(--rojo); border-color: transparent; }
 .linea-tiempo .omitido_por_costo .marca-etapa { background: var(--amarillo-s); color: var(--amarillo); border-color: transparent; }
+/* Etapa detenida por un corte de cuenta (sin saldo, llave inválida): amarilla
+   como la omitida por costo, no roja — no falló, se quedó sin ejecutar. */
+.linea-tiempo .abortado .marca-etapa { background: var(--amarillo-s); color: var(--amarillo); border-color: transparent; }
 .linea-tiempo strong { color: var(--tinta); }
 
 @keyframes latido { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--azul) 18%, transparent); } }
