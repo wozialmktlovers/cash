@@ -302,6 +302,22 @@ export const contenidoLotes = pgTable('contenido_lotes', {
   // guarda en vez de recalcularla para que la cuenta regresiva que ve el
   // cliente no se mueva si alguien le cambia `dias_revision` a medio mes.
   limiteRevision: timestamp('limite_revision', { withTimezone: true }),
+  // Cuándo se tocó por última vez el CONTENIDO del mes: el alta, la edición o
+  // el borrado de una pieza. Lo estampa `marcarContenidoTocado`
+  // (src/contenido/servicio.ts) y nadie más.
+  //
+  // Es el reloj con el que se compara `compartido_en` para saber si el plazo de
+  // revisión sigue valiendo: un mes solo se auto-aprueba si su contenido no se
+  // ha movido desde que se compartió (`loteAutoAprobado`, src/contenido/reglas.ts).
+  // Por eso la revisión del CLIENTE no lo toca: aprobar una pieza o pedir
+  // cambios en ella escribe en `contenido_piezas`, pero no cambia lo que se le
+  // compartió, y contarlo como «contenido nuevo» haría que responder dentro de
+  // plazo alargara el plazo.
+  //
+  // No nulo con `now()` por omisión: un lote recién creado ya tiene contenido
+  // (ninguno) de ese instante, y como `compartido_en` nace nulo, no hay plazo
+  // que pueda correr antes del primer reparto.
+  contenidoActualizadoEn: timestamp('contenido_actualizado_en', { withTimezone: true }).notNull().defaultNow(),
   creadoPor: uuid('creado_por').references(() => users.id, { onDelete: 'set null' }),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
   actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),

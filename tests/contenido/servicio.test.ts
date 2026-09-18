@@ -264,7 +264,7 @@ describe('refrescarLote', () => {
  */
 describe('compartirLote', () => {
   const VIERNES = new Date('2026-09-11T23:00:00.000Z');
-  const base = { id: 'l1', clientId: CLIENTE, compartidoEn: null, limiteRevision: null };
+  const base = { id: 'l1', clientId: CLIENTE, compartidoEn: null, limiteRevision: null, contenidoActualizadoEn: null };
 
   it('un lote en proceso queda en revisión, con su compartido y su fecha límite', async () => {
     espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];

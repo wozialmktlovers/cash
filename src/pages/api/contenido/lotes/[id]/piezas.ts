@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { eq, max } from 'drizzle-orm';
 import { db, contenidoPiezas } from '@/db';
 import { piezaVisibleJson, validarNuevaPieza } from '@/contenido/piezas';
-import { refrescarLote } from '@/contenido/servicio';
+import { marcarContenidoTocado, refrescarLote } from '@/contenido/servicio';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { violaRestriccionUnica } from '@/lib/unicidad';
 import { loteVisible } from '@/lib/visibilidad';
@@ -54,11 +54,12 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   const lote = visible.lote;
   let resultado;
   try {
-    // El alta, el estado del lote y el de la etapa van en la misma
-    // transacción: un lote ya compartido cambia de estado al recibir una pieza
-    // nueva —si su ronda de revisión ya terminó, vuelve al lado del operador
-    // con el plazo borrado; ver `refrescarLote`— y eso tiene que llegar a la
-    // ficha, al Inicio y al portal de una pieza.
+    // El alta, la marca de contenido, el estado del lote y el de la etapa van
+    // en la misma transacción: un lote ya compartido cambia de estado al recibir
+    // una pieza nueva —si su ronda de revisión ya terminó, vuelve al lado del
+    // operador con el plazo borrado; ver `refrescarLote`— y eso tiene que llegar
+    // a la ficha, al Inicio y al portal de una pieza.
+    const ahora = new Date();
     resultado = await db.transaction(async (tx) => {
       let numero = v.datos.numero;
       if (numero === undefined) {
@@ -85,6 +86,13 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
           arte: v.datos.arte,
         })
         .returning();
+
+      // El mes tiene contenido que no estaba cuando se compartió, así que el
+      // plazo de esa ronda deja de valer sobre él (`marcarContenidoTocado`,
+      // src/contenido/servicio.ts). Va antes del recalculo por orden de
+      // lectura, no por necesidad: las dos escrituras son de la misma
+      // transacción y ninguna depende de la otra.
+      await marcarContenidoTocado(lote.id, ahora, tx);
 
       const estadoLote = await refrescarLote(lote, tx);
       return { pieza, estadoLote };

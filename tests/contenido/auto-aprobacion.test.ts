@@ -153,6 +153,9 @@ const vencido = (estado = 'en_revision') => ({
   estado,
   compartidoEn: new Date('2026-09-11T17:00:00-06:00'),
   limiteRevision: LIMITE,
+  // Armado antes de repartirse: el plazo vale sobre lo que el cliente tiene
+  // delante (ver `loteAutoAprobado`).
+  contenidoActualizadoEn: new Date('2026-09-11T16:00:00-06:00'),
 });
 
 let urlPrevia: string | undefined;

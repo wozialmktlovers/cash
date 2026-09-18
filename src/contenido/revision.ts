@@ -159,6 +159,30 @@ export function aceptaDecision(lote: LoteFresco, ahora: Date): boolean {
  * sobre TODAS sus piezas, así que el lote queda `aprobada` cuando todas lo
  * están y vuelve a `con_cambios` en cuanto una se devuelve, sin esperar al
  * resto. Después, `sincronizarEtapa` copia ese estado a `cliente_etapas`.
+ *
+ * ── El lote puede volver a `en_revision` por aquí, y no pasa nada ─────────
+ *
+ * Hay un caso en que este recálculo devuelve el lote a `en_revision` desde
+ * `con_cambios`: el cliente aprueba él mismo la pieza que había devuelto y no
+ * queda ninguna en `cambios`, pero sí pendientes. Si el plazo de aquella ronda
+ * ya venció —y suele haber vencido, porque un mes `con_cambios` no se
+ * auto-aprueba y el reloj corrió igual—, el lote queda `en_revision` con una
+ * fecha límite muerta, y el siguiente barrido aprobaba en el acto las piezas que
+ * el cliente aún no había mirado, con constancia de que «no respondió» justo
+ * cuando acababa de responder.
+ *
+ * No se arregla aquí, y por eso esta función no lleva ninguna salvedad: el mes
+ * llegó a `con_cambios` porque el operador tenía trabajo pendiente, y al hacerlo
+ * marca `contenido_actualizado_en` (`marcarContenidoTocado`, ./servicio.ts), así
+ * que el plazo de la ronda anterior ya no vale sobre lo que el cliente tiene
+ * delante y `loteAutoAprobado` no lo toca. Lo cubre
+ * `tests/contenido/plazo-contenido-tocado.test.ts`.
+ *
+ * Queda vivo el caso en que el operador NO tocó nada entre una cosa y la otra:
+ * ahí el contenido sí es el que se compartió y el plazo vencido vuelve a correr,
+ * aunque venciera mientras la pelota era del operador. Está anotado como tal en
+ * lugar de taparse con un quinto parche: decidir si esa retractación devuelve el
+ * mes al operador o solo apaga el plazo es una decisión de producto.
  */
 export async function registrarRevision(o: {
   piezaId: string;

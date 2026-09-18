@@ -293,6 +293,62 @@ describe('0008: el brief visual de la pieza', () => {
   });
 });
 
+describe('0010: cuándo se tocó por última vez el contenido del mes', () => {
+  const carpeta = path.resolve(__dirname, '../../drizzle');
+  const m0010 = () => leerMigraciones(carpeta).find((x: { tag: string }) => x.tag === '0010_plazo_contenido_tocado')!;
+  const trozos = (): string[] => m0010().sql.map((t: string) => t.trim()).filter(Boolean);
+
+  it('añade la columna y rellena las filas que ya existen, en ese orden', () => {
+    const t = trozos();
+    const indice = (fragmento: string) => t.findIndex((x) => x.includes(fragmento));
+    const columna = indice('ADD COLUMN "contenido_actualizado_en"');
+    const relleno = indice('UPDATE "contenido_lotes" SET "contenido_actualizado_en"');
+    expect(columna).toBeGreaterThanOrEqual(0);
+    // El relleno tiene que ir DESPUÉS: antes de la columna no hay nada que
+    // escribir y el UPDATE fallaría.
+    expect(columna).toBeLessThan(relleno);
+    expect(t).toHaveLength(2);
+  });
+
+  it('el relleno es `creado_en`, que es lo único que deja coherentes los meses en curso', () => {
+    // `creado_en <= compartido_en` siempre (no se comparte un lote antes de
+    // crearlo), así que un mes con el plazo corriendo sigue venciendo igual que
+    // antes de la migración. Con el `now()` por omisión de la columna quedaría
+    // marcado como «tocado después de compartirse» y no se auto-aprobaría nunca
+    // más, incumpliendo en silencio la promesa del entregable.
+    // El trozo lleva delante sus comentarios, así que se compara la última
+    // línea: lo que Postgres va a ejecutar.
+    const relleno = trozos().find((t) => t.includes('UPDATE "contenido_lotes"'))!;
+    expect(relleno.trim().split('\n').at(-1)).toBe('UPDATE "contenido_lotes" SET "contenido_actualizado_en" = "creado_en";');
+    // Y no se toca ninguna otra tabla ni se borra nada.
+    expect(trozos().join('\n')).not.toContain('DELETE');
+    expect(trozos().join('\n')).not.toContain('DROP');
+  });
+
+  it('no añade valores a ningún enum: entra entera aunque se aplique sobre una base atrasada', () => {
+    // La trampa 55P04 (`ALTER TYPE ... ADD VALUE` y usarlo en la misma
+    // transacción) no aplica aquí, y conviene que siga sin aplicar: el UPDATE
+    // corre en la misma transacción que el ALTER TABLE.
+    expect(trozos().join('\n')).not.toContain('ADD VALUE');
+  });
+
+  it('la columna de la migración es la que declara el esquema (sin deriva con drizzle-kit)', () => {
+    const snapshot = JSON.parse(fs.readFileSync(path.join(carpeta, 'meta', '0010_snapshot.json'), 'utf8'));
+    const columna = snapshot.tables['public.contenido_lotes'].columns.contenido_actualizado_en;
+    // No nula con `now()`: un lote recién creado ya tiene contenido de ese
+    // instante, y como `compartido_en` nace nulo no hay plazo que pueda correr
+    // antes del primer reparto.
+    expect(columna).toMatchObject({
+      name: 'contenido_actualizado_en', type: 'timestamp with time zone', notNull: true, default: 'now()',
+    });
+    // Con zona, como las otras fechas del lote: el plazo se compara entre
+    // instantes, no entre horas locales.
+    for (const c of ['compartido_en', 'limite_revision', 'creado_en']) {
+      expect(snapshot.tables['public.contenido_lotes'].columns[c].type).toBe('timestamp with time zone');
+    }
+  });
+});
+
 describe('0009: el lote tiene su propio tipo de enlace', () => {
   const carpeta = path.resolve(__dirname, '../../drizzle');
   const migraciones = () => leerMigraciones(carpeta) as Array<{ tag: string; sql: string[]; folderMillis: number }>;

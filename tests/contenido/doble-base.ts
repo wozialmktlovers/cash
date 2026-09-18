@@ -9,10 +9,17 @@
 // primero.
 //
 // Por eso este doble **guarda filas y respeta el `WHERE`**: las condiciones de
-// Drizzle se interpretan (solo `eq`, `and`, `isNotNull` y `lt`, que es todo lo
-// que usan los módulos bajo prueba; cualquier otra revienta en vez de pasar de
-// largo). Eso es lo que permite afirmar que una escritura toca las filas que
-// dice tocar y no las demás.
+// Drizzle se interpretan (solo `eq`, `and`, `isNotNull`, `lt` y `lte`, que es
+// todo lo que usan los módulos bajo prueba; cualquier otra revienta en vez de
+// pasar de largo). Eso es lo que permite afirmar que una escritura toca las
+// filas que dice tocar y no las demás.
+//
+// `lte` se entiende también **entre dos columnas** (`lte(a, b)`, sin valor de
+// por medio), que es como el prefiltro de `autoAprobarVencidos` pregunta si el
+// contenido del lote se tocó después de compartirlo. Se emula con la semántica
+// de SQL y no con la de JavaScript: si cualquiera de los dos lados es nulo, la
+// comparación no es cierta y la fila queda fuera —en SQL daría NULL—, en vez de
+// colarse por un `undefined <= fecha`.
 //
 // Vive en su propio archivo —y no dentro de un `.test.ts`— para que lo compartan
 // los archivos que lo necesitan sin copiarlo: dos copias de un doble se
@@ -37,6 +44,18 @@ export type Espia = {
   piezas: Fila[];
   etapas: Fila[];
   eventos: Fila[];
+  /**
+   * Opcional porque solo la necesita quien ejerce `registrarRevision` de
+   * verdad: pedir cambios deja un comentario anclado a la pieza. Quien no la
+   * declara y aun así escribe en `comentarios` se lleva un error del doble, que
+   * es lo que queremos —mejor que una escritura que se pierde en silencio—.
+   */
+  comentarios?: Fila[];
+  /**
+   * Los enlaces públicos (`share_links`), con la misma regla: opcional porque
+   * solo la necesita quien ejerce `retirarEnlaceDelLote` (src/contenido/enlaces.ts).
+   */
+  enlaces?: Fila[];
 };
 
 /** El `@/db` real, tal como lo entrega `importarReal` dentro del `vi.mock`. */
@@ -53,12 +72,16 @@ export function dobleDeBase(real: ModuloDb, espia: Espia) {
     [real.contenidoPiezas, 'piezas'],
     [real.clienteEtapas, 'etapas'],
     [real.etapaEventos, 'eventos'],
+    [real.comentarios, 'comentarios'],
+    [real.shareLinks, 'enlaces'],
   ]);
 
   const filasDe = (tabla: unknown): Fila[] => {
     const nombre = tablas.get(tabla);
     if (!nombre) throw new Error('El doble de la base no conoce esa tabla.');
-    return espia[nombre];
+    const filas = espia[nombre];
+    if (!filas) throw new Error(`El espía no declara la tabla «${nombre}».`);
+    return filas;
   };
 
   /** Nombre de la propiedad de la fila que corresponde a esa columna. */
@@ -69,34 +92,53 @@ export function dobleDeBase(real: ModuloDb, espia: Espia) {
     throw new Error('El doble de la base no reconoce esa columna.');
   };
 
+  type Operador = '=' | '<' | '<=';
+
+  /** Compara como lo haría Postgres: con un lado nulo, la condición no es cierta. */
+  const compara = (op: Operador, izq: unknown, der: unknown): boolean => {
+    if (op === '=') return izq === der;
+    if (izq == null || der == null) return false;
+    return op === '<' ? (izq as number) < (der as number) : (izq as number) <= (der as number);
+  };
+
   /**
    * Traduce una condición de Drizzle a un predicado sobre la fila. Entiende
-   * `eq`, `and`, `isNotNull` y `lt`; ante cualquier otra cosa lanza, para que
-   * un `WHERE` que este doble no sepa evaluar no se ignore en silencio.
+   * `eq`, `and`, `isNotNull`, `lt` y `lte` —este último también entre dos
+   * columnas—; ante cualquier otra cosa lanza, para que un `WHERE` que este
+   * doble no sepa evaluar no se ignore en silencio.
    */
   const predicado = (tabla: unknown, condicion: unknown): ((fila: Fila) => boolean) => {
     if (condicion === undefined || condicion === null) return () => true;
     const partes: ((fila: Fila) => boolean)[] = [];
     let columna: unknown = null;
-    let operador: '=' | '<' | null = null;
+    let operador: Operador | null = null;
 
     const recorrer = (sql: any) => {
       for (const trozo of sql?.queryChunks ?? []) {
         if (trozo?.queryChunks) { recorrer(trozo); continue; }
-        if (trozo instanceof Column) { columna = trozo; continue; }
+        if (trozo instanceof Column) {
+          // Una segunda columna con operador pendiente es el lado derecho de
+          // una comparación entre columnas (`lte(a, b)`), no una condición nueva.
+          if (columna !== null && operador !== null) {
+            const kIzq = clave(tabla, columna), kDer = clave(tabla, trozo), op = operador;
+            partes.push((fila) => compara(op, fila[kIzq], fila[kDer]));
+            columna = null; operador = null;
+            continue;
+          }
+          columna = trozo;
+          continue;
+        }
         if (trozo && typeof trozo === 'object' && 'encoder' in trozo) {
           const col = columna, op = operador;
           if (col === null || op === null) throw new Error('Valor sin columna ni operador.');
           const k = clave(tabla, col), v = (trozo as { value: unknown }).value;
-          partes.push(op === '='
-            ? (fila) => fila[k] === v
-            : (fila) => fila[k] != null && (fila[k] as number) < (v as number));
+          partes.push((fila) => compara(op, fila[k], v));
           columna = null; operador = null;
           continue;
         }
         const texto = (Array.isArray(trozo?.value) ? trozo.value.join('') : String(trozo ?? '')).trim();
         if (texto === '' || texto === '(' || texto === ')' || texto === 'and') continue;
-        if (texto === '=' || texto === '<') { operador = texto as '=' | '<'; continue; }
+        if (texto === '=' || texto === '<' || texto === '<=') { operador = texto as Operador; continue; }
         if (texto === 'is not null') {
           const col = columna;
           if (col === null) throw new Error('«is not null» sin columna.');
@@ -105,7 +147,7 @@ export function dobleDeBase(real: ModuloDb, espia: Espia) {
           columna = null;
           continue;
         }
-        throw new Error(`El doble de la base solo entiende eq/and/isNotNull/lt; encontró «${texto}».`);
+        throw new Error(`El doble de la base solo entiende eq/and/isNotNull/lt/lte; encontró «${texto}».`);
       }
     };
 

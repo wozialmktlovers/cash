@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { db, contenidoPiezas } from '@/db';
 import { piezaVisibleJson, validarCambioPieza } from '@/contenido/piezas';
-import { refrescarLote } from '@/contenido/servicio';
+import { marcarContenidoTocado, refrescarLote } from '@/contenido/servicio';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { violaRestriccionUnica } from '@/lib/unicidad';
 import { piezaVisible } from '@/lib/visibilidad';
@@ -31,6 +31,17 @@ const RESTRICCION_NUMERO = 'contenido_piezas_lote_id_numero';
  * no entra en `estadoLoteSegunPiezas`, que solo mira `estado_cliente` —y este
  * cuerpo tiene prohibido tocarlo—. Mover el copy de una pieza no cambia en qué
  * estado está el mes. Ver `refrescarLote` (src/contenido/servicio.ts).
+ *
+ * **Sí marca que el contenido del mes se movió** (`marcarContenidoTocado`), y
+ * esa era la puerta que quedaba abierta: editar una pieza de un lote que el
+ * cliente está revisando no cambia ningún estado, así que el mes seguía
+ * `en_revision` con su plazo corriendo y al vencer daba por aprobado un texto
+ * que el cliente no llegó a leer. Con la marca, ese plazo deja de valer y para
+ * volver a arrancarlo hay que repartir el mes otra vez (`compartirLote`).
+ *
+ * La edición y la marca van en la misma transacción: si se fueran por separado
+ * y fallara la segunda, quedaría contenido nuevo bajo un plazo viejo, que es
+ * exactamente lo que esto viene a impedir.
  */
 export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const visible = await piezaVisible(locals.usuario, params.id!);
@@ -48,13 +59,18 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   const v = validarCambioPieza(crudo);
   if (!v.ok) return json({ ok: false, errores: v.errores }, 400);
 
+  const ahora = new Date();
   let filas;
   try {
-    filas = await db
-      .update(contenidoPiezas)
-      .set({ ...v.datos, actualizadoEn: new Date() })
-      .where(eq(contenidoPiezas.id, visible.pieza.id))
-      .returning();
+    filas = await db.transaction(async (tx) => {
+      const actualizadas = await tx
+        .update(contenidoPiezas)
+        .set({ ...v.datos, actualizadoEn: ahora })
+        .where(eq(contenidoPiezas.id, visible.pieza.id))
+        .returning();
+      if (actualizadas.length > 0) await marcarContenidoTocado(visible.lote.id, ahora, tx);
+      return actualizadas;
+    });
   } catch (e) {
     // Igual que en el alta: el choque de números lo canta la restricción única
     // de la base, no un `SELECT` previo que otra petición podría dejar viejo.
@@ -101,6 +117,9 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
       .where(eq(contenidoPiezas.id, visible.pieza.id))
       .returning({ id: contenidoPiezas.id });
     if (borradas.length === 0) return null;
+    // Quitar una pieza también es mover el contenido del mes: lo que queda ya no
+    // es lo que se compartió.
+    await marcarContenidoTocado(lote.id, new Date(), tx);
     return { id: borradas[0].id, estadoLote: await refrescarLote(lote, tx) };
   });
 

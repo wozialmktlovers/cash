@@ -115,11 +115,20 @@ export function enlaceWeb(url: string | null | undefined): string | null {
 /** Lo que estas reglas necesitan saber de una pieza. */
 export type PiezaRevisable = { formato: Formato; estadoCliente: EstadoRevision };
 
-/** Lo que estas reglas necesitan saber de un lote. */
+/**
+ * Lo que estas reglas necesitan saber de un lote.
+ *
+ * `contenidoActualizadoEn` no es opcional a propósito, aunque admita `null`:
+ * quien consulte la regla tiene que haber leído esa columna, y así el compilador
+ * se lo exige en vez de dejar que un `SELECT` incompleto desactive la invariante
+ * en silencio. `null` solo puede venir de una prueba o de una fila anterior a la
+ * columna —en la base es `NOT NULL`— y se lee como «no consta que se tocara».
+ */
 export type LoteRevisable = {
   compartidoEn: Date | null;
   limiteRevision: Date | null;
   estado: EstadoLote;
+  contenidoActualizadoEn: Date | null;
 };
 
 /** Cuántas piezas al mes lleva el cliente, por formato (diseño §3). */
@@ -272,10 +281,44 @@ export function limiteRevision(compartidoEn: Date, diasHabiles = DIAS_REVISION_P
  *
  * El instante exacto del límite todavía es del cliente: la comparación es
  * estricta.
+ *
+ * ── Y el plazo solo vale sobre el contenido que se compartió ──────────────
+ *
+ * La última condición —`contenido_actualizado_en <= compartido_en`— es la que
+ * hace que esta función no dependa de por dónde haya pasado el lote.
+ *
+ * `limite_revision` se estampa una vez, al compartir, y sobrevivía a todo lo que
+ * le ocurriera al mes después. Como un lote puede volver a `en_revision` por
+ * varios caminos —dar de alta una pieza, borrar la última, borrar la que el
+ * cliente había devuelto, que el cliente apruebe él mismo esa pieza—, cada uno
+ * tenía que acordarse de limpiar la fecha, y el que se olvidaba dejaba un plazo
+ * muerto corriendo: el siguiente barrido aprobaba en el acto material que el
+ * cliente nunca vio, con constancia de que «no respondió».
+ *
+ * Preguntar por el contenido en vez de por el camino cierra los cinco de una vez
+ * y también el que nadie había mirado: el operador que EDITA una pieza mientras
+ * el cliente revisa no cambia el estado de nada —`PATCH` no toca
+ * `estado_cliente`—, así que el lote seguía `en_revision` con su plazo corriendo
+ * y al vencer se daba por aprobado un texto que el cliente no llegó a leer.
+ *
+ * Lo que NO cuenta como tocar el contenido es la revisión del cliente: aprobar
+ * una pieza o pedir cambios en ella escribe en `contenido_piezas`, pero es su
+ * opinión sobre el material, no el material. Si contara, responder dentro del
+ * plazo alargaría el plazo. Quién mueve la fecha y quién no está en
+ * `marcarContenidoTocado` (../contenido/servicio.ts), que es su única escritura.
+ *
+ * La comparación es `<=` y no `<`: compartir el mes en el mismo instante en que
+ * se guardó la última pieza es repartir esa pieza, no adelantarse a ella.
  */
 export function loteAutoAprobado(lote: LoteRevisable, ahora: Date): boolean {
   if (lote.compartidoEn === null || lote.limiteRevision === null) return false;
   if (lote.estado !== 'en_revision') return false;
+  // Truthiness y no `!== null`: así un `undefined` —una fila leída sin esta
+  // columna, o un doble de pruebas— se lee como «no consta que se tocara» en vez
+  // de reventar al pedirle la hora.
+  if (lote.contenidoActualizadoEn && lote.contenidoActualizadoEn.getTime() > lote.compartidoEn.getTime()) {
+    return false;
+  }
   return ahora.getTime() > lote.limiteRevision.getTime();
 }
 

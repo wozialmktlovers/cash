@@ -58,7 +58,7 @@
 //   proceso y una bandera en memoria daría una seguridad falsa.
 // - **Nunca tumba la pantalla.** Un fallo aquí se registra y la página sigue.
 
-import { and, eq, isNotNull, lt } from 'drizzle-orm';
+import { and, eq, isNotNull, lt, lte } from 'drizzle-orm';
 import { db, clienteEtapas, clients, contenidoLotes, contenidoPiezas, etapaEventos } from '@/db';
 import { loteAutoAprobado } from './reglas';
 import { sincronizarEtapa } from './servicio';
@@ -168,6 +168,7 @@ async function aprobarLoteVencido(candidato: Candidato, ahora: Date): Promise<bo
         estado: contenidoLotes.estado,
         compartidoEn: contenidoLotes.compartidoEn,
         limiteRevision: contenidoLotes.limiteRevision,
+        contenidoActualizadoEn: contenidoLotes.contenidoActualizadoEn,
       })
       .from(contenidoLotes)
       .where(eq(contenidoLotes.id, candidato.id))
@@ -218,13 +219,21 @@ async function aprobarLoteVencido(candidato: Candidato, ahora: Date): Promise<bo
 }
 
 /**
- * Los lotes que hoy podrían estar vencidos: `en_revision`, con fecha límite y
- * con la límite ya pasada. Prefiltro en SQL del mismo criterio de
- * `loteAutoAprobado`, para no traerse la tabla entera; la palabra final la
- * tiene la regla, dentro de la transacción y sobre la fila bloqueada.
+ * Los lotes que hoy podrían estar vencidos: `en_revision`, con fecha límite, con
+ * la límite ya pasada y **con el contenido intacto desde que se compartió**.
+ * Prefiltro en SQL del mismo criterio de `loteAutoAprobado`, para no traerse la
+ * tabla entera; la palabra final la tiene la regla, dentro de la transacción y
+ * sobre la fila bloqueada.
  *
- * `lt` y no `lte` porque el instante exacto del límite todavía es del cliente
- * (ver `loteAutoAprobado`).
+ * `lt` y no `lte` para el límite porque el instante exacto todavía es del
+ * cliente; `lte` para el contenido porque compartir el mes en el mismo instante
+ * en que se guardó la última pieza es repartir esa pieza (ver `loteAutoAprobado`
+ * para el porqué de esta condición).
+ *
+ * La comparación es entre dos columnas de la misma fila, así que la resuelve
+ * Postgres sin parámetros: si `compartido_en` fuera nulo, el `<=` daría NULL y
+ * la fila quedaría fuera, que es justo lo que se quiere —sin compartir no hay
+ * plazo— y lo mismo que contesta la regla.
  *
  * Trae de paso el nombre del cliente y su operador, que es lo que necesita el
  * aviso: son los mismos lotes, y hacerlo después serían dos consultas más por
@@ -235,6 +244,7 @@ async function candidatos(ahora: Date, clientId?: string): Promise<Candidato[]> 
     eq(contenidoLotes.estado, 'en_revision'),
     isNotNull(contenidoLotes.limiteRevision),
     lt(contenidoLotes.limiteRevision, ahora),
+    lte(contenidoLotes.contenidoActualizadoEn, contenidoLotes.compartidoEn),
   ];
   if (clientId) condiciones.push(eq(contenidoLotes.clientId, clientId));
 

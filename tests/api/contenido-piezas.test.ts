@@ -35,6 +35,8 @@ const espia = vi.hoisted(() => ({
   fallo: null as unknown,
   insertado: undefined as Record<string, unknown> | undefined,
   actualizado: undefined as Record<string, unknown> | undefined,
+  /** Los `set` sobre `contenido_lotes`: aquí llega `marcarContenidoTocado`. */
+  marcados: [] as Record<string, unknown>[],
   borradas: 1,
   refrescados: [] as string[],
 }));
@@ -52,16 +54,23 @@ vi.mock('@/db', async (importarReal) => {
       return [{ ...filaPieza(), ...espia.insertado, id: ids.PIEZA }];
     },
   };
-  const escritura = {
-    set(cambio: Record<string, unknown>) {
-      espia.actualizado = cambio;
-      return escritura;
-    },
-    where: () => escritura,
-    async returning() {
-      if (espia.fallo) throw espia.fallo;
-      return [{ ...filaPieza(), ...espia.actualizado }];
-    },
+  // La escritura distingue la tabla: la pieza y el lote se escriben en la misma
+  // transacción —la marca de contenido va con la edición— y mezclarlas dejaría
+  // a `espia.actualizado` diciendo lo último que se escribió, que es del lote.
+  const escritura = (tabla: unknown) => {
+    const w = {
+      set(cambio: Record<string, unknown>) {
+        if (tabla === real.contenidoLotes) espia.marcados.push(cambio);
+        else espia.actualizado = cambio;
+        return w;
+      },
+      where: () => w,
+      async returning() {
+        if (espia.fallo) throw espia.fallo;
+        return [{ ...filaPieza(), ...espia.actualizado }];
+      },
+    };
+    return w;
   };
   const baja = {
     where: () => baja,
@@ -69,7 +78,7 @@ vi.mock('@/db', async (importarReal) => {
       return espia.borradas > 0 ? [{ id: ids.PIEZA }] : [];
     },
   };
-  const ejecutor = { select: () => lectura, insert: () => alta, update: () => escritura, delete: () => baja };
+  const ejecutor = { select: () => lectura, insert: () => alta, update: (t: unknown) => escritura(t), delete: () => baja };
   return {
     ...real,
     db: { ...ejecutor, transaction: async (fn: (tx: unknown) => unknown) => fn(ejecutor) },
@@ -132,6 +141,7 @@ beforeEach(() => {
   espia.fallo = null;
   espia.insertado = undefined;
   espia.actualizado = undefined;
+  espia.marcados = [];
   espia.borradas = 1;
   espia.refrescados = [];
 });
@@ -153,6 +163,10 @@ describe('POST /api/contenido/lotes/[id]/piezas', () => {
       fechaPublicacion: null, temaId: null, copy: '', cta: '', hashtags: '', briefVisual: '', arte: [],
     });
     expect(espia.refrescados).toEqual([LOTE]);
+    // El mes tiene contenido que no estaba cuando se compartió, así que el plazo
+    // de aquella ronda deja de valer sobre él (`loteAutoAprobado`).
+    expect(espia.marcados).toHaveLength(1);
+    expect(espia.marcados[0]?.contenidoActualizadoEn).toBeInstanceOf(Date);
     const cuerpo = await res.json();
     expect(cuerpo.pieza.id).toBe(PIEZA);
     expect(cuerpo.estadoLote).toBe('en_proceso');
@@ -314,6 +328,24 @@ describe('PATCH /api/contenido/piezas/[id]', () => {
     await editar({ copy: 'x' });
     expect(espia.refrescados).toEqual([]);
   });
+
+  /**
+   * …pero sí marca que el contenido del mes se movió. Es la puerta que quedaba
+   * abierta: `PATCH` no cambia ningún estado, así que un lote que el cliente
+   * estaba revisando seguía `en_revision` con su plazo corriendo y al vencer
+   * daba por aprobado un texto que el cliente no llegó a leer
+   * (`loteAutoAprobado`, src/contenido/reglas.ts).
+   */
+  it('marca que el contenido del lote se movió, con la misma hora que la pieza', async () => {
+    await editar({ copy: 'x' });
+    expect(espia.marcados).toHaveLength(1);
+    expect(espia.marcados[0]?.contenidoActualizadoEn).toEqual(espia.actualizado?.actualizadoEn);
+  });
+
+  it('un cuerpo rechazado no marca nada', async () => {
+    await editar({});
+    expect(espia.marcados).toEqual([]);
+  });
 });
 
 describe('DELETE /api/contenido/piezas/[id]', () => {
@@ -322,6 +354,10 @@ describe('DELETE /api/contenido/piezas/[id]', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, id: PIEZA, estadoLote: 'en_proceso' });
     expect(espia.refrescados).toEqual([LOTE]);
+    // Quitar una pieza también mueve el contenido del mes: lo que queda ya no es
+    // lo que se compartió.
+    expect(espia.marcados).toHaveLength(1);
+    expect(espia.marcados[0]?.contenidoActualizadoEn).toBeInstanceOf(Date);
   });
 
   it('la pieza que no se opera responde 404', async () => {
@@ -336,5 +372,6 @@ describe('DELETE /api/contenido/piezas/[id]', () => {
     espia.borradas = 0;
     expect((await borrar()).status).toBe(404);
     expect(espia.refrescados).toEqual([]);
+    expect(espia.marcados).toEqual([]);
   });
 });

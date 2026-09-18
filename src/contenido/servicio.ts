@@ -121,6 +121,59 @@ export async function sincronizarEtapa(clientId: string, ejecutor: Ejecutor = db
 }
 
 /**
+ * Deja constancia de que el CONTENIDO del mes se movió: alta, edición o borrado
+ * de una pieza. Es la única escritura de `contenido_lotes.contenido_actualizado_en`.
+ *
+ * ── Por qué existe esta columna ──────────────────────────────────────────
+ *
+ * El plazo de revisión (`limite_revision`) sobrevivía a todo lo que le pasara al
+ * mes, y cada camino que devolvía un lote a `en_revision` tenía que acordarse de
+ * limpiarlo. Se parchearon cuatro caminos y quedaba al menos uno abierto; la
+ * forma de dejar de jugar a eso es no preguntar por dónde pasó el lote, sino por
+ * lo único que importa: **un mes solo se auto-aprueba si nadie tocó su contenido
+ * desde que se compartió** (`loteAutoAprobado`, ./reglas.ts). Así el plazo vale
+ * exactamente sobre el material que el cliente recibió, y ni un carrusel más.
+ *
+ * ── Qué la mueve y qué no ────────────────────────────────────────────────
+ *
+ * La mueven las tres escrituras del OPERADOR sobre el contenido: `POST
+ * /api/contenido/lotes/[id]/piezas`, `PATCH /api/contenido/piezas/[id]` y
+ * `DELETE /api/contenido/piezas/[id]`. **La revisión del cliente no**, aunque
+ * escriba en la misma tabla: `estado_cliente`, `nota_cliente` y `revisado_en`
+ * son lo que el cliente OPINA del contenido, no el contenido. Si contaran,
+ * responder dentro del plazo alargaría el plazo, que es lo contrario de lo que
+ * el plazo significa. Por el mismo motivo tampoco la mueve `compartirLote`
+ * cuando devuelve a `pendiente` las piezas de la ronda anterior, ni
+ * `autoAprobarVencidos` al aprobarlas.
+ *
+ * ── Por qué aparte de `refrescarLote` ────────────────────────────────────
+ *
+ * Porque no coinciden: `PATCH` no pasa por `refrescarLote` —editar el copy no
+ * cambia el estado del mes— y sí tiene que marcar el contenido; y al revés,
+ * `refrescarLote` se llama también desde sitios donde no hubo edición. Meterlo
+ * dentro obligaría a `PATCH` a recalcular el estado del lote y a resincronizar
+ * la etapa en cada tecla guardada, por una columna que se escribe con un solo
+ * `UPDATE`.
+ *
+ * Se consideró un disparador de Postgres sobre `contenido_piezas` —que ningún
+ * camino podría olvidar, ni los que aún no existen— y se descartó por dos
+ * razones: tendría que distinguir a mano las columnas de contenido de las de
+ * revisión (la lista volvería a desincronizarse al crecer la pieza), y las
+ * pruebas de esta etapa corren sobre un doble de la base, así que la invariante
+ * quedaría sin verificar en CI. Queda anotado por si algún día hay pruebas
+ * contra Postgres de verdad.
+ */
+export async function marcarContenidoTocado(
+  loteId: string,
+  ahora: Date = new Date(),
+  ejecutor: Ejecutor = db,
+): Promise<void> {
+  await ejecutor.update(contenidoLotes)
+    .set({ contenidoActualizadoEn: ahora, actualizadoEn: ahora })
+    .where(eq(contenidoLotes.id, loteId));
+}
+
+/**
  * Lo mínimo que hace falta de un lote para refrescarlo tras tocar sus piezas.
  */
 export type LoteRefrescable = { id: string; clientId: string; estado: Estado; compartidoEn: Date | null };
@@ -198,6 +251,26 @@ export type LoteRefrescable = { id: string; clientId: string; estado: Estado; co
  * `en_proceso` por el primer punto, sin llegar a este: existe, se está armando,
  * y un lote vacío es trabajo empezado, no aprobado.
  *
+ * ── Qué queda de esto desde que existe `contenido_actualizado_en` ─────────
+ *
+ * La invariante de `loteAutoAprobado` —un mes solo se auto-aprueba si nadie tocó
+ * su contenido desde que se compartió— ya impide sola el DAÑO que originaba este
+ * bloque: el alta y el borrado marcan el contenido, así que aunque el lote
+ * volviera a `en_revision` con el límite muerto, nadie lo aprobaría.
+ *
+ * Aun así esto se queda, porque no hace lo mismo. La invariante decide si un
+ * plazo vale; esto decide **de quién es la pelota**, y eso se ve en tres sitios
+ * que la invariante no toca: la ficha y el tablero leen `cliente_etapas`, que
+ * diría «en revisión» de un mes que en realidad espera al operador; el
+ * entregable del cliente pintaría «compartido el …, el plazo vence el …» con una
+ * cuenta regresiva agotada sobre material que nadie le ha vuelto a mandar; y el
+ * botón «Compartir» necesita que el lote esté del lado del operador para volver a
+ * ser el reparto del mes. Borrar `compartido_en` y `limite_revision` es decir
+ * eso mismo en los datos: esta versión del mes no se ha compartido.
+ *
+ * Las dos reglas se solapan a propósito, y el solape es barato: una cuida el
+ * estado, la otra cuida el plazo.
+ *
  * `PATCH` de una pieza no pasa por aquí: los campos que edita el operador
  * —planeación, copy, cta, hashtags, arte— no entran en `estadoLoteSegunPiezas`,
  * que solo mira `estado_cliente`, así que no hay nada que recalcular.
@@ -243,6 +316,9 @@ export type LoteCompartible = {
   estado: Estado;
   compartidoEn: Date | null;
   limiteRevision: Date | null;
+  /** Ver `marcarContenidoTocado`. Obligatorio —aunque admita `null`— para que
+   *  el compilador no deje compartir sin haber leído esta columna. */
+  contenidoActualizadoEn: Date | null;
 };
 
 /** Cómo quedó el lote después de compartirlo. */
@@ -291,6 +367,25 @@ export type ResultadoCompartir = {
  * ronda nueva sobre contenido que el cliente no ha visto. Sin reiniciar, el mes
  * arrastraría el límite vencido de la ronda anterior y se auto-aprobaría en
  * cuanto alguien lo mirara.
+ *
+ * ── Y la excepción del `en_revision` con contenido nuevo ──────────────────
+ *
+ * Hay un tercer caso en que el plazo sí arranca: el lote está `en_revision` pero
+ * **su contenido se movió después de compartirlo**
+ * (`contenido_actualizado_en > compartido_en`). Es el operador que edita una
+ * pieza mientras el cliente revisa: `PATCH` no cambia el estado de nada, así que
+ * el mes se queda `en_revision`, pero lo que hay delante ya no es lo que se
+ * repartió y `loteAutoAprobado` deja de auto-aprobarlo.
+ *
+ * Sin esta excepción ese mes quedaría congelado: no vencería nunca y el botón
+ * «Compartir» no arrancaría nada, porque el lote ya estaba `en_revision`. Con
+ * ella, el arreglo es el gesto que el operador ya iba a hacer —volver a repartir
+ * el mes— y el plazo nuevo corre sobre el contenido nuevo.
+ *
+ * No reabre la puerta que cierra el caso `en_revision` de arriba: **reenviar el
+ * enlace no reinicia nada**, porque compartir no toca el contenido. Para volver
+ * a mover la fecha límite hay que editar una pieza, que es un cambio de verdad y
+ * no pulsar un botón dos veces.
  *
  * ── La ronda nueva también reinicia las PIEZAS ────────────────────────────
  *
@@ -350,7 +445,17 @@ export async function compartirLote(
   ahora: Date = new Date(),
   ejecutor: Ejecutor = db,
 ): Promise<ResultadoCompartir> {
-  const arranca = lote.estado === 'en_proceso' || lote.estado === 'con_cambios';
+  // El tercer caso: `en_revision` cuyo contenido se movió después del reparto.
+  // La comparación es estricta —y simétrica a la de `loteAutoAprobado`, que
+  // acepta el empate—: si las dos fechas coinciden, el contenido entró en lo que
+  // se compartió y no hay ronda nueva que arrancar.
+  const contenidoNuevo = lote.compartidoEn !== null
+    && lote.contenidoActualizadoEn !== null
+    && lote.contenidoActualizadoEn.getTime() > lote.compartidoEn.getTime();
+
+  const arranca = lote.estado === 'en_proceso'
+    || lote.estado === 'con_cambios'
+    || (lote.estado === 'en_revision' && contenidoNuevo);
   if (!arranca) {
     return {
       estado: lote.estado,

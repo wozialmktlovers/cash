@@ -53,6 +53,8 @@ import { compartirLote, refrescarLote, type LoteCompartible, type LoteRefrescabl
 const CLIENTE = '00000000-0000-4000-8000-0000000000c1';
 const LOTE = '00000000-0000-4000-8000-00000000010e';
 
+/** El día anterior: el operador armó las piezas del mes. */
+const ARMADO = new Date('2026-09-09T16:00:00.000Z');
 /** Jueves de septiembre de 2026, a media mañana de México: se comparte el mes. */
 const COMPARTIDO = new Date('2026-09-10T16:00:00.000Z');
 /** La fecha límite de esa ronda, con los 2 días hábiles de la casa. */
@@ -83,6 +85,7 @@ const comoCompartible = (): LoteCompartible => {
     estado: l.estado as LoteCompartible['estado'],
     compartidoEn: (l.compartidoEn ?? null) as Date | null,
     limiteRevision: (l.limiteRevision ?? null) as Date | null,
+    contenidoActualizadoEn: (l.contenidoActualizadoEn ?? null) as Date | null,
   };
 };
 
@@ -114,7 +117,9 @@ const clientePideCambios = (numero: number, nota: string, cuando: Date) => {
 const estados = () => espia.piezas.map((p) => p.estadoCliente);
 
 beforeEach(() => {
-  espia.lotes = [{ id: LOTE, clientId: CLIENTE, periodo: '2026-09', estado: 'en_proceso', compartidoEn: null, limiteRevision: null }];
+  // `contenidoActualizadoEn` anterior al reparto: el plazo vale sobre lo que el
+  // cliente recibe (ver `loteAutoAprobado`, src/contenido/reglas.ts).
+  espia.lotes = [{ id: LOTE, clientId: CLIENTE, periodo: '2026-09', estado: 'en_proceso', compartidoEn: null, limiteRevision: null, contenidoActualizadoEn: ARMADO }];
   espia.piezas = [piezaDe(1), piezaDe(2), piezaDe(3)];
   espia.etapas = [];
   espia.eventos = [];

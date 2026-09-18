@@ -54,6 +54,9 @@ const lote = (over: Partial<LoteRevisable> = {}): LoteRevisable => ({
   compartidoEn: mx('2026-09-11T17:00:00'),
   limiteRevision: mx('2026-09-15T23:59:59.999'),
   estado: 'en_revision',
+  // El contenido se tocó por última vez ANTES de compartirlo, que es el mes
+  // normal: se arma, se reparte y se espera al cliente.
+  contenidoActualizadoEn: mx('2026-09-11T16:00:00'),
   ...over,
 });
 
@@ -174,6 +177,42 @@ describe('loteAutoAprobado', () => {
     const vencido = mx('2026-09-30T09:00:00');
     const seAprueban = ESTADOS.filter((estado) => loteAutoAprobado(lote({ estado }), vencido));
     expect(seAprueban).toEqual(['en_revision']);
+  });
+
+  /**
+   * La invariante que deja de depender de por dónde pasó el lote: **el plazo
+   * solo vale sobre el contenido que se compartió**. Sustituye a ir limpiando
+   * `limite_revision` en cada camino que reabría un mes, que es lo que se había
+   * intentado cuatro veces dejando al menos uno abierto.
+   */
+  describe('y solo si el contenido sigue siendo el que se compartió', () => {
+    const vencido = mx('2026-09-30T09:00:00');
+
+    it('si el contenido se movió después del reparto, el plazo ya no vale', () => {
+      const tocado = lote({ contenidoActualizadoEn: mx('2026-09-12T10:00:00') });
+      expect(loteAutoAprobado(tocado, vencido)).toBe(false);
+    });
+
+    it('el empate cuenta como compartió lo que había: se aprueba', () => {
+      // Guardar la última pieza y repartir el mes en el mismo instante es
+      // repartir esa pieza, no adelantarse a ella.
+      const l = lote();
+      expect(loteAutoAprobado({ ...l, contenidoActualizadoEn: l.compartidoEn }, vencido)).toBe(true);
+    });
+
+    it('un segundo antes del reparto sigue siendo contenido compartido', () => {
+      const l = lote();
+      const justoAntes = new Date(l.compartidoEn!.getTime() - 1000);
+      expect(loteAutoAprobado({ ...l, contenidoActualizadoEn: justoAntes }, vencido)).toBe(true);
+    });
+
+    it('sin fecha de contenido no consta que se tocara, y el plazo vale', () => {
+      // La columna es `NOT NULL` en la base, así que esto solo llega de una fila
+      // anterior a la columna o de un doble de pruebas. Se lee como «no consta
+      // que se tocara»: es el comportamiento de antes de la invariante, y no
+      // deja lotes congelados sin que nadie pueda desbloquearlos.
+      expect(loteAutoAprobado(lote({ contenidoActualizadoEn: null }), vencido)).toBe(true);
+    });
   });
 });
 
