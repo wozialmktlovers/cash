@@ -136,12 +136,14 @@ const archivos: ArchivoCliente[] = await db
 // cliente vea lo nuevo.
 const reabierto = !!lote && lote.compartidoEn === null && filas.some((p) => p.estadoCliente !== 'pendiente');
 
-// **Un mes al que se le apagó el plazo.** `registrarRevision`
-// (src/contenido/revision.ts) deja el lote `en_revision` con `limite_revision`
-// nulo cuando el plazo de la ronda se consumió mientras el mes esperaba al
-// operador y el cliente se retractó de la pieza que había devuelto. La firma es
-// un lote compartido y sin fecha límite, que no la tiene ningún otro estado: el
-// mes que vuelve al operador pierde también `compartido_en`.
+// **Un mes al que se le apagó el plazo.** Es lo que hace el sistema cuando el
+// plazo de la ronda se consumió mientras el mes esperaba al operador y algo lo
+// saca de `con_cambios` sin pasar por un reparto: `registrarRevision`
+// (src/contenido/revision.ts) si el gesto es del cliente —se retracta de la
+// pieza que había devuelto— y `refrescarLote` (src/contenido/servicio.ts) si es
+// del operador —resuelve la petición borrando esa pieza—. La firma es un lote
+// compartido y sin fecha límite, que no la tiene ningún otro estado: el mes que
+// vuelve al operador pierde también `compartido_en`.
 //
 // Se dice por lo mismo que el `reabierto`: si no, el operador ve desaparecer la
 // fecha límite del encabezado sin explicación y no tiene por qué adivinar que
@@ -149,13 +151,13 @@ const reabierto = !!lote && lote.compartidoEn === null && filas.some((p) => p.es
 // un plazo, cuando en cualquier otro mes ya compartido solo crea otro enlace.
 const sinPlazo = !!lote && lote.compartidoEn !== null && lote.limiteRevision === null;
 
-// De los dos meses sin fecha, este es el que además quedó **aprobado**: no
-// quedaba ninguna pieza pendiente cuando el cliente se retractó, así que el
-// recálculo dedujo `aprobada` y el plazo se apagó igual. Se distingue porque lo
-// que hay que decirle al operador es distinto: aquí el cliente no está
-// revisando nada —ya aprobó el mes entero—, pero sigue pudiendo cambiar de
-// opinión mientras el mes no tenga fecha, y compartirlo otra vez es lo que lo
-// cierra (ver `aceptaDecision` y `compartirLote`).
+// De los dos meses sin fecha, este es el que además quedó **aprobado**: al salir
+// de `con_cambios` no quedaba ninguna pieza pendiente, así que el recálculo
+// dedujo `aprobada` y el plazo se apagó igual. Se distingue porque lo que hay
+// que decirle al operador es distinto: aquí el cliente no está revisando nada
+// —el mes está aprobado entero—, pero sigue pudiendo cambiar de opinión
+// mientras el mes no tenga fecha, y compartirlo otra vez es lo que lo cierra
+// (ver `aceptaDecision` y `compartirLote`).
 const aprobadoSinPlazo = sinPlazo && lote?.estado === 'aprobada';
 
 // **Los enlaces del mes.** Cada «Compartir el mes» crea otro token, y hasta
@@ -214,18 +216,19 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
   {sinPlazo && (aprobadoSinPlazo ? (
     <p class="aviso amarillo" style="margin-bottom:18px">
       <strong>Este mes está aprobado, pero sin fecha límite.</strong> El plazo de la ronda anterior se consumió
-      mientras el mes estaba de tu lado, y después el cliente retiró los cambios que había pedido y aprobó esa
-      pieza él mismo: con eso quedó aprobado el mes entero. Ese reloj se paró a su favor, así que mientras no
-      haya fecha sigue pudiendo cambiar de opinión sobre cualquier pieza. Para cerrarlo, comparte el mes otra
-      vez: eso le pone un plazo nuevo de {plazo} y, cuando pase, el mes deja de admitir cambios.
+      mientras el mes estaba de tu lado, y después se resolvió la petición que el cliente había dejado abierta
+      —él mismo retiró sus cambios, o se quitó esa pieza del mes—: con eso quedó aprobado lo que queda. Ese
+      reloj se paró a su favor, así que mientras no haya fecha sigue pudiendo cambiar de opinión sobre
+      cualquier pieza. Para cerrarlo, comparte el mes otra vez: eso le pone un plazo nuevo de {plazo} y,
+      cuando pase, el mes deja de admitir cambios.
     </p>
   ) : (
     <p class="aviso amarillo" style="margin-bottom:18px">
       <strong>Este mes se quedó sin fecha límite.</strong> El plazo de la ronda anterior se consumió mientras
-      el mes estaba de tu lado, y después el cliente retiró los cambios que había pedido y aprobó esa pieza
-      él mismo. Hacer valer ahí un plazo vencido habría dado por aprobadas, en el acto, las piezas que todavía
-      no ha mirado, así que se detuvo: el cliente sigue revisando en su portal, pero el mes ya no se va a
-      aprobar solo. Para que vuelva a tener fecha, comparte el mes otra vez: eso arranca un plazo nuevo de {plazo}.
+      el mes estaba de tu lado, y después se resolvió la petición que el cliente había dejado abierta. Hacer
+      valer ahí un plazo vencido habría dado por aprobadas, en el acto, las piezas que todavía no ha mirado,
+      así que se detuvo: el cliente sigue revisando en su portal, pero el mes ya no se va a aprobar solo.
+      Para que vuelva a tener fecha, comparte el mes otra vez: eso arranca un plazo nuevo de {plazo}.
     </p>
   ))}
 

@@ -175,8 +175,20 @@ export async function marcarContenidoTocado(
 
 /**
  * Lo mínimo que hace falta de un lote para refrescarlo tras tocar sus piezas.
+ *
+ * `limiteRevision` es obligatorio —aunque admita `null`— por lo mismo que
+ * `contenidoActualizadoEn` en `LoteCompartible`: de él depende si el plazo que
+ * arrastra el mes se apaga o se conserva, así que el compilador exige haber
+ * leído esa columna en vez de dejar que un `SELECT` incompleto desactive la
+ * regla en silencio.
  */
-export type LoteRefrescable = { id: string; clientId: string; estado: Estado; compartidoEn: Date | null };
+export type LoteRefrescable = {
+  id: string;
+  clientId: string;
+  estado: Estado;
+  compartidoEn: Date | null;
+  limiteRevision: Date | null;
+};
 
 /**
  * Deja el lote y la etapa al día después de dar de alta o borrar una pieza
@@ -245,7 +257,8 @@ export type LoteRefrescable = { id: string; clientId: string; estado: Estado; co
  * Deducir `aprobada` sí se acepta tal cual, aunque el lote venga de
  * `con_cambios`: no es un plazo corriendo sobre material no visto, es la
  * conclusión de lo que el cliente decidió pieza por pieza. En ningún caso el
- * lote se borra solo.
+ * lote se borra solo. Lo que sí se apaga en ese paso es el PLAZO, y tiene su
+ * propio apartado abajo.
  *
  * Un lote **sin compartir** al que se le borra la última pieza se queda
  * `en_proceso` por el primer punto, sin llegar a este: existe, se está armando,
@@ -271,11 +284,59 @@ export type LoteRefrescable = { id: string; clientId: string; estado: Estado; co
  * Las dos reglas se solapan a propósito, y el solape es barato: una cuida el
  * estado, la otra cuida el plazo.
  *
+ * ── Y el plazo que se consumió mientras la pelota era nuestra ─────────────
+ *
+ * Queda un camino que la reapertura de arriba no cubre, porque no reabre nada:
+ * el lote está `con_cambios`, el operador **resuelve la petición borrando la
+ * pieza devuelta** en vez de corregirla, y lo que queda está todo aprobado. El
+ * recálculo deduce `aprobada` —correcto, lo aprobó el cliente pieza por pieza—
+ * y el mes se quedaba con el `limite_revision` de aquella ronda, ya vencido.
+ *
+ * El daño es el de la puerta, no el de la auto-aprobación: `loteAutoAprobado`
+ * solo mira `en_revision`, así que ahí nadie aprueba nada de oficio, pero
+ * `aceptaDecision` (./revision.ts) sí cierra un `aprobada` con la fecha pasada,
+ * y le contestaba al cliente con `razonPlazoVencido` que el mes «quedó cerrado
+ * al terminar el plazo». Ni se auto-aprobó —lo aprobó él— ni ese plazo venció en
+ * su turno: el mes estuvo esperando al operador.
+ *
+ * Es el mismo caso que `registrarRevision` (./revision.ts) ya resolvía desde el
+ * otro lado, con una sola diferencia: allí el gesto que saca el mes de
+ * `con_cambios` es del cliente —se retracta y aprueba él mismo la pieza— y aquí
+ * es del operador. **El principio manda sobre el actor:** un reloj que se
+ * consumió mientras la pelota estaba del lado del equipo no cuenta contra el
+ * cliente, lo mueva quien lo mueva. Así que aquí se apaga igual, y el mes queda
+ * `aprobada` **sin fecha**: aprobado pero no cerrado, con el cliente todavía
+ * pudiendo cambiar de opinión (`aceptaDecision` admite siempre un lote sin
+ * límite) hasta que el reparto le ponga una nueva —el «quinto caso» de
+ * `compartirLote`, que estampa la fecha y deja el mes `aprobada`—.
+ *
+ * La condición es tan estrecha como la de `registrarRevision`, y por las mismas
+ * dos razones:
+ *
+ * - **Solo la salida de `con_cambios`**, que es el único estado del que se sale
+ *   por aquí con la pelota del lado del operador. Un mes `aprobada` al que se le
+ *   borra una pieza y sigue `aprobada` no entra: si su plazo venció, venció en
+ *   el turno del cliente, y ese es exactamente el mes **auto-aprobado por
+ *   vencimiento legítimo** que toda esta familia existe para respetar. Sigue
+ *   cerrado con su fecha.
+ * - **Solo un límite ya vencido.** Si todavía corre, es el plazo de la ronda que
+ *   el cliente tiene delante y sigue siendo bueno; no hay nada que perdonarle a
+ *   nadie. La comparación es estricta, como la de `loteAutoAprobado`: el instante
+ *   exacto del límite todavía es del cliente.
+ *
+ * El destino `en_revision` de ese mismo borrado no necesita nada de esto: cae en
+ * la reapertura de arriba, que ya devuelve el mes al operador con el plazo
+ * limpio. Lo cubre `tests/contenido/plazo-pieza-borrada.test.ts`.
+ *
  * `PATCH` de una pieza no pasa por aquí: los campos que edita el operador
  * —planeación, copy, cta, hashtags, arte— no entran en `estadoLoteSegunPiezas`,
  * que solo mira `estado_cliente`, así que no hay nada que recalcular.
  */
-export async function refrescarLote(lote: LoteRefrescable, ejecutor: Ejecutor = db): Promise<Estado> {
+export async function refrescarLote(
+  lote: LoteRefrescable,
+  ahora: Date = new Date(),
+  ejecutor: Ejecutor = db,
+): Promise<Estado> {
   let estado = lote.estado;
 
   if (lote.compartidoEn !== null) {
@@ -290,14 +351,28 @@ export async function refrescarLote(lote: LoteRefrescable, ejecutor: Ejecutor = 
     // devuelve al operador con el plazo borrado.
     const reabre = deducido === 'en_revision' && estado !== 'en_revision';
 
+    // El plazo que se consumió mientras el mes esperaba al operador no revive
+    // porque sea él quien acabe cerrándolo (ver la explicación larga de arriba):
+    // solo la SALIDA de `con_cambios` hacia `aprobada` —el operador resolvió la
+    // petición borrando la pieza devuelta— y solo si la fecha que arrastra ya
+    // está vencida.
+    const plazoConsumidoEnTurnoAjeno = deducido === 'aprobada'
+      && estado === 'con_cambios'
+      && lote.limiteRevision !== null
+      && ahora.getTime() > lote.limiteRevision.getTime();
+
     if (reabre) {
       await ejecutor.update(contenidoLotes)
-        .set({ estado: 'en_proceso', compartidoEn: null, limiteRevision: null, actualizadoEn: new Date() })
+        .set({ estado: 'en_proceso', compartidoEn: null, limiteRevision: null, actualizadoEn: ahora })
         .where(eq(contenidoLotes.id, lote.id));
       estado = 'en_proceso';
     } else if (deducido !== estado) {
       await ejecutor.update(contenidoLotes)
-        .set({ estado: deducido, actualizadoEn: new Date() })
+        .set({
+          estado: deducido,
+          ...(plazoConsumidoEnTurnoAjeno ? { limiteRevision: null } : {}),
+          actualizadoEn: ahora,
+        })
         .where(eq(contenidoLotes.id, lote.id));
       estado = deducido;
     }
@@ -407,17 +482,24 @@ export type ResultadoCompartir = {
  * este reparto le pone fecha nueva, el siguiente «Compartir» vuelve a ser un
  * enlace más que no mueve nada. Recompartir dos veces seguidas no alarga un
  * plazo vivo: hace falta que el sistema lo haya apagado antes, y eso solo pasa
- * una vez por retractación.
+ * al sacar el mes de `con_cambios` con el reloj ya consumido.
  *
  * ── Y el quinto: el mes APROBADO al que se le apagó el plazo ──────────────
  *
- * El mismo apagón tiene otro destino. Si al retractarse el cliente no queda
- * ninguna pieza pendiente, `registrarRevision` deja el lote `aprobada` —lo
- * aprobó él, pieza por pieza— y también sin `limite_revision`. Un mes así está
- * aprobado pero **no cerrado**: `aceptaDecision` admite siempre un lote sin
- * fecha, así que el cliente puede seguir cambiando de opinión mientras no la
- * tenga, que es lo correcto —el reloj se detuvo porque el equipo dejó correr el
- * suyo—, pero no puede quedarse así para siempre.
+ * El mismo apagón tiene otro destino, y a él se llega por dos gestos distintos
+ * que valen lo mismo —el principio manda sobre el actor—:
+ *
+ * - Si al retractarse el cliente no queda ninguna pieza pendiente,
+ *   `registrarRevision` (./revision.ts) deja el lote `aprobada` —lo aprobó él,
+ *   pieza por pieza— y sin `limite_revision`.
+ * - Si es el OPERADOR quien resuelve la petición borrando la pieza devuelta y lo
+ *   que queda está todo aprobado, `refrescarLote` (más arriba en este archivo)
+ *   deja exactamente el mismo lote.
+ *
+ * Un mes así está aprobado pero **no cerrado**: `aceptaDecision` admite siempre
+ * un lote sin fecha, así que el cliente puede seguir cambiando de opinión
+ * mientras no la tenga, que es lo correcto —el reloj se detuvo porque el equipo
+ * dejó correr el suyo—, pero no puede quedarse así para siempre.
  *
  * Compartirlo otra vez es el remedio, y aquí hace algo distinto que en los otros
  * cuatro casos: estampa la fecha y **deja el mes `aprobada`**. El porqué está
@@ -498,11 +580,13 @@ export async function compartirLote(
   const sinPlazo = lote.estado === 'en_revision' && lote.limiteRevision === null;
 
   // Y el quinto, la otra mitad de ese mismo apagón: `aprobada` sin fecha
-  // límite. Es el mes que el cliente terminó de aprobar al retractarse, con el
-  // plazo ya apagado porque se había consumido esperando al operador. Vale lo
-  // mismo que el cuarto —solo `registrarRevision` deja un lote así, y ningún
-  // reparto pone un `aprobada` sin fecha—, con un matiz que cambia el efecto:
-  // aquí el mes NO vuelve a `en_revision` (el porqué, más abajo, donde escribe).
+  // límite. Es el mes que quedó aprobado al salir de `con_cambios` con el plazo
+  // ya consumido esperando al operador —lo saque de ahí el cliente
+  // retractándose (`registrarRevision`) o el operador borrando la pieza devuelta
+  // (`refrescarLote`)—. Vale lo mismo que el cuarto: ningún reparto pone un
+  // `aprobada` sin fecha, así que a este estado solo se llega por ese apagón.
+  // El matiz que cambia el efecto es que aquí el mes NO vuelve a `en_revision`
+  // (el porqué, más abajo, donde escribe).
   const aprobadoSinPlazo = lote.estado === 'aprobada' && lote.limiteRevision === null;
 
   const arranca = lote.estado === 'en_proceso'

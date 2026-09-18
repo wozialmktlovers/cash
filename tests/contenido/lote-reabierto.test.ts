@@ -97,6 +97,7 @@ const comoRefrescable = (): LoteRefrescable => {
     clientId: l.clientId as string,
     estado: l.estado as LoteRefrescable['estado'],
     compartidoEn: (l.compartidoEn ?? null) as Date | null,
+    limiteRevision: (l.limiteRevision ?? null) as Date | null,
   };
 };
 
@@ -294,7 +295,12 @@ describe('un lote con cambios cuyo plazo venció', () => {
     espia.piezas.splice(2, 1);
     // Esto no es un plazo corriendo sobre material no visto: es la conclusión
     // de lo que el cliente decidió pieza por pieza. No se reabre nada.
-    expect(await refrescarLote(comoRefrescable())).toBe('aprobada');
+    expect(await refrescarLote(comoRefrescable(), DIAS_DESPUES)).toBe('aprobada');
     expect(filaLote().compartidoEn).toEqual(COMPARTIDO);
+    // Lo que sí se apaga es el PLAZO: ese reloj se consumió mientras el mes
+    // esperaba al operador, así que no puede cerrarle luego la puerta al cliente
+    // (`aceptaDecision`, src/contenido/revision.ts). La secuencia entera, con lo
+    // que el cliente todavía puede hacer, está en `./plazo-pieza-borrada.test.ts`.
+    expect(filaLote().limiteRevision).toBeNull();
   });
 });

@@ -111,6 +111,11 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
   // El borrado y el estado del lote van juntos: si la pieza se fuera y el
   // recálculo fallara, el lote podría quedarse `en_revision` esperando a una
   // pieza que ya no existe.
+  // Un solo instante para las dos escrituras de la transacción: la marca de
+  // contenido tocado y el recálculo del lote —que compara ese instante con
+  // `limite_revision` para decidir si el plazo se apaga— tienen que hablar del
+  // mismo momento.
+  const ahora = new Date();
   const resultado = await db.transaction(async (tx) => {
     const borradas = await tx
       .delete(contenidoPiezas)
@@ -119,8 +124,8 @@ export const DELETE: APIRoute = async ({ params, locals }) => {
     if (borradas.length === 0) return null;
     // Quitar una pieza también es mover el contenido del mes: lo que queda ya no
     // es lo que se compartió.
-    await marcarContenidoTocado(lote.id, new Date(), tx);
-    return { id: borradas[0].id, estadoLote: await refrescarLote(lote, tx) };
+    await marcarContenidoTocado(lote.id, ahora, tx);
+    return { id: borradas[0].id, estadoLote: await refrescarLote(lote, ahora, tx) };
   });
 
   if (!resultado) return json({ ok: false, errores: ['La pieza no existe'] }, 404);

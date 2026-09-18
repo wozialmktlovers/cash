@@ -94,7 +94,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
       // transacción y ninguna depende de la otra.
       await marcarContenidoTocado(lote.id, ahora, tx);
 
-      const estadoLote = await refrescarLote(lote, tx);
+      const estadoLote = await refrescarLote(lote, ahora, tx);
       return { pieza, estadoLote };
     });
   } catch (e) {

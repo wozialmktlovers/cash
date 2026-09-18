@@ -143,10 +143,13 @@ type LoteFresco = { estado: Estado; compartidoEn: Date | null; limiteRevision: D
  *   mes que el cliente aprobó entero y cuyo plazo venció después. En los dos, el
  *   plazo se acabó de verdad; `razonPlazoVencido` lo dice sin atribuirle a nadie
  *   una aprobación que no hizo.
- * - **Límite nulo:** acepta. Un lote sin fecha es uno al que `registrarRevision`
- *   le APAGÓ el plazo porque se consumió mientras el mes esperaba al operador
- *   (ver la explicación larga de abajo). Ese reloj se detuvo a favor del cliente
- *   y nunca venció para él, así que oponérselo sería cobrarle una espera ajena.
+ * - **Límite nulo:** acepta. Un lote sin fecha es uno al que el sistema le APAGÓ
+ *   el plazo porque se consumió mientras el mes esperaba al operador: por aquí
+ *   si quien sacó el mes de `con_cambios` fue el cliente retractándose (ver la
+ *   explicación larga de abajo), o por `refrescarLote` (./servicio.ts) si fue el
+ *   operador, resolviendo la petición con el borrado de la pieza devuelta. Ese
+ *   reloj se detuvo a favor del cliente y nunca venció para él, así que
+ *   oponérselo sería cobrarle una espera ajena.
  *
  * **Sí: un mes aprobado sin fecha queda reabrible mientras no la tenga, y es lo
  * correcto.** No es un descuido ni un estado al que se llegue solo: se llega

@@ -53,10 +53,14 @@ function cifraTarjeta(valor: string, etiqueta: string): string {
  *
  * ── Y el mes compartido que se quedó SIN fecha límite ─────────────────────
  *
- * Es un estado real y hay que decirlo con todas las letras: un lote
- * `en_revision` con `limite_revision` nulo, el que deja `registrarRevision`
- * (src/contenido/revision.ts) cuando el plazo se consumió mientras el mes
- * esperaba al equipo y el cliente se retractó de la pieza que había devuelto.
+ * Es un estado real y hay que decirlo con todas las letras: un lote compartido
+ * con `limite_revision` nulo, el que queda cuando el plazo se consumió mientras
+ * el mes esperaba al equipo y después algo lo sacó de `con_cambios` sin pasar
+ * por un reparto —el cliente retractándose (`registrarRevision`,
+ * src/contenido/revision.ts) o el operador resolviendo la petición con el
+ * borrado de la pieza devuelta (`refrescarLote`, src/contenido/servicio.ts)—.
+ * Llega aquí tanto `en_revision`, si al cliente le quedan piezas por mirar,
+ * como `aprobada` y sin cerrar, si no le queda ninguna.
  *
  * Sin una rama propia caía en la de «está en camino», que es falsa —el mes lo
  * tiene delante, con sus botones— y desconcertante. Y las dos salidas fáciles

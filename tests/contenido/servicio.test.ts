@@ -196,9 +196,11 @@ describe('sincronizarEtapa', () => {
  * última pieza— y por eso está probado en los dos bordes.
  */
 describe('refrescarLote', () => {
-  const sinCompartir = { id: 'l1', clientId: CLIENTE, estado: 'en_proceso' as const, compartidoEn: null };
-  const compartido = { id: 'l1', clientId: CLIENTE, estado: 'en_revision' as const, compartidoEn: new Date('2026-09-10T18:00:00Z') };
+  const sinCompartir = { id: 'l1', clientId: CLIENTE, estado: 'en_proceso' as const, compartidoEn: null, limiteRevision: null };
+  const compartido = { id: 'l1', clientId: CLIENTE, estado: 'en_revision' as const, compartidoEn: new Date('2026-09-10T18:00:00Z'), limiteRevision: null };
   const pieza = (estadoCliente: string) => ({ formato: 'post', estadoCliente });
+  /** El plazo de aquella ronda, para los dos casos del apagado. */
+  const LIMITE = new Date('2026-09-14T23:59:59.999Z');
 
   it('el lote sin compartir no se deduce de sus piezas: se queda como está', async () => {
     espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_proceso' }];
@@ -240,6 +242,40 @@ describe('refrescarLote', () => {
     espia.piezas = [pieza('aprobada'), pieza('aprobada')];
     expect(await refrescarLote({ ...compartido, estado: 'con_cambios' })).toBe('aprobada');
     expect(espia.cambiosLote[0]?.estado).toBe('aprobada');
+  });
+
+  // Los dos bordes del apagado del plazo. El mes salía de `con_cambios` —donde
+  // la pelota era del operador— y se llevaba puesta la fecha de aquella ronda:
+  // si ya había vencido, `aceptaDecision` le cerraba la puerta al cliente por
+  // una espera que no fue suya. El porqué entero está en `refrescarLote`; la
+  // secuencia completa, en `./plazo-pieza-borrada.test.ts`.
+
+  it('si el plazo que arrastra ya venció, se apaga al deducir aprobada', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'con_cambios' }];
+    espia.piezas = [pieza('aprobada'), pieza('aprobada')];
+    const despues = new Date(LIMITE.getTime() + 60_000);
+    expect(await refrescarLote({ ...compartido, estado: 'con_cambios', limiteRevision: LIMITE }, despues)).toBe('aprobada');
+    expect(espia.cambiosLote[0]).toMatchObject({ estado: 'aprobada', limiteRevision: null });
+  });
+
+  it('pero si todavía corre, es el plazo de esta ronda y se conserva', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'con_cambios' }];
+    espia.piezas = [pieza('aprobada'), pieza('aprobada')];
+    const antes = new Date(LIMITE.getTime() - 60_000);
+    expect(await refrescarLote({ ...compartido, estado: 'con_cambios', limiteRevision: LIMITE }, antes)).toBe('aprobada');
+    expect(espia.cambiosLote[0]?.estado).toBe('aprobada');
+    expect(espia.cambiosLote[0]).not.toHaveProperty('limiteRevision');
+  });
+
+  // El mes auto-aprobado por vencimiento legítimo: la pelota era del CLIENTE y
+  // no contestó. Ese plazo corrió en su turno, así que el mes sigue cerrado con
+  // su fecha aunque después se le quite una pieza.
+  it('un mes ya aprobado que sigue aprobado conserva su fecha', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'aprobada' }];
+    espia.piezas = [pieza('aprobada'), pieza('aprobada')];
+    const despues = new Date(LIMITE.getTime() + 60_000);
+    expect(await refrescarLote({ ...compartido, estado: 'aprobada', limiteRevision: LIMITE }, despues)).toBe('aprobada');
+    expect(espia.cambiosLote).toEqual([]);
   });
 
   it('si el estado no se mueve, no escribe el lote', async () => {

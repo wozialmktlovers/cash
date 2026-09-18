@@ -284,10 +284,12 @@ export function limiteRevision(compartidoEn: Date, diasHabiles = DIAS_REVISION_P
  *
  * **Y un lote sin `limite_revision` no se auto-aprueba nunca**, que era ya la
  * primera línea de esta función y desde ahora también es una decisión: es la
- * forma en que `registrarRevision` (../contenido/revision.ts) apaga un plazo que
- * se consumió mientras el mes esperaba al operador. Un `en_revision` con la
- * fecha en nulo significa «el cliente lo tiene delante, pero aquí no corre
- * ningún reloj», y relajar esta comprobación lo dejaría sin sentido.
+ * forma en que el sistema apaga un plazo que se consumió mientras el mes
+ * esperaba al operador, lo saque de ahí el cliente (`registrarRevision`,
+ * ../contenido/revision.ts) o el propio operador (`refrescarLote`,
+ * ../contenido/servicio.ts). Un `en_revision` con la fecha en nulo significa
+ * «el cliente lo tiene delante, pero aquí no corre ningún reloj», y relajar
+ * esta comprobación lo dejaría sin sentido.
  *
  * ── Y el plazo solo vale sobre el contenido que se compartió ──────────────
  *
