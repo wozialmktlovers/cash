@@ -7,6 +7,7 @@ import { puedeOperarCliente, type UsuarioSesion } from '@/lib/permisos';
 import { documentoVisible, loteVisible, type DocumentoTipo } from '@/lib/visibilidad';
 import { permisoCompartir } from '@/flujo/servicio';
 import { compartirLote } from '@/contenido/servicio';
+import { retirarEnlaceDelLote } from '@/contenido/enlaces';
 import { baseUrlPublica } from '@/lib/base-url';
 
 const json = (cuerpo: unknown, status = 200) =>
@@ -116,11 +117,31 @@ export const DELETE: APIRoute = async ({ request, locals }) => {
   // (`loteVisible`) y no por `documentoVisible`. Sin esta rama, un link de
   // contenido caía al SELECT de `research_results`, no encontraba nada y
   // quedaba imposible de revocar.
+  const visible = link.documentoTipo === 'contenido'
+    ? await loteVisible(locals.usuario, link.documentoId)
+    : null;
   const cliente = link.documentoTipo === 'contenido'
-    ? (await loteVisible(locals.usuario, link.documentoId))?.cliente
+    ? visible?.cliente
     : (await documentoVisible(locals.usuario, link.documentoTipo as DocumentoTipo, link.documentoId))?.cliente;
   if (!cliente || !puedeOperarCliente(locals.usuario, cliente)) {
     return json({ ok: false, errores: ['El link no existe'] }, 404);
+  }
+
+  // Retirar el enlace de un mes no es solo revocar el token: si era el último
+  // vivo, el cliente se queda sin poder abrir el mes —ni por el enlace público
+  // ni por su portal, que exige `compartido_en`—, y un plazo corriendo sobre un
+  // mes que nadie puede abrir acabaría auto-aprobándolo. Por qué se detiene, y
+  // por qué solo desde `en_revision`, está argumentado en
+  // `retirarEnlaceDelLote` (src/contenido/enlaces.ts). Los otros tres tipos de
+  // documento no tienen plazo, así que siguen por la revocación de siempre.
+  if (visible) {
+    const retiro = await retirarEnlaceDelLote(visible.lote, token);
+    return json({
+      ok: true,
+      activosRestantes: retiro.activosRestantes,
+      detuvoElPlazo: retiro.detuvoElPlazo,
+      estadoLote: retiro.estado,
+    });
   }
 
   await revocarShareLink(token);

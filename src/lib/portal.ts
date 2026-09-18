@@ -6,7 +6,8 @@
 
 import { and, desc, eq, inArray, ne } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
-import { db, comentarios, etapaEventos } from '@/db';
+import { db, comentarios, contenidoLotes, etapaEventos } from '@/db';
+import { elegirLoteActivo } from '@/contenido/servicio';
 import {
   ETAPAS, NOMBRE_ETAPA, ESTADO_CLIENTE, etapasVisiblesCliente, avanceCliente, puedeComentar,
   type Etapa, type EtapaCliente,
@@ -30,19 +31,32 @@ export type TarjetaPortal = {
   puedeComentar: boolean;
   proximamente: boolean;
   /**
-   * Solo en `desarrollo_mensual`: el lote que el cliente puede abrir. Es lo que
-   * esa etapa tiene en vez de una versión aprobada, porque su entregable no es
-   * una fila con `datos` sino un lote con sus piezas (diseño §2).
+   * Solo en `desarrollo_mensual`: el mes destacado, el que el cliente abre con
+   * el botón principal. Es lo que esa etapa tiene en vez de una versión
+   * aprobada, porque su entregable no es una fila con `datos` sino un lote con
+   * sus piezas (diseño §2).
    */
   lote?: { id: string; periodo: string };
+  /**
+   * Los demás meses que el cliente ya puede abrir, del más reciente al más
+   * viejo. El diseño §2 lo promete con todas sus letras —«los meses anteriores
+   * no desaparecen: quedan accesibles y el cliente puede volver a verlos desde
+   * su portal»— y sin esta lista era mentira: la portada solo miraba el lote
+   * ACTIVO, así que abrir el lote de octubre escondía el de septiembre, que el
+   * cliente tenía aprobado y a mano el día anterior.
+   */
+  mesesAnteriores?: { id: string; periodo: string }[];
 };
 
 /**
- * El lote mensual que la portada del portal necesita saber, si lo hay
- * (C2). `compartido` es lo que decide si el cliente puede abrirlo: el mes que
- * todavía se arma no es suyo para verlo.
+ * Un mes de contenido tal como la portada del portal necesita verlo (C2).
+ *
+ * - `compartido` decide si el cliente puede abrirlo: el mes que el operador
+ *   todavía está armando no es asunto suyo, así que ni se nombra.
+ * - `activo` marca el lote activo del cliente (`elegirLoteActivo`, diseño §2),
+ *   que es el que la etapa refleja en `cliente_etapas` y el que se destaca.
  */
-export type LotePortal = { id: string; periodo: string; compartido: boolean };
+export type LotePortal = { id: string; periodo: string; compartido: boolean; activo: boolean };
 
 export type ResumenPortal = { avance: number; tarjetas: TarjetaPortal[] };
 
@@ -53,21 +67,55 @@ export type ResumenPortal = { avance: number; tarjetas: TarjetaPortal[] };
  *
  * `listo` = hay `versionAprobadaId`… **salvo en `desarrollo_mensual`**, que no
  * tiene versiones: su entregable es el lote del mes, así que ahí «listo» quiere
- * decir que hay un lote y que ya se le compartió al cliente (C2, diseño §2).
+ * decir que hay **algún** mes ya compartido con el cliente (C2, diseño §2).
  * Por lo mismo, `proximamente` deja de ser «esta etapa siempre» y pasa a ser
- * «esta etapa todavía no tiene un mes compartido»: desde C2 el cliente sí entra,
- * revisa y aprueba, y seguir anunciándole «Próximamente» sobre un mes que ya
- * tiene en la mano sería mentirle mientras le corre el plazo.
+ * «esta etapa todavía no tiene ningún mes compartido»: desde C2 el cliente sí
+ * entra, revisa y aprueba, y seguir anunciándole «Próximamente» sobre un mes
+ * que ya tiene en la mano sería mentirle mientras le corre el plazo.
  *
- * `lote` se pasa aparte y no sale de `etapas` porque `cliente_etapas` no lo
- * guarda: la fila de esta etapa refleja el ESTADO del lote activo, no cuál es
- * (ver `sincronizarEtapa`, src/contenido/servicio.ts). Quien llama lo lee de
- * `contenido_lotes` y esta función sigue siendo pura.
+ * ── Qué mes se destaca, y por qué no siempre es el activo ────────────────
+ *
+ * El destacado es **el lote activo si está compartido; si no, el mes compartido
+ * más reciente**. La segunda mitad es el arreglo: el activo es «el más reciente
+ * sin aprobar» (`elegirLoteActivo`), así que en cuanto el operador abre octubre
+ * el activo pasa a ser un lote `en_proceso` que el cliente no debe ver — y la
+ * portada, que solo miraba ese, volvía a decir «Próximamente» y hacía
+ * desaparecer septiembre, que el cliente tenía aprobado. Con esto, lo que se le
+ * enseña es siempre el mes más nuevo que puede abrir, y octubre lo sustituye el
+ * día que se comparta, ni antes ni después.
+ *
+ * Se prefiere el activo cuando está compartido para no cambiar nada del caso
+ * normal: es el mes que le toca revisar, aunque exista uno posterior ya
+ * aprobado (el caso raro de abrir tarde un mes pasado, que `elegirLoteActivo`
+ * ya resuelve así).
+ *
+ * `estadoCliente` sigue saliendo de la etapa, que refleja el lote ACTIVO: si
+ * octubre está en proceso, la tarjeta lo dice y de paso deja ver septiembre.
+ * Es lo correcto —hay trabajo nuevo— y es justo lo que el diseño §2 previó.
+ *
+ * Los lotes se pasan aparte y no salen de `etapas` porque `cliente_etapas` no
+ * los guarda: la fila de esta etapa refleja el ESTADO del lote activo, no cuál
+ * es ni cuántos hay (ver `sincronizarEtapa`, src/contenido/servicio.ts). Quien
+ * llama los lee de `contenido_lotes` con `lotesPortal` y esta función sigue
+ * siendo pura.
+ *
+ * **Un mes sin compartir no aparece por ningún lado**: ni destacado, ni en la
+ * lista, ni contando para `listo`. Es el único permiso que esta función
+ * sostiene, y `/portal/contenido/[loteId]` lo vuelve a comprobar por su cuenta
+ * —con 404 si falta `compartido_en`—, porque un enlace que no se pinta sigue
+ * pudiéndose escribir a mano.
  */
-export function resumenPortal(etapas: EtapaClientePortal[], lote: LotePortal | null = null): ResumenPortal {
+export function resumenPortal(etapas: EtapaClientePortal[], lotes: LotePortal[] = []): ResumenPortal {
   const avance = avanceCliente(etapas);
   const visibles = etapasVisiblesCliente(etapas) as EtapaClientePortal[];
-  const mesListo = Boolean(lote?.compartido);
+
+  // Del más reciente al más viejo. `periodo` es `YYYY-MM`, que se compara como
+  // texto igual que cronológicamente, y es único por cliente (restricción de
+  // la tabla): no hay empate que desempatar.
+  const compartidos = lotes.filter((l) => l.compartido).sort((a, b) => (a.periodo < b.periodo ? 1 : -1));
+  const destacado = compartidos.find((l) => l.activo) ?? compartidos[0] ?? null;
+  const anteriores = compartidos.filter((l) => l !== destacado);
+  const mesListo = destacado !== null;
 
   const tarjetas: TarjetaPortal[] = visibles.map((e) => {
     const esMensual = e.etapa === 'desarrollo_mensual';
@@ -81,11 +129,48 @@ export function resumenPortal(etapas: EtapaClientePortal[], lote: LotePortal | n
       listo: esMensual ? mesListo : Boolean(e.versionAprobadaId),
       puedeComentar: puedeComentar('cliente', false, e.etapa),
       proximamente: esMensual && !mesListo,
-      ...(esMensual && lote && lote.compartido ? { lote: { id: lote.id, periodo: lote.periodo } } : {}),
+      ...(esMensual && destacado ? { lote: { id: destacado.id, periodo: destacado.periodo } } : {}),
+      ...(esMensual && anteriores.length > 0
+        ? { mesesAnteriores: anteriores.map((l) => ({ id: l.id, periodo: l.periodo })) }
+        : {}),
     };
   });
 
   return { avance, tarjetas };
+}
+
+/**
+ * Los meses de contenido del cliente, como los necesita `resumenPortal`.
+ *
+ * Trae todos sus lotes en una sola consulta —doce filas por año y cliente— y
+ * marca el activo con `elegirLoteActivo`, que es el criterio del diseño §2 y
+ * vive en `src/contenido/servicio.ts`: aquí no se reimplementa, se llama.
+ *
+ * Devuelve también los lotes sin compartir, con `compartido: false`. Podrían
+ * filtrarse en el `WHERE`, pero entonces `elegirLoteActivo` decidiría sobre una
+ * lista recortada y diría que el activo es septiembre cuando el activo de
+ * verdad es octubre. Quien decide qué se enseña es `resumenPortal`, que ya no
+ * nombra ningún lote sin compartir.
+ */
+export async function lotesPortal(clientId: string): Promise<LotePortal[]> {
+  const filas = await db
+    .select({
+      id: contenidoLotes.id,
+      periodo: contenidoLotes.periodo,
+      estado: contenidoLotes.estado,
+      compartidoEn: contenidoLotes.compartidoEn,
+    })
+    .from(contenidoLotes)
+    .where(eq(contenidoLotes.clientId, clientId))
+    .orderBy(desc(contenidoLotes.periodo));
+
+  const activo = elegirLoteActivo(filas);
+  return filas.map((f) => ({
+    id: f.id,
+    periodo: f.periodo,
+    compartido: f.compartidoEn !== null,
+    activo: f.id === activo?.id,
+  }));
 }
 
 export type ClientePortal = { cliente: Cliente; vistaPrevia: boolean };

@@ -19,10 +19,13 @@ import PiezasEditor, { type ArchivoCliente, type GrupoTemas, type PiezaUI } from
 import { db, clientFiles, contenidoLotes, contenidoPiezas, pilaresResults } from '@/db';
 import { DIAS_REVISION_POR_OMISION, periodoValido, type Paquete } from '@/contenido/reglas';
 import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
+import { enlacesDelLote } from '@/contenido/enlaces';
 import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA } from '@/flujo/reglas';
 import { COLOR_ESTADO } from '@/flujo/ui';
 import { etapasDelCliente } from '@/flujo/servicio';
+import { baseUrlPublica } from '@/lib/base-url';
 import { puedeOperarCliente } from '@/lib/permisos';
+import { slugificar } from '@/lib/slug';
 import { clienteVisible } from '@/lib/visibilidad';
 import { fechaHora } from '@/lib/ui/fecha';
 import { nombrePeriodo, periodoVecino } from '@/lib/ui/periodo';
@@ -133,6 +136,22 @@ const archivos: ArchivoCliente[] = await db
 // cliente vea lo nuevo.
 const reabierto = !!lote && lote.compartidoEn === null && filas.some((p) => p.estadoCliente !== 'pendiente');
 
+// **Los enlaces del mes.** Cada «Compartir el mes» crea otro token, y hasta
+// ahora ninguno se podía cerrar desde ninguna pantalla: un enlace que salió por
+// WhatsApp al contacto equivocado se quedaba abierto para siempre. Se listan
+// aquí, y no en un panel flotante como en los otros tres entregables, por lo
+// mismo que el botón de compartir: en esta etapa el enlace no solo publica,
+// también sostiene el plazo de revisión — retirar el último lo detiene (ver
+// `retirarEnlaceDelLote`, src/contenido/enlaces.ts).
+const enlaces = lote ? await enlacesDelLote(lote.id) : [];
+const enlacesActivos = enlaces.filter((e) => !e.revocado);
+// Un mes sin `compartido_en` al que le quedan enlaces retirados no es lo mismo
+// que uno que nunca se compartió, aunque la fila del lote los describa igual.
+const retirado = !!lote && lote.compartidoEn === null && enlacesActivos.length === 0 && enlaces.length > 0;
+const base = baseUrlPublica(Astro.request);
+const clienteSlug = slugificar(cliente.nombre);
+const urlEnlace = (token: string) => `${base}/p/${clienteSlug}/${token}`;
+
 const paquete = (cliente.paquete ?? {}) as Paquete;
 // El plazo en palabras («2 días hábiles»), en un solo lugar: la pantalla lo
 // repite en el encabezado y en los tres textos del bloque de compartir.
@@ -199,6 +218,12 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
               que arranca uno nuevo de {plazo}: el lote pasa a revisión y, si el cliente no contesta antes de
               la fecha límite, se da por aprobado.
             </p>
+          ) : retirado ? (
+            <p class="secundario">
+              Se retiraron todos los enlaces de este mes, así que el plazo se detuvo: el cliente ya no puede
+              abrirlo, ni por el enlace ni desde su portal. Un enlace nuevo le devuelve el acceso y arranca un
+              plazo nuevo de {plazo}.
+            </p>
           ) : (
             <p class="secundario">
               Crea el enlace del mes y arranca el plazo de {plazo}:
@@ -207,13 +232,52 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
           )}
         </div>
         <button type="button" class="btn" id="compartir-lote" disabled={!operable}>
-          {lote.compartidoEn ? 'Crear otro enlace' : reabierto ? 'Volver a compartir el mes' : 'Compartir el mes'}
+          {lote.compartidoEn ? 'Crear otro enlace' : reabierto || retirado ? 'Volver a compartir el mes' : 'Compartir el mes'}
         </button>
-        <div class="link-publico" id="link-lote" hidden>
-          <input type="text" id="url-lote" readonly aria-label="Enlace del mes para el cliente" />
-          <button type="button" class="btn suave chico" id="copiar-lote">Copiar</button>
-        </div>
       </section>
+
+      {/* Los enlaces que andan sueltos por ahí. La sección solo aparece cuando
+          este mes ha tenido alguno: un lote recién abierto no necesita una
+          lista vacía debajo del botón que la va a llenar. */}
+      {enlaces.length > 0 && (
+        <section class="enlaces-mes">
+          <div class="enlaces-texto">
+            <strong>Enlaces de este mes</strong>
+            <p class="secundario">
+              Cada vez que se comparte el mes se crea un enlace nuevo, y todos siguen abiertos hasta que se
+              retiran. Retirar uno lo deja en 404 para siempre; retirar el último le quita el acceso al cliente
+              {lote.estado === 'en_revision' ? <> y detiene el plazo de revisión</> : null}.
+            </p>
+          </div>
+
+          {enlacesActivos.length === 0 ? (
+            <p class="secundario">
+              No queda ningún enlace activo: los {enlaces.length} que se crearon están retirados.
+            </p>
+          ) : (
+            <ul class="enlaces-lista">
+              {enlacesActivos.map((e) => (
+                <li data-token={e.token}>
+                  <input
+                    type="text"
+                    class="enlace-url"
+                    readonly
+                    value={urlEnlace(e.token)}
+                    aria-label={`Enlace creado el ${fechaHora(e.creadoEn)}`}
+                  />
+                  <p class="secundario">
+                    Creado el {fechaHora(e.creadoEn)} · {e.visitas} {e.visitas === 1 ? 'visita' : 'visitas'}
+                  </p>
+                  <div class="enlaces-acciones">
+                    <button type="button" class="btn suave chico" data-copiar>Copiar</button>
+                    <button type="button" class="btn peligro chico" data-retirar disabled={!operable}>Retirar</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       <PiezasEditor
         client:load
         clientId={cliente.id}
@@ -260,8 +324,33 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
   .compartir-texto { flex: 1; min-width: 240px; }
   .compartir-texto strong { display: block; color: var(--tinta); }
   .compartir-texto p { margin-top: 2px; max-width: 70ch; }
-  .link-publico { display: flex; gap: 8px; width: 100%; max-width: 520px; }
-  .link-publico input { min-height: 44px; padding: 6px 12px; font-size: 13px; }
+
+  /* Los enlaces vivos del mes, en su propia tarjeta debajo de la de compartir:
+     son la consecuencia de ese botón y se leen en ese orden. Mismo marco que
+     `.compartir-mes` para que las dos se vean como una sola conversación. */
+  .enlaces-mes {
+    padding: 16px; margin-bottom: 18px; border: 1px solid var(--linea);
+    border-radius: var(--r); background: var(--tarjeta);
+  }
+  .enlaces-texto strong { display: block; color: var(--tinta); }
+  .enlaces-texto p { margin-top: 2px; max-width: 70ch; }
+  .enlaces-lista { list-style: none; margin-top: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .enlaces-lista li {
+    display: grid; gap: 8px; padding: 12px; border: 1px solid var(--linea);
+    border-radius: var(--r-sm); background: var(--fondo);
+  }
+  .enlaces-lista .enlace-url { min-height: 44px; padding: 6px 12px; font-size: 13px; }
+  .enlaces-lista p { margin: 0; }
+  .enlaces-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  /* A partir de tablet la fila se lee de un vistazo: el enlace ocupa el ancho
+     que sobra y los botones se quedan a la derecha. En celular cada cosa
+     ocupa su renglón, que es lo que hace la cuadrícula por omisión. */
+  @media (min-width: 700px) {
+    .enlaces-lista li { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+    .enlaces-lista li p { grid-column: 1; }
+    .enlaces-acciones { grid-column: 2; grid-row: 1 / span 2; }
+  }
 
   /* El indicador de global.css es de dos renglones (valor y nombre); aquí lleva
      un tercero con lo que pide el paquete, y sin esto se pegaría al nombre. */
@@ -331,10 +420,6 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
   // `compartirLote` (src/contenido/servicio.ts), no esta pantalla.
   const compartir = document.getElementById('compartir-lote') as HTMLButtonElement | null;
   const seccionCompartir = compartir?.closest('.compartir-mes') as HTMLElement | null;
-  const cajaLink = document.getElementById('link-lote') as HTMLElement | null;
-  const campoLink = document.getElementById('url-lote') as HTMLInputElement | null;
-
-  document.getElementById('copiar-lote')?.addEventListener('click', () => copiar(campoLink?.value ?? '', campoLink));
 
   compartir?.addEventListener('click', async () => {
     compartir.disabled = true;
@@ -348,23 +433,66 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
       });
       const cuerpo = await res.json();
       if (!cuerpo.ok) throw new Error((cuerpo.errores ?? []).join(' · '));
-      if (campoLink) campoLink.value = cuerpo.url;
-      if (cajaLink) cajaLink.hidden = false;
-      await copiar(cuerpo.url, campoLink);
-      // Solo se recarga cuando el plazo arrancó: es lo que cambia el estado del
-      // lote y la fecha que muestra la pantalla. Un segundo enlace no mueve
-      // nada, y recargar borraría de la vista el enlace recién creado.
-      if (cuerpo.arrancoElPlazo) {
-        toast('Mes compartido · el plazo empezó a correr');
-        setTimeout(() => location.reload(), 1200);
-      } else {
-        toast('Enlace creado');
-      }
+      await copiar(cuerpo.url);
+      // Siempre se recarga, y ahora sí sin perder nada: el enlace recién creado
+      // aparece en la lista de «Enlaces de este mes», que la pinta el servidor.
+      // Antes no se recargaba cuando el plazo no arrancaba, justamente porque
+      // recargar borraba de la vista el único sitio donde se veía ese enlace.
+      toast(cuerpo.arrancoElPlazo ? 'Mes compartido · el plazo empezó a correr' : 'Enlace creado');
+      setTimeout(() => location.reload(), 1200);
     } catch (e) {
       toast(e instanceof Error && e.message ? e.message : 'No se pudo compartir el mes.', 'error');
     }
     compartir.disabled = false;
     compartir.textContent = original;
+  });
+
+  // Copiar y retirar cada enlace vivo. Delegado en la lista y no un listener
+  // por fila: la lista se vuelve a pintar en el servidor después de cada
+  // cambio, así que no hay nada que volver a enganchar.
+  const lista = document.querySelector('.enlaces-lista');
+
+  lista?.addEventListener('click', async (ev) => {
+    const boton = (ev.target as HTMLElement | null)?.closest('button');
+    if (!(boton instanceof HTMLButtonElement)) return;
+    const fila = boton.closest('li') as HTMLLIElement | null;
+    const token = fila?.dataset.token;
+    const campo = fila?.querySelector('.enlace-url') as HTMLInputElement | null;
+    if (!token || !campo) return;
+
+    if (boton.hasAttribute('data-copiar')) {
+      await copiar(campo.value, campo);
+      return;
+    }
+    if (!boton.hasAttribute('data-retirar')) return;
+
+    // Con confirmación, y diciendo qué se lleva por delante: retirar no se
+    // deshace —el token queda en 404 para siempre— y, si es el último, el
+    // cliente pierde el acceso al mes y el plazo se detiene. El servidor manda
+    // igual: `activosRestantes` sale de la base, no de lo que se pintó aquí.
+    const ultimo = lista.querySelectorAll('li').length === 1;
+    const aviso = ultimo
+      ? '¿Retirar este enlace? Es el último activo: el cliente dejará de poder abrir el mes y, si estaba en revisión, el plazo se detiene.'
+      : '¿Retirar este enlace? Dejará de funcionar para siempre; los demás enlaces del mes siguen abiertos.';
+    if (!window.confirm(aviso)) return;
+
+    boton.disabled = true;
+    try {
+      const res = await fetch('/api/share', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      const cuerpo = await res.json();
+      if (!res.ok || !cuerpo.ok) throw new Error((cuerpo.errores ?? []).join(' · '));
+      toast(cuerpo.detuvoElPlazo
+        ? 'Enlace retirado · el plazo se detuvo y el mes volvió a estar en proceso'
+        : 'Enlace retirado. Ahora devuelve 404.');
+      setTimeout(() => location.reload(), 1200);
+    } catch (e) {
+      toast(e instanceof Error && e.message ? e.message : 'No se pudo retirar el enlace.', 'error');
+      boton.disabled = false;
+    }
   });
 
   // Abrir el lote del mes. Es lo único que esta página hace por su cuenta: en

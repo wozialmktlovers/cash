@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resumenPortal, fraseEtapaLista, clientePortal, actividadPortal, type EtapaClientePortal } from '@/lib/portal';
+import { resumenPortal, fraseEtapaLista, clientePortal, actividadPortal, lotesPortal, type EtapaClientePortal } from '@/lib/portal';
 
 // Base simulada del estilo existente (tests/research/convertir-lecturas.test.ts):
 // un objeto `db` que solo imita las cadenas que este módulo de verdad usa
@@ -9,20 +9,22 @@ import { resumenPortal, fraseEtapaLista, clientePortal, actividadPortal, type Et
 // prueba. `vi.hoisted` porque `vi.mock('@/db', ...)` se eleva sobre los
 // imports del archivo.
 const mockDb = vi.hoisted(() => {
-  const estado: { filasClients: any[]; filasEventos: any[]; filasComentarios: any[] } = {
-    filasClients: [], filasEventos: [], filasComentarios: [],
+  const estado: { filasClients: any[]; filasEventos: any[]; filasComentarios: any[]; filasLotes: any[] } = {
+    filasClients: [], filasEventos: [], filasComentarios: [], filasLotes: [],
   };
 
   const TABLAS = {
     clients: { __tabla: 'clients' },
     etapaEventos: { __tabla: 'etapaEventos' },
     comentarios: { __tabla: 'comentarios' },
+    contenidoLotes: { __tabla: 'contenidoLotes' },
   };
 
   function filasDe(tabla: any): any[] {
     if (tabla === TABLAS.clients) return estado.filasClients;
     if (tabla === TABLAS.etapaEventos) return estado.filasEventos;
     if (tabla === TABLAS.comentarios) return estado.filasComentarios;
+    if (tabla === TABLAS.contenidoLotes) return estado.filasLotes;
     return [];
   }
 
@@ -51,6 +53,7 @@ vi.mock('@/db', () => ({
   clients: mockDb.TABLAS.clients,
   etapaEventos: mockDb.TABLAS.etapaEventos,
   comentarios: mockDb.TABLAS.comentarios,
+  contenidoLotes: mockDb.TABLAS.contenidoLotes,
   db: mockDb.db,
 }));
 
@@ -124,17 +127,20 @@ describe('resumenPortal', () => {
   // mentirle mientras le corre el plazo.
   describe('el mes de desarrollo_mensual', () => {
     const LOTE = { id: 'lote-1', periodo: '2026-09' };
+    const SEPTIEMBRE = { id: 'lote-sep', periodo: '2026-09', compartido: true, activo: false };
+    const OCTUBRE = { id: 'lote-oct', periodo: '2026-10', compartido: false, activo: true };
 
     it('con un mes compartido, la etapa queda lista y con su lote', () => {
-      const r = resumenPortal([et('desarrollo_mensual')], { ...LOTE, compartido: true });
+      const r = resumenPortal([et('desarrollo_mensual')], [{ ...LOTE, compartido: true, activo: true }]);
       const t = r.tarjetas.find((x) => x.etapa === 'desarrollo_mensual')!;
       expect(t.proximamente).toBe(false);
       expect(t.listo).toBe(true);
       expect(t.lote).toEqual(LOTE);
+      expect(t.mesesAnteriores).toBeUndefined();
     });
 
     it('un lote que todavía se arma no es del cliente: sigue en próximamente', () => {
-      const r = resumenPortal([et('desarrollo_mensual')], { ...LOTE, compartido: false });
+      const r = resumenPortal([et('desarrollo_mensual')], [{ ...LOTE, compartido: false, activo: true }]);
       const t = r.tarjetas.find((x) => x.etapa === 'desarrollo_mensual')!;
       expect(t.proximamente).toBe(true);
       expect(t.listo).toBe(false);
@@ -146,11 +152,87 @@ describe('resumenPortal', () => {
       expect(t.proximamente).toBe(true);
       expect(t.listo).toBe(false);
       expect(t.lote).toBeUndefined();
+      expect(t.mesesAnteriores).toBeUndefined();
     });
 
     it('el lote no se le pega a ninguna otra etapa', () => {
-      const r = resumenPortal([et('investigacion'), et('manual_campana')], { ...LOTE, compartido: true });
+      const r = resumenPortal([et('investigacion'), et('manual_campana')], [{ ...LOTE, compartido: true, activo: true }]);
       for (const t of r.tarjetas) expect(t.lote, t.etapa).toBeUndefined();
+      for (const t of r.tarjetas) expect(t.mesesAnteriores, t.etapa).toBeUndefined();
+    });
+
+    // El fallo que motivó la lista: abrir el lote de octubre —`en_proceso`, sin
+    // compartir— devolvía la tarjeta a «Próximamente» y hacía desaparecer
+    // septiembre, que el cliente tenía aprobado. El diseño §2 promete lo
+    // contrario con todas sus letras.
+    describe('los meses anteriores (diseño §2)', () => {
+      it('abrir un mes nuevo sin compartir no borra el anterior: destaca el último compartido', () => {
+        const r = resumenPortal([et('desarrollo_mensual')], [OCTUBRE, SEPTIEMBRE]);
+        const t = r.tarjetas[0];
+        expect(t.proximamente).toBe(false);
+        expect(t.listo).toBe(true);
+        expect(t.lote).toEqual({ id: 'lote-sep', periodo: '2026-09' });
+        // Y octubre no se nombra por ningún lado: se está armando.
+        expect(t.mesesAnteriores).toBeUndefined();
+      });
+
+      it('en cuanto octubre se comparte, pasa al frente y septiembre baja a la lista', () => {
+        const r = resumenPortal([et('desarrollo_mensual')], [{ ...OCTUBRE, compartido: true }, SEPTIEMBRE]);
+        const t = r.tarjetas[0];
+        expect(t.lote).toEqual({ id: 'lote-oct', periodo: '2026-10' });
+        expect(t.mesesAnteriores).toEqual([{ id: 'lote-sep', periodo: '2026-09' }]);
+      });
+
+      it('los anteriores van del más reciente al más viejo, venga como venga la lista', () => {
+        const r = resumenPortal([et('desarrollo_mensual')], [
+          { id: 'jul', periodo: '2026-07', compartido: true, activo: false },
+          { id: 'nov', periodo: '2026-11', compartido: true, activo: true },
+          { id: 'ago', periodo: '2026-08', compartido: true, activo: false },
+          { id: 'sep', periodo: '2026-09', compartido: true, activo: false },
+        ]);
+        const t = r.tarjetas[0];
+        expect(t.lote!.id).toBe('nov');
+        expect(t.mesesAnteriores!.map((m) => m.id)).toEqual(['sep', 'ago', 'jul']);
+      });
+
+      // El permiso que sostiene esta función: lo que no se compartió no existe
+      // para el cliente, ni destacado ni en la lista, ni aunque esté en medio
+      // de dos meses que sí se compartieron.
+      it('un mes sin compartir nunca aparece, aunque haya otros compartidos', () => {
+        const r = resumenPortal([et('desarrollo_mensual')], [
+          { id: 'oct', periodo: '2026-10', compartido: true, activo: true },
+          { id: 'sep-borrador', periodo: '2026-09', compartido: false, activo: false },
+          { id: 'ago', periodo: '2026-08', compartido: true, activo: false },
+        ]);
+        const t = r.tarjetas[0];
+        const nombrados = [t.lote!.id, ...(t.mesesAnteriores ?? []).map((m) => m.id)];
+        expect(nombrados).toEqual(['oct', 'ago']);
+      });
+
+      it('ningún mes compartido: próximamente, aunque el cliente tenga dos lotes abiertos', () => {
+        const r = resumenPortal([et('desarrollo_mensual')], [
+          { id: 'oct', periodo: '2026-10', compartido: false, activo: true },
+          { id: 'sep', periodo: '2026-09', compartido: false, activo: false },
+        ]);
+        const t = r.tarjetas[0];
+        expect(t.proximamente).toBe(true);
+        expect(t.listo).toBe(false);
+        expect(t.lote).toBeUndefined();
+        expect(t.mesesAnteriores).toBeUndefined();
+      });
+
+      // `elegirLoteActivo` toma «el más reciente sin aprobar» al pie de la
+      // letra, así que el activo puede no ser el último. Si está compartido, es
+      // el que el cliente tiene que atender y va al frente.
+      it('el activo compartido manda, aunque exista un mes posterior ya aprobado', () => {
+        const r = resumenPortal([et('desarrollo_mensual')], [
+          { id: 'oct', periodo: '2026-10', compartido: true, activo: false },
+          { id: 'sep', periodo: '2026-09', compartido: true, activo: true },
+        ]);
+        const t = r.tarjetas[0];
+        expect(t.lote!.id).toBe('sep');
+        expect(t.mesesAnteriores!.map((m) => m.id)).toEqual(['oct']);
+      });
     });
   });
 
@@ -299,5 +381,48 @@ describe('actividadPortal', () => {
     mockDb.estado.filasComentarios = [];
     const r = await actividadPortal(ETAPAS_VISIBLES, 'u1', false);
     expect(r[0].etiqueta).toBe('Tu etapa ya está lista para ti');
+  });
+});
+
+/**
+ * `lotesPortal`: los meses del cliente tal como los necesita la portada, con el
+ * activo marcado. Lo que se comprueba aquí es lo que no se puede comprobar en
+ * `resumenPortal` porque es puro — que el activo se decida con
+ * `elegirLoteActivo` (diseño §2) y que `compartido` salga de `compartido_en`.
+ */
+describe('lotesPortal', () => {
+  const lote = (periodo: string, estado: string, compartidoEn: Date | null) =>
+    ({ id: `lote-${periodo}`, periodo, estado, compartidoEn });
+
+  it('marca activo el más reciente sin aprobar y traduce compartido_en', async () => {
+    mockDb.estado.filasLotes = [
+      lote('2026-10', 'en_proceso', null),
+      lote('2026-09', 'aprobada', new Date('2026-09-20T00:00:00Z')),
+    ];
+    const r = await lotesPortal('cliente-1');
+    expect(r).toEqual([
+      { id: 'lote-2026-10', periodo: '2026-10', compartido: false, activo: true },
+      { id: 'lote-2026-09', periodo: '2026-09', compartido: true, activo: false },
+    ]);
+  });
+
+  it('con todos aprobados, el activo es el último', async () => {
+    mockDb.estado.filasLotes = [
+      lote('2026-10', 'aprobada', new Date('2026-10-20T00:00:00Z')),
+      lote('2026-09', 'aprobada', new Date('2026-09-20T00:00:00Z')),
+    ];
+    const r = await lotesPortal('cliente-1');
+    expect(r.filter((l) => l.activo).map((l) => l.periodo)).toEqual(['2026-10']);
+  });
+
+  it('devuelve también los meses sin compartir, para que el activo se decida sobre la lista completa', async () => {
+    mockDb.estado.filasLotes = [lote('2026-10', 'en_proceso', null)];
+    const r = await lotesPortal('cliente-1');
+    expect(r).toEqual([{ id: 'lote-2026-10', periodo: '2026-10', compartido: false, activo: true }]);
+  });
+
+  it('un cliente sin lotes devuelve la lista vacía, no revienta', async () => {
+    mockDb.estado.filasLotes = [];
+    expect(await lotesPortal('cliente-1')).toEqual([]);
   });
 });

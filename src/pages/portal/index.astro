@@ -5,9 +5,8 @@
 import PortalBase from '@/layouts/PortalBase.astro';
 import Icono from '@/components/Icono.astro';
 import { etapasDelCliente } from '@/flujo/servicio';
-import { clientePortal, resumenPortal, actividadPortal, type EtapaClientePortal } from '@/lib/portal';
+import { clientePortal, resumenPortal, actividadPortal, lotesPortal, type EtapaClientePortal } from '@/lib/portal';
 import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
-import { loteActivo } from '@/contenido/servicio';
 import { fechaCorta } from '@/lib/ui/fecha';
 import { nombrePeriodo } from '@/lib/ui/periodo';
 
@@ -45,14 +44,13 @@ if (resultado) {
   // todo lo que se pinta.
   await asegurarLotesAlDia(resultado.cliente.id);
   const etapas = await etapasDelCliente(resultado.cliente.id);
-  // El lote activo es el mes del que habla la etapa 3 (diseño §2). Se lee aquí
-  // y se le pasa a `resumenPortal`, que es pura: `cliente_etapas` guarda el
-  // ESTADO del lote activo, no cuál es, así que la tarjeta no sabría a qué mes
-  // enlazar sin esto.
-  const lote = await loteActivo(resultado.cliente.id);
-  const resumen = resumenPortal(etapas as EtapaClientePortal[], lote
-    ? { id: lote.id, periodo: lote.periodo, compartido: lote.compartidoEn !== null }
-    : null);
+  // **Todos** los meses del cliente, no solo el activo (diseño §2: «los meses
+  // anteriores no desaparecen»). `cliente_etapas` guarda el ESTADO del lote
+  // activo, no cuál es ni cuántos hay, así que la tarjeta no sabría a qué mes
+  // enlazar sin esto. Cuáles se enseñan lo decide `resumenPortal`, que es pura:
+  // solo los compartidos.
+  const lotes = await lotesPortal(resultado.cliente.id);
+  const resumen = resumenPortal(etapas as EtapaClientePortal[], lotes);
   // Sin etapas visibles no puede haber actividad que mostrar (ni aprobaciones
   // ni respuestas): se evita la consulta.
   const actividad = resumen.tarjetas.length > 0
@@ -171,6 +169,19 @@ const desplazamiento = Math.round(CIRCUNFERENCIA * (1 - avance / 100) * 100) / 1
                   )}
                   {t.proximamente && <span class="etiqueta marca">Próximamente</span>}
                 </div>
+                {/* Los meses que ya vio y puede volver a ver (diseño §2). Solo
+                    los que se le compartieron: el mes que el equipo está
+                    armando no aparece aquí ni cuando es el más reciente. */}
+                {t.mesesAnteriores && t.mesesAnteriores.length > 0 && (
+                  <div class="portal-meses">
+                    <p class="secundario">Meses anteriores</p>
+                    <div class="portal-meses-lista">
+                      {t.mesesAnteriores.map((m) => (
+                        <a class="btn fantasma chico" href={hrefMes(m.id)}>{nombrePeriodo(m.periodo)}</a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </article>
             ))}
           </div>
@@ -222,6 +233,13 @@ const desplazamiento = Math.round(CIRCUNFERENCIA * (1 - avance / 100) * 100) / 1
   }
   .portal-etapa-cuerpo { min-width: 0; }
   .portal-etapa-cuerpo h3 { margin-bottom: 2px; }
+
+  /* Los meses anteriores van debajo de las acciones y separados por una línea:
+     son un archivo al que volver, no una acción que compita con el mes en
+     curso. En celular los botones envuelven solos. */
+  .portal-meses { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--linea); }
+  .portal-meses p { margin-bottom: 8px; }
+  .portal-meses-lista { display: flex; flex-wrap: wrap; gap: 8px; }
 
   .portal-actividad { list-style: none; display: flex; flex-direction: column; gap: 4px; }
   .portal-actividad li { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--linea); }
