@@ -214,7 +214,7 @@ export async function pedirJson<T>(opts: {
   if (!primero.ok && primero.crudo !== undefined) crudos.push(primero.crudo);
 
   // ---- Segundo intento.
-  if (buscarWeb && texto.trim()) {
+  if ((buscarWeb || forma) && texto.trim()) {
     // Corrección barata: la respuesta ya obtenida, sin herramientas ni contexto.
     const correccion = await pedir({
       model: modelo,
