@@ -14,9 +14,33 @@ import { correrPrompts } from './agents/prompts';
 export const ETAPAS_GROWTH = ['estructura', 'creativos', 'google', 'prompts'] as const;
 export type EtapaGrowth = typeof ETAPAS_GROWTH[number];
 
-/** `prompts` necesita los creativos, así que espera. Las otras tres no dependen entre sí. */
-export function decidirParalelas(etapas: readonly string[]): string[] {
-  return etapas.filter((e) => e !== 'prompts');
+/**
+ * Orden de ejecución, en fases. Creativos y Google leen los ángulos y las
+ * campañas que decide `estructura`; antes corrían en paralelo con ella y
+ * siempre recibían `null`, así que cada uno inventaba su propia estructura.
+ * `prompts` necesita los creativos. Dentro de una fase, las etapas van en
+ * paralelo. `prompts` se ejecuta aparte (ver `ejecutarGrowth`).
+ */
+export function decidirFases(etapas: readonly string[]): string[][] {
+  return [
+    etapas.filter((e) => e === 'estructura'),
+    etapas.filter((e) => e === 'creativos' || e === 'google'),
+  ].filter((f) => f.length);
+}
+
+/**
+ * Corre una etapa y, si falla, deja el error en el registro con el id del
+ * trabajo antes de propagarlo. Sin esto, el manual de «Mar de miel» terminó
+ * con `estructura` y `google` en `fallo` y nada en los registros que lo
+ * explicara ni lo ligara al trabajo.
+ */
+export async function conRegistro<T>(jobId: string, etapa: string, correr: () => Promise<T>): Promise<T> {
+  try {
+    return await correr();
+  } catch (e) {
+    console.error(`[${jobId}] ${etapa}:`, e);
+    throw e;
+  }
 }
 
 export function decidirPendientesGrowth(estado: Record<string, string>): EtapaGrowth[] {
@@ -90,14 +114,16 @@ export async function ejecutarGrowth(jobId: string): Promise<void> {
   };
 
   const pendientes = decidirPendientesGrowth(estado);
-  const paralelas = decidirParalelas(pendientes);
 
   try {
-    await repartirPorTope(paralelas, tope, gasto, estado, async (etapa) => {
-      const r = await corredores[etapa]();
-      resultados[etapa] = r.datos;
-      tIn += r.tokensEntrada; tOut += r.tokensSalida;
-    }, publicar, corte);
+    for (const fase of decidirFases(pendientes)) {
+      await repartirPorTope(fase, tope, gasto, estado, async (etapa) => {
+        const r = await conRegistro(jobId, etapa, corredores[etapa]);
+        resultados[etapa] = r.datos;
+        tIn += r.tokensEntrada; tOut += r.tokensSalida;
+        if (r.parcial) console.warn(`[${jobId}] ${etapa}: guardada a medias; se descartó: ${r.descartes?.join(' | ')}`);
+      }, publicar, corte);
+    }
     await guardarProgreso();
 
     // Los prompts esperan a los creativos: sin la lista de piezas no hay nada que ilustrar.

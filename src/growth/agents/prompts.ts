@@ -1,6 +1,6 @@
 import { promptsSchema, type Prompts, type Creativos } from '@/growth/schemas';
 import { pedirJson } from '@/research/claude';
-import { SISTEMA_GROWTH } from '@/growth/contexto';
+import { SISTEMA_GROWTH, MAX_TOKENS_GROWTH } from '@/growth/contexto';
 
 const SISTEMA = `${SISTEMA_GROWTH}
 
@@ -30,5 +30,6 @@ export async function correrPrompts(
     schema: promptsSchema,
     buscarWeb: false,
     onUso,
+    maxTokens: MAX_TOKENS_GROWTH,
   });
 }

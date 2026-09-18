@@ -68,13 +68,23 @@ function textoDe(res: any): string {
  * Intenta leer y validar `texto`. Devuelve los datos si cumple; si no, el
  * error legible y, si al menos era JSON, el objeto crudo para el rescate.
  */
-function evaluar<T>(texto: string, schema: ZodType<T>):
+function evaluar<T>(texto: string, schema: ZodType<T>, preparar?: (crudo: unknown) => unknown):
   { ok: true; datos: T } | { ok: false; error: string; crudo?: unknown } {
   let crudo: unknown;
   try {
     crudo = extraerJson(texto);
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  // La forma propia de cada agente (llaves con acento, un objeto por clave
+  // donde va una lista…) se arregla antes de validar, para que el ajuste y el
+  // rescate trabajen ya sobre las rutas del esquema.
+  if (preparar) {
+    try {
+      crudo = preparar(structuredClone(crudo));
+    } catch (e) {
+      console.warn('[pedirJson] preparar falló; se valida la respuesta tal cual:', e);
+    }
   }
   const parsed = schema.safeParse(crudo);
   if (parsed.success) return { ok: true, datos: parsed.data };
@@ -128,8 +138,13 @@ export async function pedirJson<T>(opts: {
    * Por omisión, solo con búsqueda web: es donde perder la etapa sale caro.
    */
   rescatar?: boolean;
+  /**
+   * Arreglo de forma propio del agente, aplicado a la respuesta ya leída y
+   * antes de validar (p. ej. un objeto indexado por clave → lista).
+   */
+  preparar?: (crudo: unknown) => unknown;
 }): Promise<ResultadoJson<T>> {
-  const { modelo, sistema, usuario, schema, buscarWeb = false, maxTokens = 16_000, onUso, forma } = opts;
+  const { modelo, sistema, usuario, schema, buscarWeb = false, maxTokens = 16_000, onUso, forma, preparar } = opts;
   const rescatar = opts.rescatar ?? buscarWeb;
   const api = obtenerCliente();
 
@@ -205,7 +220,7 @@ export async function pedirJson<T>(opts: {
   // ---- Primer intento: el pedido completo.
   const res = await turno(usuario);
   const texto = textoDe(res);
-  const primero = evaluar(texto, schema);
+  const primero = evaluar(texto, schema, preparar);
   if (primero.ok && res.stop_reason !== 'max_tokens') {
     return { datos: primero.datos, tokensEntrada: entrada, tokensSalida: salida };
   }
@@ -229,7 +244,7 @@ export async function pedirJson<T>(opts: {
     if (correccion.stop_reason === 'refusal') {
       throw new Error(`${MENSAJE_DECLINO} (${correccion.stop_details?.category ?? 'sin categoría'}).`);
     }
-    const segundo = evaluar(textoDe(correccion), schema);
+    const segundo = evaluar(textoDe(correccion), schema, preparar);
     if (segundo.ok && correccion.stop_reason !== 'max_tokens') {
       return { datos: segundo.datos, tokensEntrada: entrada, tokensSalida: salida };
     }
@@ -241,7 +256,7 @@ export async function pedirJson<T>(opts: {
     const res2 = await turno(
       `${usuario}\n\nTu respuesta anterior no cumplió el esquema. Error: ${ultimoError}\nDevuelve únicamente JSON válido.`,
     );
-    const segundo = evaluar(textoDe(res2), schema);
+    const segundo = evaluar(textoDe(res2), schema, preparar);
     if (segundo.ok && res2.stop_reason !== 'max_tokens') {
       return { datos: segundo.datos, tokensEntrada: entrada, tokensSalida: salida };
     }

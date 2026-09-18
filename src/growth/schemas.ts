@@ -173,8 +173,11 @@ export const growthSchema = z.object({
   // y fija los demás números.
   semanas: z.number().int().min(2).max(12),
 
-  campanasMeta: z.array(campanaMetaSchema).length(3),
-  campanasGoogle: z.array(campanaGoogleSchema).length(5),
+  // La estructura de la casa es 3 + 5, pero el documento acepta menos: un
+  // agente que entregó dos campañas buenas no debe dejar el manual sin
+  // ninguna, ni el documento guardado debe quedar imposible de editar.
+  campanasMeta: z.array(campanaMetaSchema).min(1).max(3),
+  campanasGoogle: z.array(campanaGoogleSchema).min(1).max(5),
   creativos: z.array(creativoSchema).length(9),
 
   promptsImagen: z.object({
@@ -182,14 +185,15 @@ export const growthSchema = z.object({
     porCreativo: z.array(z.string().trim().min(1)).length(9),
   }),
 
-  googleKeywords: z.array(keywordsSchema).length(5),
+  googleKeywords: z.array(keywordsSchema).min(1).max(5),
 
   rsa: z.object({
     // Límites reales de Google Ads. Un titular de 31 caracteres no se puede
     // cargar, así que dejarlo pasar sería entregarle al cliente un manual que
-    // no se puede ejecutar.
-    titulares: z.array(z.string().trim().min(1).max(30)).length(15),
-    descripciones: z.array(z.string().trim().min(1).max(90)).length(4),
+    // no se puede ejecutar. El agente los recorta antes de guardar; aquí se
+    // exige el límite. El mínimo es el de Google: 3 titulares y 2 descripciones.
+    titulares: z.array(z.string().trim().min(1).max(30)).min(3).max(15),
+    descripciones: z.array(z.string().trim().min(1).max(90)).min(2).max(4),
   }),
 
   segmentacion: segmentacionSchema.optional(),
@@ -207,6 +211,13 @@ export type Creativo = z.infer<typeof creativoSchema>;
 /**
  * Sub-esquemas por agente. Cada uno valida solo su trozo, para que el fallo de
  * una etapa no invalide el trabajo de las otras tres.
+ *
+ * `estructuraSchema` y `googleSchema` son el trozo del DOCUMENTO (estricto).
+ * Los agentes validan contra `estructuraAgenteSchema` y `googleAgenteSchema`,
+ * más tolerantes: aceptan menos elementos de los ideales, recortan los textos
+ * de anuncio al límite de Google en vez de rechazarlos y dejan fuera lo que
+ * venga vacío. Todo lo que dejan pasar sigue cumpliendo `growthSchema.partial()`,
+ * que es contra lo que se valida la edición del documento.
  */
 export const estructuraSchema = growthSchema.pick({
   semanas: true, campanasMeta: true, campanasGoogle: true,
@@ -217,8 +228,82 @@ export const googleSchema = growthSchema.pick({ googleKeywords: true, rsa: true 
 export const promptsSchema = growthSchema.pick({ promptsImagen: true });
 export const segmentacionAgenteSchema = z.object({ segmentacion: segmentacionSchema });
 
-export type Estructura = z.infer<typeof estructuraSchema>;
+/** Quita las listas vacías: el documento no admite `bloqueantes: []`, pero sí que falten. */
+function sinListasVacias<T extends Record<string, unknown>>(o: T): T {
+  const copia: Record<string, unknown> = { ...o };
+  for (const [k, v] of Object.entries(copia)) {
+    if (v === undefined || (Array.isArray(v) && v.length === 0)) delete copia[k];
+  }
+  return copia as T;
+}
+
+/**
+ * Recorta un texto de anuncio a `max` caracteres por palabra completa y SIN
+ * elipsis: en Google un «…» al final se lee como anuncio roto, y un titular
+ * de 31 no se puede cargar. Si la última palabra entera deja el texto
+ * demasiado corto, se corta en seco.
+ */
+export function recortarAnuncio(t: string, max: number): string {
+  const limpio = t.replace(/\s+/g, ' ').trim();
+  if (limpio.length <= max) return limpio;
+  const corte = limpio.slice(0, max + 1);
+  const espacio = corte.lastIndexOf(' ');
+  if (espacio < max * 0.5) return limpio.slice(0, max).trim();
+  const palabras = corte.slice(0, espacio).split(' ');
+  // «Miel cruda de la península de» no se puede publicar: se quitan los
+  // conectores que quedan colgando al final.
+  while (palabras.length > 2 && CONECTORES.has(palabras[palabras.length - 1].toLowerCase().replace(/[^\p{L}]/gu, ''))) {
+    palabras.pop();
+  }
+  return palabras.join(' ').replace(/[\s,;:\-–—|·]+$/u, '').trim();
+}
+
+const CONECTORES = new Set([
+  'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'o', 'u', 'a', 'al', 'en', 'con', 'sin',
+  'para', 'por', 'que', 'tu', 'su', 'un', 'una', 'mas', 'más', 'desde', 'hasta', 'entre',
+]);
+
+/** Lista de textos de anuncio: recortados, sin vacíos ni repetidos, hasta `cuantos`. */
+const textosDeAnuncio = (max: number, cuantos: number, minimo: number) =>
+  z.array(z.string())
+    .transform((lista) => {
+      const vistos = new Set<string>();
+      const salida: string[] = [];
+      for (const t of lista) {
+        const r = recortarAnuncio(t, max);
+        const clave = r.toLowerCase();
+        if (!r || vistos.has(clave)) continue;
+        vistos.add(clave);
+        salida.push(r);
+      }
+      return salida.slice(0, cuantos);
+    })
+    .pipe(z.array(z.string().min(1).max(max)).min(minimo));
+
+export const estructuraAgenteSchema = z.object({
+  semanas: z.number().int().min(2).max(12).optional(),
+  campanasMeta: z.array(campanaMetaSchema).min(1).max(3),
+  campanasGoogle: z.array(campanaGoogleSchema).max(5).optional(),
+  bloqueantes: z.array(z.string().trim().min(1)).optional(),
+  reglasCopy: z.array(z.string().trim().min(1)).optional(),
+}).transform(sinListasVacias);
+
+export const googleAgenteSchema = z.object({
+  googleKeywords: z.array(z.object({
+    clave: z.enum(CLAVES_GOOGLE),
+    keywords: z.array(z.string().trim().min(1)).min(1),
+    // La campaña de marca a menudo no lleva negativas propias.
+    negativas: z.array(z.string().trim().min(1)).default([]),
+  })).min(1).max(5),
+  // Opcional para poder salvar las keywords si los anuncios no sirven.
+  rsa: z.object({
+    titulares: textosDeAnuncio(30, 15, 3),
+    descripciones: textosDeAnuncio(90, 4, 2),
+  }).optional(),
+}).transform(sinListasVacias);
+
+export type Estructura = z.output<typeof estructuraAgenteSchema>;
 export type Creativos = z.infer<typeof creativosSchema>;
-export type GoogleDatos = z.infer<typeof googleSchema>;
+export type GoogleDatos = z.output<typeof googleAgenteSchema>;
 export type Prompts = z.infer<typeof promptsSchema>;
 export type SegmentacionAgente = z.infer<typeof segmentacionAgenteSchema>;

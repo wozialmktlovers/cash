@@ -55,6 +55,15 @@ Notas: ${c.notas ?? 'sin notas'}
 ${bloques.length ? bloques.join('\n\n') : 'La investigación no produjo ninguna etapa con datos.'}${aviso}`;
 }
 
+/**
+ * Tope de salida de los agentes de campaña. En Sonnet 5 y Opus 5 el
+ * razonamiento está activo por omisión y gasta del mismo `max_tokens` que el
+ * JSON: con 16k, un agente que razonaba de más (Google contando caracteres de
+ * 19 anuncios) se cortaba por `max_tokens` sin haber escrito la respuesta.
+ * Solo se paga lo que se usa, así que la holgura no encarece el caso normal.
+ */
+export const MAX_TOKENS_GROWTH = 32_000;
+
 /** Reglas comunes a los cuatro agentes de campaña. */
 export const SISTEMA_GROWTH = `Eres estratega de medios de pago para una agencia mexicana. Recibes una investigación de mercado ya hecha y devuelves JSON.
 

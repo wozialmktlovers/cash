@@ -1,6 +1,6 @@
 import { creativosSchema, type Creativos, type Estructura, RATIO_POR_FORMATO } from '@/growth/schemas';
 import { pedirJson } from '@/research/claude';
-import { SISTEMA_GROWTH } from '@/growth/contexto';
+import { SISTEMA_GROWTH, MAX_TOKENS_GROWTH } from '@/growth/contexto';
 
 const SISTEMA = `${SISTEMA_GROWTH}
 
@@ -33,5 +33,6 @@ export async function correrCreativos(
     schema: creativosSchema,
     buscarWeb: false,
     onUso,
+    maxTokens: MAX_TOKENS_GROWTH,
   });
 }
