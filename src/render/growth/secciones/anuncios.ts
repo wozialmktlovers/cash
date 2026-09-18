@@ -1,6 +1,11 @@
 import { escapar, cabeceraSeccion, hueco } from './comunes';
 import { rutaEditable, rutaAncla } from '@/render/editorial/flujo-cliente';
 import { GRUPOS, type Growth, type Creativo, type CampanaMeta } from '@/growth/schemas';
+import { enlaceWeb } from '@/contenido/reglas';
+import {
+  ARCHIVOS, MEDIDAS, TARJETAS_CARRUSEL, acomodarArtes, claseDe,
+  type ArteGrowth, type ArtesManual, type Hueco, type HuecoOcupado,
+} from '@/growth/artes-reglas';
 
 // La vista que el cliente entiende sin traducción: campaña → anuncios, cada
 // anuncio con su arte a un lado y sus dos copys al otro. Es la anatomía del
@@ -26,39 +31,16 @@ const FORMATO_TEXTO: Record<string, string> = {
   imagen: 'Imagen', video: 'Video', carrusel: 'Carrusel',
 };
 
-const MEDIDAS: Record<string, string> = {
-  '1x1': '1080 × 1080 px', '4x5': '1080 × 1350 px', '9x16': '1080 × 1920 px',
-};
-
-/**
- * Archivos que hay que producir por cada anuncio, según su formato. Es la
- * tabla `ARCHIVOS` de la antigua sección de creativos (quitada en 2d4cc85),
- * con los mismos datos: se perdió con aquella sección y es justo lo que
- * necesita quien produce el arte.
- *
- * Un carrusel no es una imagen: son cinco tarjetas. Un video necesita además
- * su fotograma de portada, que es lo que se ve en el feed antes de
- * reproducir. Sin este desglose, «un anuncio» deja al diseñador calculando
- * cuántos archivos son en realidad.
- */
-const ARCHIVOS: Record<string, { cantidad: number; etiqueta: string; ratio: string }[]> = {
-  imagen: [{ cantidad: 1, etiqueta: 'Pieza', ratio: '1x1' }],
-  // 4:5, igual que dicta el agente de creativos: la tabla vieja decía 1:1 y
-  // el anuncio mostraba las dos medidas a la vez.
-  carrusel: [{ cantidad: 5, etiqueta: 'Tarjetas', ratio: '4x5' }],
-  video: [
-    { cantidad: 1, etiqueta: 'Video', ratio: '9x16' },
-    { cantidad: 1, etiqueta: 'Portada', ratio: '4x5' },
-  ],
-};
+// `ARCHIVOS` y `MEDIDAS` viven en src/growth/artes-reglas.ts: la misma tabla
+// que dice cuántos archivos se producen dice cuántos se pueden subir.
 
 /** «3 archivos · Video 9:16 … · Portada 4:5 …»: lo que se entrega por este anuncio. */
 function bloqueArchivos(c: Creativo): string {
-  const archivos = ARCHIVOS[c.formato] ?? [{ cantidad: 1, etiqueta: 'Pieza', ratio: c.ratio }];
+  const archivos = ARCHIVOS[c.formato as keyof typeof ARCHIVOS] ?? [{ cantidad: 1, etiqueta: 'Pieza', ratio: c.ratio }];
   const total = archivos.reduce((n, a) => n + a.cantidad, 0);
   return `<div class="arte-archivos">
       <span class="kv-k">${total} ${total === 1 ? 'archivo' : 'archivos'} por producir</span>
-      <ul>${archivos.map((a) => `<li><strong>${a.cantidad > 1 ? `${a.cantidad} ` : ''}${escapar(a.etiqueta)}</strong> <span>${escapar(a.ratio.replace('x', ':'))} · ${escapar(MEDIDAS[a.ratio] ?? c.medidas)}</span></li>`).join('')}</ul>
+      <ul>${archivos.map((a) => `<li><strong>${a.cantidad > 1 ? `${a.cantidad} ` : ''}${escapar(a.etiqueta)}</strong> <span>${escapar(a.ratio.replace('x', ':'))} · ${escapar(MEDIDAS[a.ratio as keyof typeof MEDIDAS] ?? c.medidas)}</span></li>`).join('')}</ul>
     </div>`;
 }
 
@@ -73,13 +55,123 @@ function botonCopiar(destino: string, etiqueta: string): string {
   return `<button class="anuncio-copiar" type="button" data-copiar="${escapar(destino)}" aria-label="${escapar(etiqueta)}">${ICONO_COPIAR}<span data-copiar-texto>Copiar</span></button>`;
 }
 
+/** El arte de un anuncio en este render: sus huecos ya ocupados, y cómo pedir y tocar los archivos. */
+type ArteAnuncio = { creativo: number; ocupados: HuecoOcupado[]; src: (id: string) => string; api?: string };
+
+const ACEPTA_IMAGEN = 'image/png,image/jpeg';
+const ACEPTA_VIDEO = 'video/mp4';
+
+/** «9:16 · 1080 × 1920 px» */
+const proporcion = (h: Hueco) => `${h.ratio.replace('x', ':')} · ${MEDIDAS[h.ratio]}`;
+
 /**
- * El arte todavía no existe en este entregable. En vez de un recuadro vacío,
- * el hueco dice qué falta (la pieza, con su proporción y sus medidas) y trae
- * debajo el brief visual con el que se produce.
+ * Un botón de los controles del arte. Todo lo que hace lo lee `SCRIPT_ARTES`
+ * de sus `data-*`; sin JS los controles ni se ven (`html.js`).
  */
-function bloqueArte(c: Creativo, prompt: string | undefined, i: number, id: string, nombre: string, razonPrompt: string, editable: boolean): string {
-  const ratio = c.ratio.replace('x', ':');
+function boton(texto: string, datos: Record<string, string | number>, peligro = false, etiqueta?: string): string {
+  const attrs = Object.entries(datos).map(([k, v]) => ` data-${k}="${escapar(v)}"`).join('');
+  return `<button type="button" class="panel-boton${peligro ? ' panel-peligro' : ''}"${attrs}${etiqueta ? ` aria-label="${escapar(etiqueta)}"` : ''}>${escapar(texto)}</button>`;
+}
+
+/** Los controles de un hueco de posición fija (pieza, video, portada), según esté vacío u ocupado. */
+function controlesHueco(h: Hueco, arte: ArteGrowth | undefined, nombre: string): string {
+  const quien = `${h.etiqueta.toLowerCase()} del ${nombre}`;
+  const orden = h.orden ?? 0;
+  const botones: string[] = [];
+  if (h.acepta.includes('video')) {
+    botones.push(boton(arte && claseDe(arte) === 'video' ? 'Reemplazar video' : 'Subir video', { 'arte-subir': orden, acepta: ACEPTA_VIDEO }, false, `Subir el video del ${nombre}`));
+  }
+  if (h.acepta.includes('imagen')) {
+    const texto = arte ? 'Reemplazar' : h.clave === 'portada' ? 'Subir portada' : 'Subir arte';
+    botones.push(boton(texto, { 'arte-subir': orden, acepta: ACEPTA_IMAGEN }, false, `${arte ? 'Reemplazar' : 'Subir'} ${quien}`));
+  }
+  if (h.acepta.includes('enlace')) {
+    botones.push(boton(arte && claseDe(arte) === 'enlace' ? 'Cambiar enlace' : 'Agregar enlace', { 'arte-enlace': orden, actual: enlaceWeb(arte?.url) ?? '' }, false, `Enlace del video del ${nombre}`));
+  }
+  if (arte) botones.push(boton('Quitar', { 'arte-quitar': arte.id }, true, `Quitar ${quien}`));
+  return botones.join('');
+}
+
+/** La imagen de un hueco, en su proporción. */
+function figuraImagen(a: ArteGrowth, ratio: string, src: (id: string) => string, alt: string, pie: string, controles: string): string {
+  return `<figure class="arte-figura">
+      <div class="arte-marco ar-${escapar(ratio)}"><img src="${escapar(src(a.id))}" alt="${escapar(alt)}" loading="lazy" decoding="async"></div>
+      <figcaption><span class="arte-pie">${escapar(pie)}</span>${controles ? `<span class="arte-botones">${controles}</span>` : ''}</figcaption>
+    </figure>`;
+}
+
+/**
+ * El video del anuncio: el archivo, con su portada de póster si ya la hay, o
+ * el enlace. El enlace se vuelve a pasar por `enlaceWeb` al pintarlo —la
+ * API ya lo filtró al guardarlo, pero esta es la última puerta antes del
+ * `href` que abre el cliente—; si no pasa, se enseña como hueco.
+ */
+function figuraVideo(a: ArteGrowth, h: Hueco, portada: ArteGrowth | undefined, x: ArteAnuncio, nombre: string, controles: string): string {
+  const pie = `${h.etiqueta} · ${proporcion(h)}`;
+  const botones = controles ? `<span class="arte-botones">${controles}</span>` : '';
+  if (claseDe(a) === 'video') {
+    const poster = portada ? ` poster="${escapar(x.src(portada.id))}"` : '';
+    return `<figure class="arte-figura">
+      <div class="arte-marco ar-${escapar(h.ratio)}"><video src="${escapar(x.src(a.id))}"${poster} controls playsinline preload="metadata" aria-label="${escapar(`Video del ${nombre}`)}"></video></div>
+      <figcaption><span class="arte-pie">${escapar(pie)}</span>${botones}</figcaption>
+    </figure>`;
+  }
+  const href = enlaceWeb(a.url);
+  if (!href) return huecoChico(h, controles);
+  let sitio = '';
+  try { sitio = new URL(href).hostname.replace(/^www\./, ''); } catch { /* ya validado */ }
+  const fondo = portada ? `<img src="${escapar(x.src(portada.id))}" alt="" loading="lazy" decoding="async">` : '';
+  return `<figure class="arte-figura">
+      <a class="arte-marco arte-enlace ar-${escapar(h.ratio)}" href="${escapar(href)}" target="_blank" rel="noopener noreferrer">${fondo}<span class="arte-enlace-t">Ver el video ↗<small>${escapar(sitio)}</small></span></a>
+      <figcaption><span class="arte-pie">${escapar(pie)} · enlace</span>${botones}</figcaption>
+    </figure>`;
+}
+
+/** Un hueco todavía vacío, cuando el anuncio ya tiene otro arte puesto. */
+function huecoChico(h: Hueco, controles: string): string {
+  return `<figure class="arte-figura">
+      <div class="arte-marco arte-vacio ar-${escapar(h.ratio)}"><span class="arte-hueco-k">${escapar(h.etiqueta)} por producir</span><span class="arte-hueco-m">${escapar(proporcion(h))}</span></div>
+      ${controles ? `<figcaption><span class="arte-botones">${controles}</span></figcaption>` : ''}
+    </figure>`;
+}
+
+/** El recuadro grande «Arte por producir», el de siempre: el anuncio todavía no tiene ningún arte. */
+function huecoGrande(c: Creativo): string {
+  return `<div class="arte-hueco ar-${escapar(c.ratio)}">
+      <span class="arte-hueco-k">Arte por producir</span>
+      <strong class="arte-hueco-r">${escapar(c.ratio.replace('x', ':'))}</strong>
+      <span class="arte-hueco-m">${escapar(c.medidas)}</span>
+    </div>`;
+}
+
+/** Las tarjetas del carrusel, en orden, y el botón para agregar mientras falten. */
+function carrusel(o: HuecoOcupado, x: ArteAnuncio, nombre: string): string {
+  const total = TARJETAS_CARRUSEL;
+  const tarjetas = o.artes.map((a, k) => {
+    const quien = `la tarjeta ${k + 1} del ${nombre}`;
+    const controles = x.api
+      ? boton('Reemplazar', { 'arte-subir': a.orden, acepta: ACEPTA_IMAGEN }, false, `Reemplazar ${quien}`)
+        + boton('Quitar', { 'arte-quitar': a.id }, true, `Quitar ${quien}`)
+      : '';
+    return `<li>${figuraImagen(a, o.hueco.ratio, x.src, `Tarjeta ${k + 1} de ${total} del ${nombre}`, `Tarjeta ${k + 1} de ${total}`, controles)}</li>`;
+  }).join('');
+  const faltan = total - o.artes.length;
+  const nota = faltan > 0
+    ? `<p class="arte-nota">${o.artes.length} de ${total} tarjetas · ${escapar(proporcion(o.hueco))}</p>`
+    : '';
+  return `<ol class="arte-carrusel" aria-label="${escapar(`Tarjetas del carrusel del ${nombre}`)}">${tarjetas}</ol>${nota}`;
+}
+
+/**
+ * El arte del anuncio: lo que ya se subió en su proporción, o el recuadro
+ * «Arte por producir» si todavía no hay nada, y debajo el desglose de
+ * archivos y el brief visual con el que se produce.
+ *
+ * Los controles (subir, reemplazar, enlazar, quitar) salen solo cuando llega
+ * `x.api`, que es solo en la vista interna de quien puede operar al cliente.
+ * El portal y el enlace público ven el arte y nada más.
+ */
+function bloqueArte(c: Creativo, prompt: string | undefined, i: number, id: string, nombre: string, razonPrompt: string, editable: boolean, x?: ArteAnuncio): string {
   const brief = prompt
     ? `<div class="arte-brief">
         <div class="arte-brief-hd"><span class="kv-k">Brief visual</span>${botonCopiar(`${id}-brief`, `Copiar el brief visual del ${nombre}`)}</div>
@@ -88,14 +180,54 @@ function bloqueArte(c: Creativo, prompt: string | undefined, i: number, id: stri
     : `<p class="tiny">Sin brief visual: ${escapar(razonPrompt)}</p>`;
 
   return `<div class="anuncio-arte">
-    <div class="arte-hueco ar-${escapar(c.ratio)}">
-      <span class="arte-hueco-k">Arte por producir</span>
-      <strong class="arte-hueco-r">${escapar(ratio)}</strong>
-      <span class="arte-hueco-m">${escapar(c.medidas)}</span>
-    </div>
+    ${arteVisible(c, nombre, x)}
     ${bloqueArchivos(c)}
     ${brief}
   </div>`;
+}
+
+function arteVisible(c: Creativo, nombre: string, x?: ArteAnuncio): string {
+  const ocupados = x?.ocupados ?? [];
+  const hayArte = ocupados.some((o) => o.artes.length > 0);
+  const api = x?.api;
+
+  if (!x || !hayArte) {
+    if (!api || !ocupados.length) return huecoGrande(c);
+    // Sin arte todavía: el recuadro de siempre y, debajo, cómo empezar.
+    const controles = ocupados.map((o) => o.hueco.orden === null
+      ? boton(`Subir arte`, { 'arte-subir': '', acepta: ACEPTA_IMAGEN, multiple: TARJETAS_CARRUSEL }, false, `Subir las tarjetas del carrusel del ${nombre}`)
+      : controlesHueco(o.hueco, undefined, nombre)).join('');
+    return gestion(x, `${huecoGrande(c)}<div class="arte-botones arte-botones-inicio">${controles}</div>`);
+  }
+
+  const portada = ocupados.find((o) => o.hueco.clave === 'portada')?.artes[0];
+  const partes = ocupados.map((o) => {
+    if (o.hueco.orden === null) {
+      const agregar = api && o.artes.length < TARJETAS_CARRUSEL
+        ? `<div class="arte-botones">${boton('Agregar tarjeta', { 'arte-subir': '', acepta: ACEPTA_IMAGEN, multiple: TARJETAS_CARRUSEL - o.artes.length }, false, `Agregar tarjetas al carrusel del ${nombre}`)}</div>`
+        : '';
+      return carrusel(o, x, nombre) + agregar;
+    }
+    const arte = o.artes[0];
+    const controles = api ? controlesHueco(o.hueco, arte, nombre) : '';
+    if (!arte) return api ? huecoChico(o.hueco, controles) : '';
+    if (o.hueco.clave === 'video') return figuraVideo(arte, o.hueco, portada, x, nombre, controles);
+    const pie = `${o.hueco.etiqueta} · ${proporcion(o.hueco)}`;
+    const alt = o.hueco.clave === 'portada' ? `Portada del video del ${nombre}` : `Arte del ${nombre}`;
+    return figuraImagen(arte, o.hueco.ratio, x.src, alt, pie, controles);
+  }).join('');
+
+  return gestion(x, `<div class="arte-subido">${partes}</div>`);
+}
+
+/**
+ * El contenedor de los controles: de él lee `SCRIPT_ARTES` a dónde hablar y de
+ * qué anuncio, y en él escribe «Subiendo…» y los errores. Sin `api` (portal,
+ * enlace público) no hay contenedor: el arte va tal cual.
+ */
+function gestion(x: ArteAnuncio | undefined, html: string): string {
+  if (!x?.api) return html;
+  return `<div class="arte-gestion" data-arte-api="${escapar(x.api)}" data-creativo="${escapar(String(x.creativo))}">${html}<p class="arte-estado" role="status" aria-live="polite"></p></div>`;
 }
 
 /**
@@ -131,6 +263,7 @@ function bloqueCopys(c: Creativo, i: number, id: string, nombre: string, editabl
 
 function tarjetaAnuncio(
   c: Creativo, i: number, n: number, prompt: string | undefined, razonPrompt: string, editable: boolean, anclas: boolean,
+  arte?: ArteAnuncio,
 ): string {
   const letra = c.grupo.toUpperCase();
   const id = `anuncio-${c.grupo}-${n}`;
@@ -141,7 +274,7 @@ function tarjetaAnuncio(
   // de creativos: así un comentario ya dejado sobre un anuncio sigue
   // encontrando su sitio.
   return `<article class="anuncio" id="${escapar(id)}"${rutaAncla(anclas, `creativos.${i}`)}>
-    ${bloqueArte(c, prompt, i, id, nombre, razonPrompt, editable)}
+    ${bloqueArte(c, prompt, i, id, nombre, razonPrompt, editable, arte)}
     <div class="anuncio-info">
       <div class="anuncio-hd">
         <div>
@@ -182,6 +315,7 @@ export function seccionAnuncios(
   huecos: Record<string, string>,
   editable = false,
   anclas = false,
+  artes?: ArtesManual,
 ): string {
   const cabecera = cabeceraSeccion({
     numero: 'A', kicker: 'Lo que se publica', titulo: 'Los anuncios, campaña por campaña',
@@ -198,6 +332,13 @@ export function seccionAnuncios(
   const razonPrompts = huecos.prompts ?? 'Los prompts no se generaron.';
   const prompts = g.promptsImagen?.porCreativo ?? [];
   const campanaPorGrupo = new Map((g.campanasMeta ?? []).map((c) => [c.grupo as string, c]));
+  // El arte subido, repartido en los huecos de los anuncios de ESTA versión
+  // del manual: lo que ya no tiene hueco (un anuncio que se fue al restaurar
+  // una versión) no sale.
+  const acomodo = artes ? acomodarArtes(creativos, artes.lista) : null;
+  const arteDe = (i: number): ArteAnuncio | undefined => artes && acomodo
+    ? { creativo: i, ocupados: acomodo.get(i) ?? [], src: artes.src, api: artes.api }
+    : undefined;
 
   const campanas = GRUPOS.map((grupo) => {
     const suyos = creativos
@@ -206,7 +347,7 @@ export function seccionAnuncios(
     const campana = campanaPorGrupo.get(grupo);
     if (!suyos.length && !campana) return '';
     const tarjetas = suyos.length
-      ? suyos.map(({ c, i }, n) => tarjetaAnuncio(c, i, n + 1, prompts[i], razonPrompts, editable, anclas)).join('')
+      ? suyos.map(({ c, i }, n) => tarjetaAnuncio(c, i, n + 1, prompts[i], razonPrompts, editable, anclas, arteDe(i))).join('')
       : `<p class="tiny">Sin anuncios para esta campaña: ${escapar(razonCreativos)}</p>`;
     return `<section class="campana campana-${escapar(grupo)}" aria-label="${escapar(`Campaña ${grupo.toUpperCase()}`)}">
       ${cabeceraCampana(grupo, campana, suyos.length, razonCampanas)}

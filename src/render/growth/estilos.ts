@@ -222,6 +222,48 @@ html.js .anuncio-panel-hd{justify-content:flex-end;}
 html.js .anuncio-copiar{display:inline-flex;}
 .anuncio-copiar:hover{border-color:var(--rosa);color:var(--rosa);}
 .anuncio-copiar svg{width:14px;height:14px;}
+/* ── Arte subido del anuncio ─────────────────────────── */
+/* Cada pieza en su proporción (el marco lleva .ar-*), sin recortar: si el
+   archivo no tiene la medida pedida, se nota en vez de esconderse. */
+.arte-gestion,.arte-subido{display:grid;gap:14px;width:100%;justify-items:center;}
+.arte-figura{display:grid;gap:8px;margin:0;width:100%;justify-items:center;}
+.arte-marco{position:relative;display:flex;align-items:center;justify-content:center;width:100%;overflow:hidden;
+  background:var(--fondo);border:1px solid var(--linea);border-radius:var(--r-sm);}
+.arte-marco.ar-1x1{max-width:320px;}
+.arte-marco.ar-4x5{max-width:280px;}
+.arte-marco.ar-9x16{max-width:220px;}
+.arte-marco img,.arte-marco video{display:block;width:100%;height:100%;object-fit:contain;}
+.arte-vacio{flex-direction:column;gap:6px;padding:12px;text-align:center;border:1.5px dashed color-mix(in srgb,var(--suave) 45%,transparent);}
+.arte-enlace{text-decoration:none;color:var(--tinta);}
+.arte-enlace img{position:absolute;inset:0;object-fit:cover;opacity:.35;}
+.arte-enlace-t{position:relative;display:grid;gap:4px;padding:12px 16px;border-radius:var(--r-pill);background:var(--tarjeta);
+  border:1px solid var(--linea);font:var(--t-small);font-weight:700;text-align:center;}
+.arte-enlace-t small{font-weight:400;color:var(--suave);font-family:var(--mono);word-break:break-all;}
+.arte-enlace:hover .arte-enlace-t,.arte-enlace:focus-visible .arte-enlace-t{border-color:var(--rosa);color:var(--rosa);}
+.arte-figura figcaption{display:grid;gap:8px;justify-items:center;width:100%;}
+.arte-pie{font:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--suave);text-align:center;}
+/* El carrusel se recorre de lado, tarjeta por tarjeta, como en el feed. */
+.arte-carrusel{display:flex;gap:12px;width:100%;margin:0;padding:2px 2px 10px;list-style:none;overflow-x:auto;
+  scroll-snap-type:x mandatory;overscroll-behavior-x:contain;}
+.arte-carrusel li{flex:0 0 min(72%,220px);scroll-snap-align:start;}
+.arte-nota{margin:0;font:var(--t-small);color:var(--suave);text-align:center;}
+/* Los controles: solo con JS, y nunca mientras se edita o se comenta el
+   documento, que es cuando un clic sobre el anuncio significa otra cosa. */
+.arte-botones{display:none;flex-wrap:wrap;justify-content:center;gap:8px;}
+html.js .arte-botones{display:flex;}
+html.modo-edicion .arte-gestion .arte-botones,html.modo-comentar .arte-gestion .arte-botones,
+html.modo-edicion .arte-enlace-form,html.modo-comentar .arte-enlace-form{display:none;}
+.arte-botones .panel-boton{background:var(--tarjeta);}
+.arte-botones .panel-primario{background:var(--rosa);}
+.arte-botones .panel-boton:disabled{opacity:.55;cursor:progress;}
+.arte-enlace-form{display:grid;gap:8px;width:100%;}
+.arte-enlace-form label{display:grid;gap:6px;font:var(--t-small);font-weight:600;color:var(--tinta);}
+.arte-enlace-form input{min-height:44px;padding:0 12px;border-radius:var(--r-sm);border:1px solid var(--linea);
+  background:var(--fondo);color:var(--tinta);font:inherit;font-weight:400;width:100%;}
+.arte-enlace-form input:focus{outline:2px solid var(--rosa);outline-offset:1px;}
+.arte-estado{margin:0;min-height:0;font:var(--t-small);font-weight:600;color:var(--suave);text-align:center;}
+.arte-estado:empty{display:none;}
+.arte-estado.arte-error{color:var(--rojo);}
 @media (max-width:900px){
   .anuncio{grid-template-columns:1fr;}
   .anuncio-arte{border-right:none;border-bottom:1px solid var(--linea);padding:18px;}
@@ -230,6 +272,9 @@ html.js .anuncio-copiar{display:inline-flex;}
   .arte-hueco.ar-1x1{max-width:200px;}
   .arte-hueco.ar-4x5{max-width:180px;}
   .arte-hueco.ar-9x16{max-width:150px;}
+  .arte-marco.ar-1x1{max-width:240px;}
+  .arte-marco.ar-4x5{max-width:220px;}
+  .arte-marco.ar-9x16{max-width:180px;}
   .anuncio-info{padding:18px;}
   .anuncio-hd{flex-direction:column;gap:10px;}
 }
@@ -248,6 +293,7 @@ html.js .anuncio-copiar{display:inline-flex;}
   .cabecera-escala,.cabecera-pantalla{display:none!important;}
   .anuncio{break-inside:avoid;box-shadow:none;}
   .anuncio-copiar{display:none!important;}
+  .arte-botones,.arte-estado,.arte-enlace-form{display:none!important;}
   .anuncio-panel[hidden]{display:grid!important;}
   html.js .anuncio-panel-titulo{position:static;width:auto;height:auto;clip:auto;}
 }

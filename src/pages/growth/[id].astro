@@ -10,6 +10,7 @@ import { etapaDelDocumento, permisoCompartir, barraDelDocumento } from '@/flujo/
 import { puedeEditar as calcularPuedeEditar } from '@/flujo/edicion';
 import { puedeComentar } from '@/flujo/reglas';
 import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
+import { artesDelManual } from '@/growth/artes-consultas';
 
 const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
@@ -60,6 +61,15 @@ if (operable) {
   }
 }
 
+// El arte de los anuncios va aparte del documento (`growth_artes`): se lee el
+// vigente, y solo quien puede operar al cliente recibe la API para tocarlo.
+const apiArtes = `/api/growth/${r.id}/artes`;
+const artes = {
+  lista: await artesDelManual(r.id),
+  src: (arteId: string) => `${apiArtes}/${arteId}`,
+  api: operable ? apiArtes : undefined,
+};
+
 const html = renderizarManual(
   r.datos as any,
   {
@@ -70,6 +80,7 @@ const html = renderizarManual(
     creadoEn: r.createdAt,
     // Vista interna, con sesión: el logo lleva al inicio del equipo.
     inicio: '/',
+    artes,
   },
   // La cabecera flotante arma el botón Compartir y los de Editar/Comentar a
   // partir de estas opciones y de `flujo`: ya no se le pasa HTML armado.

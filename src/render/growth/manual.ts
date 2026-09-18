@@ -5,6 +5,8 @@ import { ESTILOS_GROWTH } from './estilos';
 import { NAVEGACION_GROWTH } from './navegacion';
 import { envolverDocumento } from '@/render/editorial/comunes';
 import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
+import type { ArtesManual } from '@/growth/artes-reglas';
+import { SCRIPT_ARTES } from './artes-script';
 import { seccion } from './secciones/comunes';
 import { seccionPortada, type MetaManual } from './secciones/portada';
 import { seccionAnuncios } from './secciones/anuncios';
@@ -90,6 +92,13 @@ export function renderizarManual(
      * el logo queda sin enlace — ver `cabeceraDocumento`.
      */
     inicio?: string;
+    /**
+     * El arte subido de los anuncios (`growth_artes`) y de dónde pedir cada
+     * archivo según la puerta por la que se ve el manual. Con `api`, además,
+     * los controles para subir y quitar: solo la vista interna de quien puede
+     * operar al cliente.
+     */
+    artes?: ArtesManual;
   },
   operador?: OpcionesBarra,
   editable = false,
@@ -117,7 +126,7 @@ export function renderizarManual(
   const anclas = Boolean(flujo);
   const cuerpo = [
     seccion('setup', seccionPortada(datos, meta, urls.length, huecos, editable), anclas),
-    seccion('anuncios', seccionAnuncios(datos, huecos, editable, anclas), anclas),
+    seccion('anuncios', seccionAnuncios(datos, huecos, editable, anclas, meta.artes), anclas),
     seccion('meta', seccionMeta(datos, huecos, editable), anclas),
     seccion('google', seccionGoogle(datos, huecos, urls), anclas),
     seccion('rsa', seccionRsa(datos, huecos), anclas),
@@ -135,7 +144,7 @@ export function renderizarManual(
     indice: INDICE,
     cuerpo,
     operador,
-    scriptsExtra: NAVEGACION_GROWTH,
+    scriptsExtra: meta.artes?.api ? `${NAVEGACION_GROWTH}\n${SCRIPT_ARTES}` : NAVEGACION_GROWTH,
     flujo,
     volver: portal ? { href: portal.volverHref, texto: portal.volverTexto, vistaPrevia: portal.vistaPrevia } : undefined,
     ayudaComentarios: portal?.ayudaComentarios,

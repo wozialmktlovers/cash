@@ -78,6 +78,13 @@
       "when": 1789689573270,
       "tag": "0010_plazo_contenido_tocado",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789763131181,
+      "tag": "0011_growth_artes",
+      "breakpoints": true
     }
   ]
 }

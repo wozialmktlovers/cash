@@ -1,4 +1,4 @@
-import { mimePermitido } from './files';
+import { mimeGuardable } from './files';
 
 /** Lo mínimo que hace falta de una fila de `client_files` para poder servirla. */
 export type ArchivoServible = { nombreOriginal: string; mime: string };
@@ -13,7 +13,7 @@ export type ArchivoServible = { nombreOriginal: string; mime: string };
  * no lo acepta al subir; si algún día se acepta, esta lista hace que salga como
  * descarga sin que nadie tenga que acordarse de este archivo.
  */
-const INCRUSTABLES = new Set(['image/png', 'image/jpeg']);
+const INCRUSTABLES = new Set(['image/png', 'image/jpeg', 'video/mp4']);
 
 /**
  * Caché.
@@ -43,7 +43,33 @@ export const CACHE_DOCUMENTO = 'private, no-store';
  * sirve como binario opaco en vez de con el tipo que diga la fila.
  */
 export function tipoServible(mime: string): string {
-  return mimePermitido(mime) ? mime : 'application/octet-stream';
+  return mimeGuardable(mime) ? mime : 'application/octet-stream';
+}
+
+/**
+ * Un rango `bytes=a-b` de la cabecera `Range`, ya recortado al tamaño.
+ *
+ * Hace falta por el video del arte de los anuncios: Safari no reproduce un
+ * `<video>` si el servidor no contesta rangos. Solo se atiende un rango; uno
+ * múltiple o mal escrito se ignora y se manda el archivo entero, que es lo
+ * que permite el RFC 9110. Un rango que empieza después del final no se puede
+ * satisfacer (`'fuera'`, que es un 416).
+ */
+export function rangoPedido(cabecera: string | null | undefined, total: number): { inicio: number; fin: number } | 'fuera' | null {
+  if (!cabecera) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(cabecera.trim());
+  if (!m || (m[1] === '' && m[2] === '')) return null;
+  if (m[1] === '') {
+    // `bytes=-N`: los últimos N bytes.
+    const n = Number(m[2]);
+    if (n === 0) return 'fuera';
+    return { inicio: Math.max(0, total - n), fin: total - 1 };
+  }
+  const inicio = Number(m[1]);
+  const fin = m[2] === '' ? total - 1 : Math.min(Number(m[2]), total - 1);
+  if (inicio >= total) return 'fuera';
+  if (fin < inicio) return null;
+  return { inicio, fin };
 }
 
 /** El nombre original viaja en una cabecera, y lo escribió quien subió el archivo. */
@@ -69,18 +95,33 @@ export function respuestaArchivo(
   contenido: Buffer,
   archivo: ArchivoServible,
   cabecerasExtra: Record<string, string> = {},
+  /** La cabecera `Range` de la petición, si se quiere atender (ver `rangoPedido`). */
+  rango?: string | null,
 ): Response {
   const tipo = tipoServible(archivo.mime);
   const incrustar = INCRUSTABLES.has(tipo);
+  const comunes = {
+    'Content-Type': tipo,
+    'Content-Disposition': cabeceraDisposicion(archivo.nombreOriginal, incrustar),
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': incrustar ? CACHE_IMAGEN : CACHE_DOCUMENTO,
+    'Accept-Ranges': 'bytes',
+    ...cabecerasExtra,
+  };
+  const total = contenido.byteLength;
+  const r = rangoPedido(rango, total);
+  if (r === 'fuera') {
+    return new Response(null, { status: 416, headers: { ...comunes, 'Content-Range': `bytes */${total}` } });
+  }
+  if (r) {
+    const trozo = contenido.subarray(r.inicio, r.fin + 1);
+    return new Response(new Uint8Array(trozo), {
+      status: 206,
+      headers: { ...comunes, 'Content-Length': String(trozo.byteLength), 'Content-Range': `bytes ${r.inicio}-${r.fin}/${total}` },
+    });
+  }
   return new Response(new Uint8Array(contenido), {
     status: 200,
-    headers: {
-      'Content-Type': tipo,
-      'Content-Length': String(contenido.byteLength),
-      'Content-Disposition': cabeceraDisposicion(archivo.nombreOriginal, incrustar),
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': incrustar ? CACHE_IMAGEN : CACHE_DOCUMENTO,
-      ...cabecerasExtra,
-    },
+    headers: { ...comunes, 'Content-Length': String(total) },
   });
 }

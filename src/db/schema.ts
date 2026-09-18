@@ -385,3 +385,45 @@ export const contenidoPiezas = pgTable('contenido_piezas', {
   // cualquier referencia, así que no se permite.
   unique('contenido_piezas_lote_id_numero').on(t.loteId, t.numero),
 ]);
+
+/**
+ * El arte de cada anuncio del manual de campaña (sección A del documento
+ * growth): la imagen, las tarjetas del carrusel, el video o su enlace y la
+ * portada que sube el equipo.
+ *
+ * **No es parte de `growth_results.datos`** a propósito: el arte no es texto
+ * del documento, no pasa por Editar ni por el historial de versiones, y subir
+ * uno no toca la etapa. Por eso el cliente ve el arte VIGENTE aunque en su
+ * portal esté leyendo la versión autorizada.
+ *
+ * El ancla es `creativo`, el índice original del anuncio en `datos.creativos`
+ * —el mismo `creativos.N` que usan los comentarios—, y `orden` es el hueco
+ * dentro del anuncio (ver `huecosDe`, src/growth/artes-reglas.ts). Si el
+ * manual cambia debajo (una versión restaurada con menos anuncios), las filas
+ * que ya no tienen hueco se quedan aquí y el documento no las enseña.
+ *
+ * Un arte es o un archivo en el disco de datos (`ruta` + `mime`, dentro de la
+ * carpeta del cliente, como los de `client_files`) o un enlace (`url`, solo
+ * http/https); nunca los dos. No se registra en `client_files` porque no es
+ * material de la ficha: no debe salir en su lista ni servirse por esa puerta.
+ */
+export const growthArtes = pgTable('growth_artes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  growthId: uuid('growth_id').notNull().references(() => growthResults.id, { onDelete: 'cascade' }),
+  creativo: integer('creativo').notNull(),
+  orden: integer('orden').notNull(),
+  tipo: text('tipo').notNull(),
+  ruta: text('ruta'),
+  mime: text('mime'),
+  nombreOriginal: text('nombre_original'),
+  bytes: integer('bytes'),
+  url: text('url'),
+  autorId: uuid('autor_id').references(() => users.id, { onDelete: 'set null' }),
+  creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  // Un hueco, un arte: reemplazar es borrar la fila y poner otra.
+  unique('growth_artes_growth_id_creativo_orden').on(t.growthId, t.creativo, t.orden),
+  check('growth_artes_tipo', sql`tipo IN ('archivo', 'enlace')`),
+  check('growth_artes_forma', sql`(tipo = 'archivo' AND ruta IS NOT NULL AND mime IS NOT NULL AND url IS NULL) OR (tipo = 'enlace' AND url IS NOT NULL AND ruta IS NULL)`),
+  check('growth_artes_posicion', sql`creativo >= 0 AND orden >= 0`),
+]);

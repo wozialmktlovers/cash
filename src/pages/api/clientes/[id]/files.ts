@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import { and, eq } from 'drizzle-orm';
 import { db, clientFiles } from '@/db';
-import { guardarArchivo, borrarArchivo, mimePermitido, MAX_BYTES } from '@/lib/files';
+import { guardarArchivo, borrarArchivo, mimePermitido, tipoReal, MAX_BYTES } from '@/lib/files';
 import { extraerTexto, recortarTexto } from '@/lib/extract';
 import { clienteOperable, esUuid } from '@/lib/visibilidad';
 
@@ -37,6 +37,13 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   }
 
   const buf = Buffer.from(await archivo.arrayBuffer());
+
+  // Una imagen se sirve INCRUSTADA (`respuestaArchivo`): que el navegador diga
+  // `image/png` no basta, el contenido tiene que serlo. Los demás tipos salen
+  // siempre como descarga, así que ahí el tipo declarado no abre nada.
+  if (mime.startsWith('image/') && tipoReal(buf) !== mime) {
+    return json({ ok: false, errores: ['El archivo no es una imagen PNG o JPEG válida'] }, 400);
+  }
 
   let ruta: string;
   try {

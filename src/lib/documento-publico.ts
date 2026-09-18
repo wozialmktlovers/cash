@@ -11,6 +11,7 @@ import { renderizarPilares } from '@/render/pilares/documento';
 import { renderizarContenido, renderizarContenidoEnPreparacion, type PiezaEntregable } from '@/render/contenido/documento';
 import type { Arte } from '@/contenido/piezas';
 import { slugificar } from '@/lib/slug';
+import { artesDelManual } from '@/growth/artes-consultas';
 
 /**
  * Los tres documentos que viven en una tabla de resultados con su `datos`.
@@ -191,12 +192,21 @@ export async function resolverDocumentoPublico(token: string): Promise<
   // Tampoco `inicio`: quien abre el enlace no tiene cuenta, y un logo que
   // llevara a `/` lo mandaría a una pantalla de acceso que no puede usar.
   // Sin `inicio`, la cabecera deja el logo como imagen (ver `cabeceraDocumento`).
+  // El arte de los anuncios, relativo al propio documento como los artes del
+  // mes: `{token}/arte/{id}` resuelto contra `/p/{negocio}/{token}` da
+  // `/p/{negocio}/{token}/arte/{id}` (ver `baseArchivosPublica`). Sin `api`:
+  // aquí nadie sube nada.
+  const artes = link.documentoTipo === 'growth'
+    ? { lista: await artesDelManual(r.id), src: (arteId: string) => `${encodeURIComponent(token)}/arte/${arteId}` }
+    : undefined;
+
   const html = link.documentoTipo === 'growth'
     ? renderizarManual(r.datos as any, {
         cliente: c.nombre, producto: c.producto, fecha,
         ciudad: c.ciudad ?? undefined,
         destino: sitio?.url,
         creadoEn: r.createdAt,
+        artes,
       })
     : link.documentoTipo === 'pilares'
     ? renderizarPilares(r.datos as any, { cliente: c.nombre, fecha })

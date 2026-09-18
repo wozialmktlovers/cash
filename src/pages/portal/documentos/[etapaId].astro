@@ -25,6 +25,7 @@ import { renderizarInvestigacion } from '@/render/investigacion/documento';
 import { renderizarPilares } from '@/render/pilares/documento';
 import { renderizarManual } from '@/render/growth/manual';
 import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
+import { artesDelManual } from '@/growth/artes-consultas';
 
 const VOLVER_TEXTO = '← Mi portal';
 const AYUDA_OBSERVACIONES = 'Selecciona una parte del documento para dejar una observación a tu equipo';
@@ -124,12 +125,21 @@ if (listaParaCliente) {
         const [resultadoGrowth] = await db.select({ createdAt: growthResults.createdAt })
           .from(growthResults).where(eq(growthResults.id, version.documentoId)).limit(1);
         const creadoEnGrowth = resultadoGrowth?.createdAt ?? version.creadoEn;
+        // El arte de los anuncios no es parte de la versión: se enseña el
+        // VIGENTE sobre la versión autorizada (el arte no se versiona). Cada
+        // archivo se pide por la puerta del portal, con el mismo `?cliente=`
+        // que la página cuando es vista previa.
+        const sufijo = vistaPrevia ? `?cliente=${encodeURIComponent(cliente.id)}` : '';
+        const artes = {
+          lista: await artesDelManual(version.documentoId),
+          src: (arteId: string) => `/portal/documentos/${fila.id}/arte/${arteId}${sufijo}`,
+        };
         html = renderizarManual(
           version.datos as any,
           {
             cliente: cliente.nombre, producto: cliente.producto, fecha: creadoEnGrowth.toISOString().slice(0, 10),
             ciudad: cliente.ciudad ?? undefined, destino: sitio?.url, creadoEn: creadoEnGrowth,
-            inicio: volverHref,
+            inicio: volverHref, artes,
           },
           undefined, false, flujo,
           { volverHref, volverTexto: VOLVER_TEXTO, ayudaComentarios: permiteObservaciones ? AYUDA_OBSERVACIONES : undefined, vistaPrevia },
