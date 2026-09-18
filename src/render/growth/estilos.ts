@@ -162,6 +162,68 @@ const CSS_GROWTH = `
 .slot-r{font-size:1rem;font-weight:800;color:var(--suave);letter-spacing:-.01em;}
 .slot-p{font:var(--t-micro);letter-spacing:.06em;color:var(--suave);}
 
+/* ── Anuncios por campaña (sección A) ────────────────── */
+/* La anatomía del entregable hecho a mano —campaña con sus datos, tarjeta por
+   anuncio con el arte a un lado y los copys en pestañas al otro— vestida con
+   la línea del Studio. Las pestañas son las .pestanas de la base editorial y
+   las mueve SCRIPT_EDITORIAL; aquí solo se ajustan a la tarjeta. */
+.campanas{display:grid;gap:var(--e4);margin-top:var(--e3);}
+.campana{display:grid;gap:var(--e2);}
+.campana-hd{display:grid;gap:8px;padding-left:18px;border-left:6px solid var(--rosa);}
+.campana-b .campana-hd{border-left-color:var(--azul);}
+.campana-c .campana-hd{border-left-color:var(--verde);}
+.campana-hd .skicker{margin-bottom:0;}
+.sec .campana-hd h3{margin:0;font-size:clamp(1.3rem,2.2vw,1.7rem);}
+.campana-datos{display:flex;flex-wrap:wrap;gap:8px;list-style:none;margin:4px 0 0;padding:0;}
+.campana-datos li{font:var(--t-small);padding:6px 12px;border-radius:var(--r-pill);background:var(--tarjeta);border:1px solid var(--linea);color:var(--texto);}
+.anuncios-lista{display:grid;gap:22px;}
+.anuncio{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);background:var(--tarjeta);border:1px solid var(--linea);
+  border-radius:var(--r);box-shadow:var(--sombra);overflow:hidden;scroll-margin-top:96px;}
+.anuncio-arte{display:flex;flex-direction:column;align-items:center;gap:16px;padding:24px;background:var(--gris);border-right:1px solid var(--linea);}
+/* El hueco toma la proporción de la pieza y un ancho tope por formato, para
+   que un 9:16 no mida un metro de alto dentro de la tarjeta. */
+.arte-hueco{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;padding:16px;text-align:center;
+  background:var(--fondo);border:1.5px dashed color-mix(in srgb,var(--suave) 45%,transparent);border-radius:var(--r-sm);}
+.arte-hueco.ar-1x1{max-width:320px;}
+.arte-hueco.ar-4x5{max-width:280px;}
+.arte-hueco.ar-9x16{max-width:220px;}
+.arte-hueco-k{font:var(--t-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--suave);}
+.arte-hueco-r{font:700 clamp(1.8rem,3vw,2.4rem)/1 var(--fuente);letter-spacing:-.03em;color:var(--tinta);}
+.arte-hueco-m{font-family:var(--mono);font-size:0.8rem;color:var(--suave);}
+.arte-brief{display:grid;gap:8px;width:100%;}
+.arte-brief-hd,.anuncio-panel-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;}
+.arte-brief .kv-k{padding-top:0;}
+.anuncio-info{display:grid;align-content:start;gap:16px;padding:26px;min-width:0;}
+.anuncio-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:14px;border-bottom:1px solid var(--linea);}
+.anuncio-hd .eyebrow{margin-bottom:4px;}
+.sec .anuncio h3{margin:0;font-size:clamp(1.25rem,2vw,1.6rem);}
+.anuncio-formato{flex-shrink:0;white-space:nowrap;}
+.anuncio-proposito{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;font-size:1.05rem;color:var(--tinta);font-weight:600;}
+.anuncio-proposito .kv-k{padding-top:0;}
+.anuncio-pestanas{margin-bottom:-4px;}
+.anuncio-panel:not([hidden]){display:grid;gap:8px;}
+/* Con JS la pestaña ya dice qué copy es; sin JS los dos paneles van seguidos
+   y el título es lo único que los distingue. */
+html.js .anuncio-panel-titulo{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+.anuncio-panel-titulo{font:var(--t-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--rosa);}
+html.js .anuncio-panel-hd{justify-content:flex-end;}
+.anuncio-copiar{display:none;align-items:center;gap:6px;min-height:44px;padding:0 16px;border-radius:var(--r-pill);
+  border:1px solid var(--linea);background:var(--tarjeta);color:var(--texto);font:var(--t-small);font-weight:600;cursor:pointer;}
+html.js .anuncio-copiar{display:inline-flex;}
+.anuncio-copiar:hover{border-color:var(--rosa);color:var(--rosa);}
+.anuncio-copiar svg{width:14px;height:14px;}
+@media (max-width:900px){
+  .anuncio{grid-template-columns:1fr;}
+  .anuncio-arte{border-right:none;border-bottom:1px solid var(--linea);padding:18px;}
+  /* En el teléfono el hueco es referencia, no protagonista: más chico, para
+     que el copy no quede a dos pantallas del encabezado del anuncio. */
+  .arte-hueco.ar-1x1{max-width:200px;}
+  .arte-hueco.ar-4x5{max-width:180px;}
+  .arte-hueco.ar-9x16{max-width:150px;}
+  .anuncio-info{padding:18px;}
+  .anuncio-hd{flex-direction:column;gap:10px;}
+}
+
 @media (max-width:768px){
   .kv{grid-template-columns:1fr;gap:5px;padding:11px 0;}
   .kv-k{padding-top:0;}
@@ -174,6 +236,10 @@ const CSS_GROWTH = `
   .sec:nth-of-type(even){box-shadow:none;clip-path:none;}
   .grp,.card,.fmt{box-shadow:none;break-inside:avoid;}
   .cabecera-escala,.cabecera-pantalla{display:none!important;}
+  .anuncio{break-inside:avoid;box-shadow:none;}
+  .anuncio-copiar{display:none!important;}
+  .anuncio-panel[hidden]{display:grid!important;}
+  html.js .anuncio-panel-titulo{position:static;width:auto;height:auto;clip:auto;}
 }
 `;
 

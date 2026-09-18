@@ -10,14 +10,14 @@ const meta = {
 const clonar = () => JSON.parse(JSON.stringify(completo));
 
 describe('manual de campaña', () => {
-  it('produce las nueve secciones', () => {
+  it('produce las diez secciones: las nueve del machote más la de anuncios', () => {
     const html = renderizarManual(completo as any, meta);
-    expect((html.match(/class="sec"/g) ?? []).length).toBe(9);
+    expect((html.match(/class="sec"/g) ?? []).length).toBe(10);
   });
 
-  it('trae las nueve anclas del nav, una por sección', () => {
+  it('trae las diez anclas del nav, una por sección', () => {
     const html = renderizarManual(completo as any, meta);
-    for (const id of ['setup','meta','creativos','prompts','google','rsa','traza','tecnico','seguimiento']) {
+    for (const id of ['setup','anuncios','meta','creativos','prompts','google','rsa','traza','tecnico','seguimiento']) {
       expect(html, `falta el ancla ${id}`).toContain(`id="${id}"`);
       expect(html, `falta el enlace a ${id}`).toContain(`href="#${id}"`);
     }
@@ -74,9 +74,9 @@ describe('manual de campaña', () => {
     expect(html).toMatch(/investigación de origen venía incompleta/i);
   });
 
-  it('con todo vacío sigue produciendo nueve secciones y ningún dato inventado', () => {
+  it('con todo vacío sigue produciendo diez secciones y ningún dato inventado', () => {
     const html = renderizarManual({ _huecos: { estructura: 'No se ejecutó.', creativos: 'No se ejecutó.' } }, meta);
-    expect((html.match(/class="sec"/g) ?? []).length).toBe(9);
+    expect((html.match(/class="sec"/g) ?? []).length).toBe(10);
     expect((html.match(/Sin datos/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
@@ -147,5 +147,98 @@ describe('URL etiquetada junto a cada pieza', () => {
   it('sin destino no inventa URLs junto a las piezas', () => {
     const html = renderizarManual(completo as any, { ...meta, destino: undefined });
     expect(html).not.toContain('utm_content=');
+  });
+});
+
+describe('anuncios por campaña (sección A)', () => {
+  const seccionA = (html: string) => {
+    const ini = html.indexOf('id="anuncios"');
+    return html.slice(ini, html.indexOf('id="meta"', ini));
+  };
+
+  it('va primera después de la portada', () => {
+    const html = renderizarManual(completo as any, meta);
+    const orden = ['setup', 'anuncios', 'meta'].map((id) => html.indexOf(`<section class="sec" id="${id}"`));
+    expect(orden[0]).toBeGreaterThan(-1);
+    expect(orden[0]).toBeLessThan(orden[1]);
+    expect(orden[1]).toBeLessThan(orden[2]);
+  });
+
+  it('agrupa los nueve anuncios en sus tres campañas, con objetivo y audiencia', () => {
+    const a = seccionA(renderizarManual(completo as any, meta));
+    expect((a.match(/<article class="anuncio"/g) ?? []).length).toBe(9);
+    for (const c of completo.campanasMeta) {
+      expect(a).toContain(`campana-${c.grupo}"`);
+      expect(a).toContain(c.nombre);
+      expect(a).toContain(`Objetivo: ${c.objetivo}`);
+    }
+    // Los anuncios de la campaña B van dentro del bloque de la campaña B.
+    const b = a.slice(a.indexOf('campana-b"'), a.indexOf('campana-c"'));
+    expect((b.match(/<article class="anuncio"/g) ?? []).length).toBe(3);
+    expect(b).not.toContain('id="anuncio-a-');
+  });
+
+  it('cada anuncio trae su copy A y su copy B en pestañas enlazadas a su panel', () => {
+    const a = seccionA(renderizarManual(completo as any, meta));
+    for (const c of completo.creativos) {
+      expect(a).toContain(c.copyA);
+      expect(a).toContain(c.copyB);
+    }
+    expect((a.match(/role="tablist"/g) ?? []).length).toBe(9);
+    expect(a).toContain('id="anuncio-a-1-tab-B" aria-controls="anuncio-a-1-copy-B"');
+    expect(a).toContain('id="anuncio-a-1-copy-B" aria-labelledby="anuncio-a-1-tab-B"');
+    // Cada botón Copiar apunta a un texto que existe.
+    for (const [, destino] of a.matchAll(/data-copiar="([^"]+)"/g)) {
+      expect(a, `el botón apunta a #${destino}, que no existe`).toContain(`id="${destino}"`);
+    }
+  });
+
+  it('el hueco del arte trae medidas y el brief visual del mismo creativo', () => {
+    const a = seccionA(renderizarManual(completo as any, meta));
+    const video = a.slice(a.indexOf('id="anuncio-b-2"'), a.indexOf('id="anuncio-b-3"'));
+    expect(video).toContain('ar-9x16');
+    expect(video).toContain('1080 × 1920 px');
+    expect(video).toContain(completo.promptsImagen.porCreativo[4]);
+  });
+
+  it('no inventa un CTA que el sistema no genera', () => {
+    const a = seccionA(renderizarManual(completo as any, meta));
+    expect(a).not.toMatch(/\bCTA\b|Llamado a la acción/);
+  });
+
+  it('sin prompts ni campañas, declara el hueco en su sitio y rinde los anuncios igual', () => {
+    const g = clonar();
+    delete g.promptsImagen;
+    delete g.campanasMeta;
+    g._huecos = { prompts: 'El agente de prompts falló.', estructura: 'La estructura no llegó.' };
+    const a = seccionA(renderizarManual(g, meta));
+    expect((a.match(/<article class="anuncio"/g) ?? []).length).toBe(9);
+    expect(a).toContain('Sin brief visual: El agente de prompts falló.');
+    expect(a).toContain('La estructura no llegó.');
+  });
+
+  it('sin creativos, declara el hueco en vez de tarjetas vacías', () => {
+    const g = clonar();
+    delete g.creativos;
+    g._huecos = { creativos: 'El agente no devolvió datos válidos.' };
+    const a = seccionA(renderizarManual(g, meta));
+    expect(a).not.toContain('<article class="anuncio"');
+    expect(a).toContain('Sin datos.');
+  });
+
+  it('escapa el copy y el brief', () => {
+    const g = clonar();
+    g.creativos[0].copyB = '<img src=x onerror=alert(1)>';
+    g.promptsImagen.porCreativo[0] = '<script>alert(2)</script>';
+    const a = seccionA(renderizarManual(g, meta));
+    expect(a).not.toContain('<img src=x');
+    expect(a).not.toContain('<script>alert(2)');
+    expect(a).toContain('&lt;img src=x');
+  });
+
+  it('es de solo lectura: la edición sigue en la sección 02', () => {
+    const html = renderizarManual(completo as any, meta, undefined, true);
+    expect(seccionA(html)).not.toContain('data-editable="');
+    expect(html).toContain('data-editable="creativos.0.copyA"');
   });
 });

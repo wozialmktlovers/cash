@@ -48,7 +48,8 @@ describe('estilos del manual de campaña', () => {
     // pieza se rinde desde hace tiempo como `.pre` dentro de un `.kv`
     // (secciones/creativos.ts), y esas reglas ya no las usaba nadie.
     for (const c of ['.sec', '.slot', '.slots-car', '.ar-1x1', '.ar-4x5', '.ar-9x16',
-                     '.copy', '.kv', '.chips', '.chip-k', '.shead', '.pre', '.fmt', '.grp']) {
+                     '.copy', '.kv', '.chips', '.chip-k', '.shead', '.pre', '.fmt', '.grp',
+                     '.campana-hd', '.anuncio', '.arte-hueco', '.anuncio-panel', '.anuncio-copiar']) {
       expect(ESTILOS_GROWTH, `falta ${c}`).toContain(c);
     }
   });

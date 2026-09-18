@@ -7,6 +7,7 @@ import { envolverDocumento } from '@/render/editorial/comunes';
 import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
 import { seccion } from './secciones/comunes';
 import { seccionPortada, type MetaManual } from './secciones/portada';
+import { seccionAnuncios } from './secciones/anuncios';
 import { seccionMeta } from './secciones/meta';
 import { seccionCreativos } from './secciones/creativos';
 import { seccionPrompts } from './secciones/prompts';
@@ -34,9 +35,14 @@ const ACCIONES_VIDEOLLAMADA = `<button type="button" class="cabecera-escala" id=
  * encabezados de las secciones (`secciones/tecnico.ts` numera 07 u 08 según
  * haya arquitectura de medición, y `seguimiento.ts` numera 09). Se deja tal
  * cual: esto es un cambio de piel, no de contenido.
+ *
+ * La «A» es la sección de anuncios por campaña, la primera después de la
+ * portada. Va con letra y no con número para no renumerar las nueve de
+ * detrás: es la vista de conjunto, y las numeradas son el detalle.
  */
 const INDICE: [string, string, string][] = [
   ['00', 'setup', 'Setup'],
+  ['A', 'anuncios', 'Campañas'],
   ['01', 'meta', 'Meta'],
   ['02', 'creativos', 'Creativos'],
   ['03', 'prompts', 'Prompts'],
@@ -103,6 +109,7 @@ export function renderizarManual(
   const anclas = Boolean(flujo);
   const cuerpo = [
     seccion('setup', seccionPortada(datos, meta, urls.length, huecos, editable), anclas),
+    seccion('anuncios', seccionAnuncios(datos, huecos), anclas),
     seccion('meta', seccionMeta(datos, huecos, editable), anclas),
     seccion('creativos', seccionCreativos(datos, huecos, urls, editable, anclas), anclas),
     seccion('prompts', seccionPrompts(datos, huecos, editable), anclas),

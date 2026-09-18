@@ -76,5 +76,44 @@ export const NAVEGACION_GROWTH = `
   });
 
   aplicarEscala();
+
+  // ── Copiar (sección A: copys y briefs visuales) ──────
+  // El botón apunta por id al texto que copia. En file:// o http sin TLS no
+  // hay navigator.clipboard, así que cae a execCommand con un textarea
+  // oculto; si eso también falla, lo dice en vez de fingir que copió.
+  function copiaVieja(texto,listo){
+    var area=document.createElement('textarea');
+    area.value=texto;
+    area.setAttribute('readonly','readonly');
+    area.style.position='fixed';
+    area.style.opacity='0';
+    document.body.appendChild(area);
+    area.select();
+    var ok=false;
+    try{ ok=document.execCommand('copy'); }catch(e){ ok=false; }
+    document.body.removeChild(area);
+    listo(ok);
+  }
+  function alPortapapeles(texto,listo){
+    if(navigator.clipboard&&window.isSecureContext){
+      navigator.clipboard.writeText(texto).then(function(){listo(true);},function(){copiaVieja(texto,listo);});
+      return;
+    }
+    copiaVieja(texto,listo);
+  }
+  var copiadores=document.querySelectorAll('[data-copiar]');
+  for(var c=0;c<copiadores.length;c++){
+    (function(boton){
+      boton.addEventListener('click',function(){
+        var destino=document.getElementById(boton.getAttribute('data-copiar'));
+        if(!destino) return;
+        var etiqueta=boton.querySelector('[data-copiar-texto]')||boton;
+        alPortapapeles(destino.textContent,function(ok){
+          etiqueta.textContent=ok?'Copiado':'Selecciona y copia';
+          setTimeout(function(){ etiqueta.textContent='Copiar'; },2000);
+        });
+      });
+    })(copiadores[c]);
+  }
 })();
 `;
