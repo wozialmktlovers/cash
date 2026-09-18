@@ -3,6 +3,7 @@ import { db, researchJobs, clients } from '@/db';
 import { ejecutarJob } from './pipeline';
 import { ejecutarGrowth } from '@/growth/pipeline';
 import { ejecutarPilares } from '@/pilares/pipeline';
+import { ejecutarContenidoMes } from '@/contenido/mes/pipeline';
 import { limpiarSesionesVencidas } from '@/lib/auth';
 import { convertirLecturasPendientes } from './convertir-lecturas';
 import { NOMBRE_ETAPA, etapaDeTipo } from '@/flujo/reglas';
@@ -52,7 +53,9 @@ async function avisarSiJobFallido(job: typeof researchJobs.$inferSelect): Promis
     evento: 'job_fallido',
     creadoPor: job.creadoPor,
     cliente: cliente?.nombre ?? 'Cliente',
-    etapa: NOMBRE_ETAPA[etapaDeTipo(job.tipo)],
+    // El job `contenido` (el mes con IA) no es un documento con su tabla: es
+    // la etapa del desarrollo mensual.
+    etapa: NOMBRE_ETAPA[job.tipo === 'contenido' ? 'desarrollo_mensual' : etapaDeTipo(job.tipo)],
     enlace: `/jobs/${job.id}`,
   }).catch((e) => console.error('[avisos] job_fallido:', e));
 }
@@ -96,6 +99,7 @@ export async function tick() {
     // misma contabilidad de costo. Lo único que cambia es qué pipeline corre.
     if (siguiente.tipo === 'growth') await ejecutarGrowth(siguiente.id);
     else if (siguiente.tipo === 'pilares') await ejecutarPilares(siguiente.id);
+    else if (siguiente.tipo === 'contenido') await ejecutarContenidoMes(siguiente.id);
     else await ejecutarJob(siguiente.id);
   } catch (e) {
     console.error('[worker] fallo no capturado:', e);

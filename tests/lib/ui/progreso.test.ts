@@ -4,6 +4,7 @@ import { ETAPAS as ETAPAS_FLUJO, avanceCliente } from '@/flujo/reglas';
 import { ETAPAS } from '@/research/pipeline';
 import { ETAPAS_GROWTH } from '@/growth/pipeline';
 import { ETAPAS_PILARES } from '@/pilares/pipeline';
+import { ETAPAS_CONTENIDO } from '@/contenido/mes/pipeline';
 import { jobEstado } from '@/db/schema';
 
 describe('etapasDe', () => {
@@ -17,6 +18,9 @@ describe('etapasDe', () => {
   });
   it('las etapas del mapa de pilares coinciden con su pipeline', () => {
     expect(etapasDe('pilares').map((e) => e.clave)).toEqual([...ETAPAS_PILARES]);
+  });
+  it('las etapas del mes con IA coinciden con su pipeline', () => {
+    expect(etapasDe('contenido').map((e) => e.clave)).toEqual([...ETAPAS_CONTENIDO]);
   });
 });
 

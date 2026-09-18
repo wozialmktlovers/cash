@@ -81,6 +81,38 @@ export const ESQUEMAS_ARTE = ['http:', 'https:'] as const;
 export const PROTOCOLO_ARTE = /^https?$/;
 
 /**
+ * Los largos de los campos de texto de una pieza, en un solo sitio sin Zod para
+ * que los lean igual la validación de la API (`src/contenido/piezas.ts`), el
+ * agente que genera el mes (`src/contenido/mes/`) y la pantalla de React
+ * (`PiezasEditor`), que no puede arrastrar Zod al navegador.
+ *
+ * `copy` (2200, el máximo de Instagram) y `briefVisual` (400) son los de
+ * siempre; los demás llegaron con la generación del mes completo:
+ *
+ * - `promptImagen`: el texto para una herramienta de generación de imágenes.
+ *   Un prompt útil describe sujeto, encuadre, luz y estilo; 1000 caracteres dan
+ *   para eso sin convertirse en un ensayo.
+ * - `tarjeta` y `tarjetas`: el texto de cada lámina de un carrusel, y cuántas
+ *   caben (el carrusel de Instagram llega a 10, igual que `MAX_ARTES`).
+ * - `escena` y `escenas`: cada escena del guion de un reel lleva lo que se ve y
+ *   lo que se dice; doce escenas son de sobra para un reel de 90 segundos.
+ */
+export const LIMITES_PIEZA = {
+  copy: 2200,
+  cta: 120,
+  hashtags: 600,
+  briefVisual: 400,
+  promptImagen: 1000,
+  tarjeta: 300,
+  tarjetas: 10,
+  escena: 300,
+  escenas: 12,
+} as const;
+
+/** Una escena del guion de un reel: lo que se ve y lo que se dice o aparece escrito. */
+export type Escena = { visual: string; texto: string };
+
+/**
  * El enlace tal cual si apunta a la web, o `null` si no.
  *
  * **Por qué el render también comprueba, si el esquema ya lo hace**

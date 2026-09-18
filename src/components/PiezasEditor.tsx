@@ -26,9 +26,12 @@
 
 import { useState } from 'react';
 import {
-  FORMATOS, PLATAFORMAS, cuadraConPaquete, enlaceWeb, estadoLoteSegunPiezas,
-  type EstadoRevision, type Formato, type Paquete, type Plataforma,
+  FORMATOS, LIMITES_PIEZA, PLATAFORMAS, cuadraConPaquete, enlaceWeb, estadoLoteSegunPiezas,
+  type Escena, type EstadoRevision, type Formato, type Paquete, type Plataforma,
 } from '@/contenido/reglas';
+// Sin Zod: las mismas reglas con que la API y el worker deciden qué se queda y
+// qué falta, para decir aquí lo que va a pasar antes de lanzar la generación.
+import { faltantes, separarPiezas, tieneArte, totalDe, type Modo } from '@/contenido/mes/reemplazo';
 import { COLOR_ESTADO } from '@/flujo/ui';
 import { toast } from '@/scripts/toast';
 // Solo tipos: `@/contenido/piezas` y `@/contenido/schemas` construyen esquemas
@@ -49,10 +52,16 @@ export type PiezaUI = {
   cta: string;
   hashtags: string;
   briefVisual: string;
+  promptImagen: string;
+  guion: Escena[];
+  tarjetas: string[];
   arte: Arte[];
   estadoCliente: EstadoRevision;
   notaCliente: string | null;
 };
+
+/** Un trabajo en segundo plano del cliente que está en cola o corriendo. */
+export type TrabajoEnCurso = { id: string; nombre: string; deEsteMes: boolean };
 
 /** Los temas del mapa más reciente, agrupados por pilar y subcategoría para el `<select>`. */
 export type GrupoTemas = { etiqueta: string; temas: { id: string; texto: string }[] };
@@ -72,7 +81,7 @@ const MAX_ARTES = 10;
  * `MAX_ARTES`: es el largo con que el agente escribe el brief y con el que la
  * API lo valida, y aquí solo recorta el `<textarea>`.
  */
-const MAX_BRIEF_VISUAL = 400;
+const MAX_BRIEF_VISUAL = LIMITES_PIEZA.briefVisual;
 
 /** Tipos de arte del esquema (`TIPOS_ARTE`), con su nombre visible. */
 const TIPOS: { valor: TipoArte; texto: string }[] = [
@@ -341,6 +350,237 @@ function Propuestas({ opciones, costo, onUsar }: { opciones: OpcionCopy[]; costo
   );
 }
 
+// ── Tarjetas del carrusel y guion del reel ─────────────────────────────
+
+/**
+ * El texto de cada lámina del carrusel, en orden. Se editan como el resto del
+ * formulario: nada se guarda hasta «Guardar la pieza».
+ */
+function Tarjetas({ id, tarjetas, operable, onCambio, aviso }: {
+  id: string; tarjetas: string[]; operable: boolean; onCambio: (t: string[]) => void; aviso: string | null;
+}) {
+  const cambiarUna = (i: number, v: string) => onCambio(tarjetas.map((t, j) => (j === i ? v : t)));
+  return (
+    <fieldset className="campo ancho lista-editable" id={id}>
+      <legend>Tarjetas del carrusel</legend>
+      {aviso && <p className="ayuda">{aviso}</p>}
+      {tarjetas.length === 0 && <p className="secundario">Sin tarjetas todavía.</p>}
+      <ol>
+        {tarjetas.map((t, i) => (
+          <li key={i}>
+            <label htmlFor={`${id}-${i}`}>Tarjeta {i + 1}</label>
+            <textarea id={`${id}-${i}`} rows={2} maxLength={LIMITES_PIEZA.tarjeta} value={t} disabled={!operable}
+              onChange={(e) => cambiarUna(i, e.target.value)} />
+            {operable && (
+              <button type="button" className="btn fantasma chico" onClick={() => onCambio(tarjetas.filter((_, j) => j !== i))}
+                aria-label={`Quitar la tarjeta ${i + 1}`}>Quitar</button>
+            )}
+          </li>
+        ))}
+      </ol>
+      {operable && tarjetas.length < LIMITES_PIEZA.tarjetas && (
+        <button type="button" className="btn fantasma chico" onClick={() => onCambio([...tarjetas, ''])}>Agregar tarjeta</button>
+      )}
+    </fieldset>
+  );
+}
+
+/** El guion del reel por escenas: lo que se ve y lo que se dice o aparece escrito. */
+function Guion({ id, guion, operable, onCambio, aviso }: {
+  id: string; guion: Escena[]; operable: boolean; onCambio: (g: Escena[]) => void; aviso: string | null;
+}) {
+  const cambiarUna = (i: number, k: keyof Escena, v: string) => onCambio(guion.map((e, j) => (j === i ? { ...e, [k]: v } : e)));
+  return (
+    <fieldset className="campo ancho lista-editable" id={id}>
+      <legend>Guion por escenas</legend>
+      {aviso && <p className="ayuda">{aviso}</p>}
+      {guion.length === 0 && <p className="secundario">Sin escenas todavía.</p>}
+      <ol>
+        {guion.map((e, i) => (
+          <li key={i}>
+            <label htmlFor={`${id}-${i}-visual`}>Escena {i + 1} · lo que se ve</label>
+            <textarea id={`${id}-${i}-visual`} rows={2} maxLength={LIMITES_PIEZA.escena} value={e.visual} disabled={!operable}
+              onChange={(ev) => cambiarUna(i, 'visual', ev.target.value)} />
+            <label htmlFor={`${id}-${i}-texto`}>Lo que se dice o aparece en pantalla</label>
+            <textarea id={`${id}-${i}-texto`} rows={2} maxLength={LIMITES_PIEZA.escena} value={e.texto} disabled={!operable}
+              onChange={(ev) => cambiarUna(i, 'texto', ev.target.value)} />
+            {operable && (
+              <button type="button" className="btn fantasma chico" onClick={() => onCambio(guion.filter((_, j) => j !== i))}
+                aria-label={`Quitar la escena ${i + 1}`}>Quitar escena</button>
+            )}
+          </li>
+        ))}
+      </ol>
+      {operable && guion.length < LIMITES_PIEZA.escenas && (
+        <button type="button" className="btn fantasma chico" onClick={() => onCambio([...guion, { visual: '', texto: '' }])}>Agregar escena</button>
+      )}
+    </fieldset>
+  );
+}
+
+// ── Generar el mes con IA ───────────────────────────────────────────────
+
+const listaFormatos = (conteo: Record<Formato, number>) =>
+  FORMATOS.filter((f) => conteo[f] > 0).map((f) => plural(conteo[f], f)).join(', ');
+
+/**
+ * El botón «Generar el mes con IA» y lo que tiene que preguntar antes.
+ *
+ * Solo lanza: la generación corre en segundo plano (job `contenido`) y al
+ * aceptarla la pantalla se va a su progreso. Lo que se muestra aquí —cuántas
+ * piezas, cuáles se reemplazan— sale de las mismas reglas que aplica el
+ * servidor (`src/contenido/mes/reemplazo.ts`), pero el servidor manda: si algo
+ * cambió entre tanto, su respuesta es la que se enseña.
+ *
+ * Nunca se ofrece borrar una pieza aprobada o con cambios pedidos, y las que
+ * ya tienen arte solo se reemplazan marcando la casilla que lo dice.
+ */
+function GenerarMes({ clientId, loteId, paquete, piezas, hayMapa, trabajo }: {
+  clientId: string; loteId: string; paquete: Paquete; piezas: PiezaUI[]; hayMapa: boolean; trabajo: TrabajoEnCurso | null;
+}) {
+  const [modo, setModo] = useState<Modo>('completar');
+  const [conArte, setConArte] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<{ texto: string; enlace?: string } | null>(null);
+
+  const sinPaquete = Object.keys(paquete).length === 0;
+  const hayPiezas = piezas.length > 0;
+  const completar = faltantes(paquete, piezas);
+  const { quedan, reemplazar } = separarPiezas(piezas, 'reemplazar', conArte);
+  const conReemplazo = faltantes(paquete, quedan);
+  const sinRevisarConArte = piezas.filter((p) => p.estadoCliente === 'pendiente' && tieneArte(p)).length;
+  const revisadas = piezas.filter((p) => p.estadoCliente !== 'pendiente').length;
+  const aGenerar = modo === 'completar' || !hayPiezas ? completar : conReemplazo;
+  const total = totalDe(aGenerar);
+
+  async function lanzar() {
+    setError(null);
+    setEnviando(true);
+    const r = await fetch(`/api/contenido/lotes/${loteId}/generar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(hayPiezas ? { modo, incluirConArte: modo === 'reemplazar' && conArte } : {}),
+    }).then(async (res) => ({ status: res.status, cuerpo: await res.json() }))
+      .catch(() => null);
+    setEnviando(false);
+    setConfirmando(false);
+    if (!r) { setError({ texto: 'No se pudo contactar al servidor.' }); return; }
+    if (r.cuerpo?.ok) {
+      toast('La IA empezó a escribir el mes. Te avisamos en la campana al terminar.');
+      location.href = `/jobs/${r.cuerpo.id}`;
+      return;
+    }
+    if (r.cuerpo?.jobId) { location.href = `/jobs/${r.cuerpo.jobId}`; return; }
+    setError({ texto: (r.cuerpo?.errores ?? ['No se pudo lanzar la generación.']).join(' · '), enlace: r.cuerpo?.enlace });
+  }
+
+  if (trabajo) {
+    return (
+      <section className="tarjeta generar-mes">
+        <h2>Generar el mes con IA</h2>
+        {trabajo.deEsteMes ? (
+          <p className="aviso">La IA está escribiendo este mes. <a href={`/jobs/${trabajo.id}`}>Ver el progreso</a>.</p>
+        ) : (
+          <p className="aviso amarillo">
+            Este cliente tiene otro trabajo en curso ({trabajo.nombre}). Un cliente corre un trabajo a la vez:
+            espera a que termine. <a href={`/jobs/${trabajo.id}`}>Ver el progreso</a>.
+          </p>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="tarjeta generar-mes">
+      <h2>Generar el mes con IA</h2>
+      <p className="sub">
+        Escribe el paquete del mes a partir del mapa de pilares: fechas repartidas en días hábiles, copy, llamado a la
+        acción, hashtags, brief visual y prompt de imagen; guion en los reels y tarjetas en los carruseles. Prefiere los
+        temas pendientes, respeta el mix y no repite temas de otros meses. Corre en segundo plano y te avisa al terminar.
+      </p>
+
+      {sinPaquete ? (
+        <p className="aviso amarillo">
+          Para generar el mes hace falta el paquete mensual del cliente: la IA escribe exactamente ese paquete.{' '}
+          <a href={`/clientes/${clientId}#paquete`}>Definir el paquete en la ficha</a>.
+        </p>
+      ) : !hayMapa ? (
+        <p className="aviso amarillo">Este cliente todavía no tiene mapa de pilares con temas. El mes sale de ahí.</p>
+      ) : (
+        <>
+          {hayPiezas && (
+            <fieldset className="modo-generar">
+              <legend>El mes ya tiene {piezas.length} {piezas.length === 1 ? 'pieza' : 'piezas'}. ¿Qué hacemos?</legend>
+              <label className="opcion">
+                <input type="radio" name={`modo-${loteId}`} value="completar" checked={modo === 'completar'}
+                  onChange={() => { setModo('completar'); setConfirmando(false); }} />
+                <span>
+                  <strong>Completar lo que falta del paquete</strong>
+                  <span className="secundario">
+                    {totalDe(completar) === 0 ? 'No falta nada: el mes ya tiene todo el paquete.' : `Agrega ${listaFormatos(completar)}. No toca ninguna pieza.`}
+                  </span>
+                </span>
+              </label>
+              <label className="opcion">
+                <input type="radio" name={`modo-${loteId}`} value="reemplazar" checked={modo === 'reemplazar'}
+                  onChange={() => { setModo('reemplazar'); setConfirmando(false); }} />
+                <span>
+                  <strong>Reemplazar las piezas sin revisar</strong>
+                  <span className="secundario">
+                    {reemplazar.length === 0
+                      ? 'No hay piezas que se puedan reemplazar.'
+                      : `Cambia ${reemplazar.length} ${reemplazar.length === 1 ? 'pieza sin revisar' : 'piezas sin revisar'} por piezas nuevas${totalDe(conReemplazo) ? ` (se escriben ${listaFormatos(conReemplazo)})` : ''}.`}
+                    {revisadas === 1 && ' La que el cliente ya aprobó o devolvió con cambios no se toca.'}
+                    {revisadas > 1 && ` Las ${revisadas} que el cliente ya aprobó o devolvió con cambios no se tocan.`}
+                  </span>
+                </span>
+              </label>
+              {modo === 'reemplazar' && sinRevisarConArte > 0 && (
+                <label className="opcion con-arte">
+                  <input type="checkbox" checked={conArte} onChange={(e) => { setConArte(e.target.checked); setConfirmando(false); }} />
+                  <span>
+                    También reemplazar {sinRevisarConArte === 1 ? 'la pieza sin revisar que ya tiene arte' : `las ${sinRevisarConArte} piezas sin revisar que ya tienen arte`}.
+                    <span className="secundario"> Sin marcar, esas se quedan con su arte.</span>
+                  </span>
+                </label>
+              )}
+            </fieldset>
+          )}
+
+          <p className="secundario" style={{ marginTop: 12 }}>
+            {total === 0 ? 'Con esta opción no hay piezas que escribir.' : `Se escribirán ${total} ${total === 1 ? 'pieza' : 'piezas'}: ${listaFormatos(aGenerar)}.`}
+          </p>
+
+          <div className="acciones">
+            {confirmando ? (
+              <>
+                <span className="secundario">
+                  ¿Reemplazar {reemplazar.length} {reemplazar.length === 1 ? 'pieza' : 'piezas'}? Se borran al terminar de escribir las nuevas.
+                </span>
+                <button type="button" className="btn peligro lleno chico" disabled={enviando} onClick={() => void lanzar()}>
+                  {enviando ? 'Lanzando…' : 'Sí, reemplazar y generar'}
+                </button>
+                <button type="button" className="btn fantasma chico" onClick={() => setConfirmando(false)}>Cancelar</button>
+              </>
+            ) : (
+              <button type="button" className="btn" disabled={enviando || total === 0}
+                onClick={() => (hayPiezas && modo === 'reemplazar' && reemplazar.length > 0 ? setConfirmando(true) : void lanzar())}>
+                {enviando ? 'Lanzando…' : 'Generar el mes con IA'}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+      {error && (
+        <p className="aviso rosa" role="alert" style={{ marginTop: 14 }}>
+          {error.texto}{error.enlace && <> <a href={error.enlace}>Ir a la ficha</a>.</>}
+        </p>
+      )}
+    </section>
+  );
+}
+
 // ── Una pieza ───────────────────────────────────────────────────────────
 
 type Borrador = {
@@ -353,6 +593,9 @@ type Borrador = {
   cta: string;
   hashtags: string;
   briefVisual: string;
+  promptImagen: string;
+  guion: Escena[];
+  tarjetas: string[];
 };
 
 const aBorrador = (p: PiezaUI): Borrador => ({
@@ -365,6 +608,9 @@ const aBorrador = (p: PiezaUI): Borrador => ({
   cta: p.cta,
   hashtags: p.hashtags,
   briefVisual: p.briefVisual,
+  promptImagen: p.promptImagen,
+  guion: p.guion,
+  tarjetas: p.tarjetas,
 });
 
 function TarjetaPieza({
@@ -412,6 +658,9 @@ function TarjetaPieza({
         cta: borrador.cta,
         hashtags: borrador.hashtags,
         briefVisual: borrador.briefVisual,
+        promptImagen: borrador.promptImagen,
+        guion: borrador.guion,
+        tarjetas: borrador.tarjetas,
       }),
     });
     setOcupado(false);
@@ -553,6 +802,22 @@ function TarjetaPieza({
                 disabled={!operable} onChange={(e) => cambiar('briefVisual', e.target.value)} />
               <p className="ayuda">La indicación para quien haga el arte. No se publica: {borrador.briefVisual.length} de {MAX_BRIEF_VISUAL} caracteres.</p>
             </div>
+            <div className="campo ancho">
+              <label htmlFor={campo('promptImagen')}>Prompt de imagen</label>
+              <textarea id={campo('promptImagen')} rows={3} maxLength={LIMITES_PIEZA.promptImagen} value={borrador.promptImagen}
+                disabled={!operable} onChange={(e) => cambiar('promptImagen', e.target.value)} />
+              <p className="ayuda">
+                Texto para una herramienta de generación de imágenes, como base del arte. No se publica: {borrador.promptImagen.length} de {LIMITES_PIEZA.promptImagen} caracteres.
+              </p>
+            </div>
+            {(borrador.formato === 'carrusel' || borrador.tarjetas.length > 0) && (
+              <Tarjetas id={campo('tarjetas')} tarjetas={borrador.tarjetas} operable={operable} onCambio={(t) => cambiar('tarjetas', t)}
+                aviso={borrador.formato !== 'carrusel' ? 'Esta pieza ya no es carrusel: sus tarjetas se conservan, pero no se usan.' : null} />
+            )}
+            {(borrador.formato === 'reel' || borrador.guion.length > 0) && (
+              <Guion id={campo('guion')} guion={borrador.guion} operable={operable} onCambio={(g) => cambiar('guion', g)}
+                aviso={borrador.formato !== 'reel' ? 'Esta pieza ya no es reel: su guion se conserva, pero no se usa.' : null} />
+            )}
           </div>
 
           <Artes
@@ -596,7 +861,7 @@ function TarjetaPieza({
 
 export default function PiezasEditor({
   clientId, loteId, paquete, grupos, operable, estadoLote,
-  piezas: iniciales, archivos: archivosIniciales,
+  piezas: iniciales, archivos: archivosIniciales, trabajo = null, hayMapa = false,
 }: {
   clientId: string;
   loteId: string;
@@ -607,6 +872,10 @@ export default function PiezasEditor({
   estadoLote: string;
   piezas: PiezaUI[];
   archivos: ArchivoCliente[];
+  /** El trabajo en segundo plano del cliente, si hay uno en cola o corriendo. */
+  trabajo?: TrabajoEnCurso | null;
+  /** El cliente tiene mapa de pilares con temas: sin él no hay de dónde generar. */
+  hayMapa?: boolean;
 }) {
   const [piezas, setPiezas] = useState<PiezaUI[]>(iniciales);
   const [archivos, setArchivos] = useState<ArchivoCliente[]>(archivosIniciales);
@@ -669,6 +938,13 @@ export default function PiezasEditor({
   return (
     <>
       <Cifras piezas={piezas} paquete={paquete} />
+
+      {/* Solo en un mes abierto y en proceso, y para quien opera al cliente
+          (admin u operador asignado): generar sobre un mes que el cliente
+          está revisando cambiaría lo que tiene delante. */}
+      {operable && estadoLote === 'en_proceso' && (
+        <GenerarMes clientId={clientId} loteId={loteId} paquete={paquete} piezas={piezas} hayMapa={hayMapa} trabajo={trabajo} />
+      )}
 
       <section className="tarjeta">
         <h2>Piezas del mes</h2>

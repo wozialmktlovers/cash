@@ -140,9 +140,9 @@ export function repartoPorEtapa(etapas: Array<{ etapa: Etapa; estado: Estado; co
 // ── Gastos ─────────────────────────────────────────────────────────────────
 
 export type TipoGasto = JobM['tipo'];
-export const TIPOS_GASTO: TipoGasto[] = ['research', 'pilares', 'growth'];
+export const TIPOS_GASTO: TipoGasto[] = ['research', 'pilares', 'growth', 'contenido'];
 export const NOMBRE_TIPO_GASTO: Record<TipoGasto, string> = {
-  research: 'Investigación', pilares: 'Mapa de pilares', growth: 'Manual de campaña',
+  research: 'Investigación', pilares: 'Mapa de pilares', growth: 'Manual de campaña', contenido: 'Contenido del mes con IA',
 };
 
 export type ComparativoGastos = {

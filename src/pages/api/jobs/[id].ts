@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { eq } from 'drizzle-orm';
 import { db, researchResults, growthResults, pilaresResults } from '@/db';
 import { jobVisible } from '@/lib/visibilidad';
+import { destinoDeJob } from '@/lib/ui/destino-job';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), {
@@ -16,13 +17,22 @@ export const GET: APIRoute = async ({ params, locals }) => {
   if (!visible) return json({ ok: false, errores: ['La investigación no existe'] }, 404);
   const { job } = visible;
 
-  // El resultado vive en una tabla u otra según el tipo del job.
-  const tabla = job.tipo === 'growth' ? growthResults : job.tipo === 'pilares' ? pilaresResults : researchResults;
-  const [resultado] = await db
-    .select({ id: tabla.id })
-    .from(tabla)
-    .where(eq(tabla.jobId, job.id))
-    .limit(1);
+  // El resultado vive en una tabla u otra según el tipo del job. El mes con
+  // IA no tiene tabla propia: su resultado son piezas dentro del lote, y a
+  // donde lleva es la pantalla del mes (`destinoDeJob`).
+  const destino = destinoDeJob(job);
+  let resultId: string | null = null;
+  if (job.tipo === 'contenido') {
+    resultId = job.estado === 'completado' ? destino?.loteId ?? null : null;
+  } else {
+    const tabla = job.tipo === 'growth' ? growthResults : job.tipo === 'pilares' ? pilaresResults : researchResults;
+    const [resultado] = await db
+      .select({ id: tabla.id })
+      .from(tabla)
+      .where(eq(tabla.jobId, job.id))
+      .limit(1);
+    resultId = resultado?.id ?? null;
+  }
 
   return json({
     ok: true,
@@ -38,6 +48,7 @@ export const GET: APIRoute = async ({ params, locals }) => {
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
     tipo: job.tipo,
-    resultId: resultado?.id ?? null,
+    resultId,
+    enlace: destino?.enlace ?? null,
   });
 };

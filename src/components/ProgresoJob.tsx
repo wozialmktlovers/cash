@@ -9,7 +9,9 @@ type Estado = {
   costoUsd: number;
   error: string | null;
   resultId: string | null;
-  tipo?: 'research' | 'growth' | 'pilares';
+  /** Solo el mes con IA: la pantalla del mes, que es su destino (no tiene vista por id). */
+  enlace?: string | null;
+  tipo?: 'research' | 'growth' | 'pilares' | 'contenido';
   startedAt: string | null;
   finishedAt: string | null;
 };
@@ -18,10 +20,11 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
 
 // El destino final y su texto según el tipo de job. `research` es el valor
 // por omisión: los jobs viejos no traían `tipo`.
-const DESTINO: Record<'research' | 'growth' | 'pilares', { href: (id: string) => string; texto: string }> = {
+const DESTINO: Record<'research' | 'growth' | 'pilares' | 'contenido', { href: (id: string, enlace?: string | null) => string; texto: string }> = {
   research: { href: (id) => `/resultados/${id}`, texto: 'Ver la presentación' },
   growth: { href: (id) => `/growth/${id}`, texto: 'Ver el manual de campaña' },
   pilares: { href: (id) => `/pilares/${id}`, texto: 'Ver el mapa de pilares' },
+  contenido: { href: (_id, enlace) => enlace ?? '/', texto: 'Ver las piezas del mes' },
 };
 
 const TRAZO: Record<string, string> = {
@@ -111,12 +114,15 @@ export default function ProgresoJob({ jobId, inicial, tope }: { jobId: string; i
       </section>
 
       {terminado && estado.resultId && (
-        <a href={destino.href(estado.resultId)} className="btn ancho-total" style={{ marginTop: 18 }}>
+        <a href={destino.href(estado.resultId, estado.enlace)} className="btn ancho-total" style={{ marginTop: 18 }}>
           {destino.texto}
         </a>
       )}
       {terminado && !estado.resultId && (
         <p className="aviso amarillo" style={{ marginTop: 18 }}>El trabajo terminó sin producir un resultado que mostrar.</p>
+      )}
+      {terminado && !estado.resultId && estado.tipo === 'contenido' && estado.enlace && (
+        <a href={estado.enlace} className="btn fantasma ancho-total" style={{ marginTop: 12 }}>Volver al mes</a>
       )}
     </div>
   );

@@ -11,9 +11,10 @@ export const extraccionEstado = pgEnum('extraccion_estado', ['pendiente','ok','f
  * tres: no vive en una tabla `*_results` con su `datos`, sino que se arma al
  * vuelo desde `contenido_lotes` + `contenido_piezas`. Por eso solo lo usa
  * `share_links.documento_tipo`, donde `documento_id` es el id del LOTE; las
- * otras columnas que comparten este enum (`research_jobs.tipo`,
- * `documento_versiones`, `comentarios`, `cliente_etapas`) no lo van a ver
- * mientras el lote no tenga versiones ni se genere con un job.
+ * otras columnas que comparten este enum (`documento_versiones`,
+ * `comentarios`, `cliente_etapas`) no lo van a ver mientras el lote no tenga
+ * versiones. `research_jobs.tipo` sí: la generación del mes con IA es un job
+ * `contenido` cuyo lote va en `research_jobs.parametros`.
  */
 export const documentoTipo = pgEnum('documento_tipo', ['research','growth','pilares','contenido']);
 /** Admin crea, modifica, autoriza y asigna; operador crea y modifica; cliente solo ve y comenta lo suyo. */
@@ -124,6 +125,11 @@ export const researchJobs = pgTable('research_jobs', {
   // Quién lo mandó a correr, para atribuir el costo.
   creadoPor: uuid('creado_por').references(() => users.id, { onDelete: 'set null' }),
   error: text('error'),
+  // Lo que un job necesita saber además del cliente. Solo lo usa la generación
+  // del mes con IA (`tipo = 'contenido'`): `{ loteId, periodo, modo,
+  // incluirConArte, planeadas }` (ver `ParametrosMes`, src/contenido/mes/plan.ts).
+  // Los otros tres documentos no llevan parámetros.
+  parametros: jsonb('parametros'),
   startedAt: timestamp('started_at', { withTimezone: true }),
   finishedAt: timestamp('finished_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -364,6 +370,16 @@ export const contenidoPiezas = pgTable('contenido_piezas', {
   // propuestas no se guardan —el operador elige una y la edita—, y sin esta
   // columna el brief se perdía en cuanto se pedía otra tanda.
   briefVisual: text('brief_visual').notNull().default(''),
+  // Lo que agregó la generación del mes con IA (src/contenido/mes/), editable a
+  // mano como el resto. Ninguno se publica: son indicaciones para producir la
+  // pieza. `prompt_imagen` es el texto para una herramienta de generación de
+  // imágenes (el Studio no las genera: diseño §8). `guion` es una lista de
+  // escenas `{ visual, texto }` y solo la llevan los reels; `tarjetas`, el
+  // texto de cada lámina, solo los carruseles. Los largos los cuida el código
+  // (`LIMITES_PIEZA`, src/contenido/reglas.ts), como los de `copy` y `brief_visual`.
+  promptImagen: text('prompt_imagen').notNull().default(''),
+  guion: jsonb('guion').notNull().default([]),
+  tarjetas: jsonb('tarjetas').notNull().default([]),
   // Los artes de la pieza, en orden. El esquema no captura la forma, así que
   // queda escrita aquí: una lista de `{ tipo, fileId }` o `{ tipo, url }`,
   // donde `tipo` es `imagen | video | portada` y se usa `fileId` (un

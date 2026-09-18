@@ -90,6 +90,7 @@ describe('comparativoGastos', () => {
       { tipo: 'research', actual: 2.5, anterior: 3 },
       { tipo: 'pilares', actual: 1.25, anterior: 0 },
       { tipo: 'growth', actual: 4, anterior: 1 },
+      { tipo: 'contenido', actual: 0, anterior: 0 },
     ]);
   });
 
@@ -106,6 +107,7 @@ describe('comparativoGastos', () => {
         { tipo: 'research', actual: 0, anterior: 0 },
         { tipo: 'pilares', actual: 0, anterior: 0 },
         { tipo: 'growth', actual: 0, anterior: 0 },
+        { tipo: 'contenido', actual: 0, anterior: 0 },
       ],
     });
   });

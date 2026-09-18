@@ -24,6 +24,7 @@ export type EventoAviso =
   | 'cliente_reasignado'
   | 'entregable_generado'
   | 'job_fallido'
+  | 'mes_generado'
   | 'lote_auto_aprobado';
 
 /**
@@ -69,6 +70,7 @@ function candidatosDe(evento: EventoAviso, ctx: ContextoDestinatarios): (Usuario
       return ctx.operador && ctx.operador.activo ? [ctx.operador] : ctx.admins;
     case 'entregable_generado':
     case 'job_fallido':
+    case 'mes_generado':
       return [ctx.autor];
     case 'lote_auto_aprobado':
       // C3: el plazo del lote mensual venció y el sistema lo dio por aprobado.
@@ -107,7 +109,7 @@ export function destinatarios(evento: EventoAviso, ctx: ContextoDestinatarios): 
  * desarrollo mensual es la única etapa que se repite cada mes, así que es la
  * única cuyo aviso necesita decir de qué mes habla (diseño §2).
  */
-export type DatosAviso = { cliente: string; etapa: string; autor?: string; periodo?: string };
+export type DatosAviso = { cliente: string; etapa: string; autor?: string; periodo?: string; detalle?: string };
 
 /**
  * Nombre que ve un cliente en vez de la identidad real de quien actuó (spec
@@ -185,6 +187,16 @@ export function textoAviso(evento: EventoAviso, datos: DatosAviso): { titulo: st
         titulo: `${etapa} de ${cliente} está lista`,
         texto: `El documento de ${etapa} para ${cliente} se generó correctamente.`,
       };
+    case 'mes_generado': {
+      // La generación del mes con IA (src/contenido/mes/pipeline.ts). No es un
+      // documento nuevo sino piezas dentro del lote, así que el aviso dice de
+      // qué mes y cuántas, y lleva a la pantalla del mes a revisarlas.
+      const mes = datos.periodo ? nombrePeriodo(datos.periodo) : 'el mes';
+      return {
+        titulo: `El contenido de ${mes} de ${cliente} está listo`,
+        texto: `La IA generó ${datos.detalle ?? 'las piezas'} de ${mes} para ${cliente}. Revísalas y edítalas antes de compartir el mes.`,
+      };
+    }
     case 'job_fallido':
       return {
         titulo: `${etapa} de ${cliente} falló`,
@@ -283,19 +295,25 @@ export async function notificar(evento: EventoAviso, ctx: ContextoAviso, enlace:
   }));
 }
 
-/** Aviso de un job de pipeline: entregable generado o job fallido, solo a quien lo lanzó. */
+/** Aviso de un job de pipeline: entregable generado, mes generado o job fallido, solo a quien lo lanzó. */
 export async function avisarJob(o: {
-  evento: 'entregable_generado' | 'job_fallido';
+  evento: 'entregable_generado' | 'job_fallido' | 'mes_generado';
   creadoPor: string | null;
   cliente: string;
   etapa: string;
   enlace: string;
+  /** Solo `mes_generado`: el mes (`AAAA-MM`) y cuántas piezas salieron. */
+  periodo?: string;
+  detalle?: string;
 }): Promise<void> {
   const autor = await usuarioPorId(o.creadoPor);
   if (!autor) return;
+  const datos: DatosAviso = { cliente: o.cliente, etapa: o.etapa };
+  if (o.periodo) datos.periodo = o.periodo;
+  if (o.detalle) datos.detalle = o.detalle;
   await notificar(
     o.evento,
-    { admins: [], operador: null, autor, usuariosCliente: [], etapaVisibleCliente: false, datos: { cliente: o.cliente, etapa: o.etapa } },
+    { admins: [], operador: null, autor, usuariosCliente: [], etapaVisibleCliente: false, datos },
     o.enlace,
   );
 }

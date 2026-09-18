@@ -177,10 +177,10 @@ for (const et of ETAPAS) {
 }
 const graficaDiasHtml = graficaBarras(filasDias, 'Días promedio por etapa', (n) => dias(n));
 
-const NOMBRE_TIPO: Record<'research' | 'pilares' | 'growth', string> = {
-  research: 'Investigación', pilares: 'Mapa de pilares', growth: 'Manual de campaña',
+const NOMBRE_TIPO: Record<'research' | 'pilares' | 'growth' | 'contenido', string> = {
+  research: 'Investigación', pilares: 'Mapa de pilares', growth: 'Manual de campaña', contenido: 'Contenido del mes con IA',
 };
-const filasCosto: FilaGrafica[] = (['research', 'pilares', 'growth'] as const).map((t) => ({
+const filasCosto: FilaGrafica[] = (['research', 'pilares', 'growth', 'contenido'] as const).map((t) => ({
   nombre: NOMBRE_TIPO[t], min: costoRes.porEtapa[t], max: costoRes.porEtapa[t], destacada: false,
 }));
 // Formateador de dinero USD con 2 decimales (fix wave, #3): sin pasarlo,

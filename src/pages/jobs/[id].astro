@@ -4,6 +4,10 @@ import Base from '@/layouts/Base.astro';
 import ProgresoJob from '@/components/ProgresoJob';
 import { db, researchResults, growthResults, pilaresResults } from '@/db';
 import { jobVisible } from '@/lib/visibilidad';
+import { destinoDeJob } from '@/lib/ui/destino-job';
+import { nombreTrabajo } from '@/lib/ui/progreso';
+import { nombrePeriodo } from '@/lib/ui/periodo';
+import { topeMesUsd } from '@/contenido/mes/pipeline';
 
 const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
@@ -11,15 +15,21 @@ const { id } = Astro.params;
 const visible = await jobVisible(usuario, id!);
 if (!visible) return new Response(null, { status: 404 });
 const { job, cliente } = visible;
-// El resultado vive en una tabla u otra según el tipo del job.
+// El resultado vive en una tabla u otra según el tipo del job. El mes con IA
+// no tiene tabla: su destino es la pantalla del mes (`destinoDeJob`).
+const esContenido = job.tipo === 'contenido';
+const destino = destinoDeJob(job);
 const tabla = job.tipo === 'growth' ? growthResults : job.tipo === 'pilares' ? pilaresResults : researchResults;
-const [resultado] = await db.select({ id: tabla.id }).from(tabla).where(eq(tabla.jobId, job.id)).limit(1);
+const [resultado] = esContenido
+  ? [job.estado === 'completado' && destino ? { id: destino.loteId } : undefined]
+  : await db.select({ id: tabla.id }).from(tabla).where(eq(tabla.jobId, job.id)).limit(1);
 
 const esGrowth = job.tipo === 'growth';
 const esPilares = job.tipo === 'pilares';
-const eyebrow = esGrowth ? 'Manual de campaña' : esPilares ? 'Mapa de pilares' : 'Social Research';
-const titulo = esGrowth ? 'Manual de campaña' : esPilares ? 'Mapa de pilares' : 'Investigación';
-const tope = Number(process.env.COST_LIMIT_USD || 15);
+const eyebrow = esContenido ? `Desarrollo mensual${destino ? ` · ${nombrePeriodo(destino.periodo)}` : ''}` : esGrowth ? 'Manual de campaña' : esPilares ? 'Mapa de pilares' : 'Social Research';
+const titulo = nombreTrabajo(job.tipo);
+// El tope que se muestra es el que aplica el pipeline de cada tipo.
+const tope = esContenido ? topeMesUsd() : Number(process.env.COST_LIMIT_USD || 15);
 
 const inicial = {
   ok: true,
@@ -30,6 +40,7 @@ const inicial = {
   error: job.error,
   tipo: job.tipo,
   resultId: resultado?.id ?? null,
+  enlace: destino?.enlace ?? null,
   startedAt: job.startedAt?.toISOString() ?? null,
   finishedAt: job.finishedAt?.toISOString() ?? null,
 };

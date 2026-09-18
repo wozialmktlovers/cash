@@ -12,11 +12,15 @@
 // `DIAS_REVISION_POR_OMISION` de las reglas, y el color del estado del lote es
 // el `COLOR_ESTADO` de la ficha, que puede usarse tal cual porque
 // `contenido_lotes.estado` reusa el enum de las etapas.
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, or } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
-import PiezasEditor, { type ArchivoCliente, type GrupoTemas, type PiezaUI } from '@/components/PiezasEditor';
-import { db, clientFiles, contenidoLotes, contenidoPiezas, pilaresResults } from '@/db';
+import PiezasEditor, { type ArchivoCliente, type GrupoTemas, type PiezaUI, type TrabajoEnCurso } from '@/components/PiezasEditor';
+import { db, clientFiles, contenidoLotes, contenidoPiezas, pilaresResults, researchJobs } from '@/db';
+import { leerGuion, leerTarjetas } from '@/contenido/piezas';
+import { leerPaquete } from '@/contenido/paquete';
+import { destinoDeJob } from '@/lib/ui/destino-job';
+import { nombreTrabajo } from '@/lib/ui/progreso';
 import { DIAS_REVISION_POR_OMISION, periodoValido, type Paquete } from '@/contenido/reglas';
 import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
 import { enlacesDelLote } from '@/contenido/enlaces';
@@ -72,6 +76,9 @@ const piezas: PiezaUI[] = filas.map((p) => ({
   cta: p.cta,
   hashtags: p.hashtags,
   briefVisual: p.briefVisual,
+  promptImagen: p.promptImagen,
+  guion: leerGuion(p.guion),
+  tarjetas: leerTarjetas(p.tarjetas),
   arte: Array.isArray(p.arte) ? p.arte : [],
   estadoCliente: p.estadoCliente,
   notaCliente: p.notaCliente,
@@ -178,7 +185,20 @@ const base = baseUrlPublica(Astro.request);
 const clienteSlug = slugificar(cliente.nombre);
 const urlEnlace = (token: string) => `${base}/p/${clienteSlug}/${token}`;
 
-const paquete = (cliente.paquete ?? {}) as Paquete;
+// Leído con `leerPaquete` y no con un `as`: solo las cuatro claves y enteros
+// positivos, que es lo mismo que usa la generación con IA para contar.
+const paquete: Paquete = leerPaquete(cliente.paquete) ?? {};
+
+// El trabajo en segundo plano del cliente, si hay uno: la generación del mes
+// con IA no se lanza mientras otro corre (uno por cliente, como los demás), y
+// si el que corre es el de este mes, la pantalla lleva a su progreso.
+const [jobActivo] = await db.select().from(researchJobs)
+  .where(and(eq(researchJobs.clientId, cliente.id), or(eq(researchJobs.estado, 'encolado'), eq(researchJobs.estado, 'corriendo'))))
+  .limit(1);
+const trabajo: TrabajoEnCurso | null = jobActivo
+  ? { id: jobActivo.id, nombre: nombreTrabajo(jobActivo.tipo), deEsteMes: !!lote && destinoDeJob(jobActivo)?.loteId === lote.id }
+  : null;
+const hayMapa = grupos.length > 0;
 // El plazo en palabras («2 días hábiles»), en un solo lugar: la pantalla lo
 // repite en el encabezado y en los tres textos del bloque de compartir.
 const diasRevision = cliente.diasRevision ?? DIAS_REVISION_POR_OMISION;
@@ -345,6 +365,8 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
         estadoLote={lote.estado}
         piezas={piezas}
         archivos={archivos}
+        trabajo={trabajo}
+        hayMapa={hayMapa}
       />
     </>
   ) : (
@@ -412,6 +434,33 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
   /* El indicador de global.css es de dos renglones (valor y nombre); aquí lleva
      un tercero con lo que pide el paquete, y sin esto se pegaría al nombre. */
   .indicador .nombre, .indicador .secundario { display: block; }
+
+  /* Generar el mes con IA: la pregunta de completar o reemplazar va en
+     opciones grandes, de toda la fila, para que en celular se toquen sin
+     atinarle a un radio de 16 px. */
+  .generar-mes .sub { max-width: 75ch; }
+  .modo-generar { border: 0; padding: 0; margin: 14px 0 0; display: grid; gap: 10px; }
+  .modo-generar legend { font: var(--t-h3); color: var(--tinta); margin-bottom: 8px; }
+  .modo-generar .opcion {
+    display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; min-height: 44px;
+    border: 1px solid var(--linea); border-radius: var(--r-sm); background: var(--fondo); cursor: pointer;
+  }
+  .modo-generar .opcion:has(input:checked) { border-color: var(--azul); background: var(--azul-s); }
+  /* El `input` de global.css es un campo de texto de ancho completo: aquí
+     vuelve a ser un radio o una casilla del tamaño de las de la ficha. */
+  .modo-generar .opcion input { width: 18px; height: 18px; min-height: 0; padding: 0; margin: 2px 0 0; flex: 0 0 auto; accent-color: var(--rosa); }
+  .modo-generar .opcion { margin: 0; font-weight: 400; }
+  .modo-generar .opcion strong { display: block; color: var(--tinta); }
+  .modo-generar .opcion .secundario { display: block; }
+  .modo-generar .con-arte { background: transparent; border-style: dashed; }
+
+  /* Tarjetas del carrusel y guion del reel: listas numeradas que se editan
+     renglón por renglón dentro del formulario de la pieza. */
+  .lista-editable { border: 0; padding: 0; margin: 0; }
+  .lista-editable legend { font-weight: 600; color: var(--tinta); margin-bottom: 6px; }
+  .lista-editable ol { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 12px; }
+  .lista-editable li { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--linea); border-radius: var(--r-sm); background: var(--fondo); }
+  .lista-editable li .btn, .lista-editable > .btn { justify-self: start; align-self: flex-start; width: auto; }
 
   .piezas { display: flex; flex-direction: column; gap: 12px; }
 

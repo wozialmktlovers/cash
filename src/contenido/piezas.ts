@@ -27,7 +27,7 @@
 
 import { z } from 'zod';
 import { ID_TEMA } from '@/pilares/schemas';
-import { FORMATOS, PLATAFORMAS, PROTOCOLO_ARTE, type EstadoRevision, type Formato, type Plataforma } from './reglas';
+import { FORMATOS, LIMITES_PIEZA, PLATAFORMAS, PROTOCOLO_ARTE, type Escena, type EstadoRevision, type Formato, type Plataforma } from './reglas';
 // El tope del brief se importa, no se copia: es el mismo largo con que el
 // agente escribe la propuesta (`opcionCopySchema`), y dos números separados
 // dejarían guardar un brief que el modelo nunca podría producir, o al revés.
@@ -94,6 +94,22 @@ const campos = {
   // mide; vacío es legítimo, igual que un copy todavía sin escribir.
   briefVisual: z.string().trim().max(LIMITES.briefVisual, `El brief visual no puede pasar de ${LIMITES.briefVisual} caracteres.`),
   arte: z.array(arteSchema).max(MAX_ARTES, `Una pieza no lleva más de ${MAX_ARTES} artes.`),
+  // Lo que agregó la generación del mes con IA, y que el operador edita igual
+  // que el resto: el texto para una herramienta de imágenes, el guion por
+  // escenas de un reel y el texto de cada tarjeta de un carrusel. Ninguno se
+  // publica; son indicaciones para quien produce la pieza. Vacíos son
+  // legítimos: una pieza armada a mano no tiene por qué traerlos.
+  promptImagen: z.string().trim().max(LIMITES_PIEZA.promptImagen, `El prompt de imagen no puede pasar de ${LIMITES_PIEZA.promptImagen} caracteres.`),
+  guion: z.array(z.object({
+    visual: z.string().trim().max(LIMITES_PIEZA.escena, `Cada escena admite hasta ${LIMITES_PIEZA.escena} caracteres en «lo que se ve».`),
+    texto: z.string().trim().max(LIMITES_PIEZA.escena, `Cada escena admite hasta ${LIMITES_PIEZA.escena} caracteres en «lo que se dice».`),
+  }, { message: 'Cada escena lleva lo que se ve y lo que se dice.' }))
+    .max(LIMITES_PIEZA.escenas, `El guion admite hasta ${LIMITES_PIEZA.escenas} escenas.`)
+    // Una escena vacía del todo es un renglón que el operador agregó y no llenó.
+    .transform((l) => l.filter((e) => e.visual || e.texto)),
+  tarjetas: z.array(z.string().trim().max(LIMITES_PIEZA.tarjeta, `Cada tarjeta admite hasta ${LIMITES_PIEZA.tarjeta} caracteres.`))
+    .max(LIMITES_PIEZA.tarjetas, `Un carrusel lleva hasta ${LIMITES_PIEZA.tarjetas} tarjetas.`)
+    .transform((l) => l.filter((t) => t !== '')),
 };
 
 /**
@@ -112,6 +128,9 @@ const altaSchema = z.object({
   hashtags: campos.hashtags.default(''),
   briefVisual: campos.briefVisual.default(''),
   arte: campos.arte.default([]),
+  promptImagen: campos.promptImagen.default(''),
+  guion: campos.guion.default([]),
+  tarjetas: campos.tarjetas.default([]),
 });
 
 /** Edición: todo suelto, y al menos un campo. */
@@ -126,6 +145,9 @@ const cambioSchema = z.object({
   hashtags: campos.hashtags.optional(),
   briefVisual: campos.briefVisual.optional(),
   arte: campos.arte.optional(),
+  promptImagen: campos.promptImagen.optional(),
+  guion: campos.guion.optional(),
+  tarjetas: campos.tarjetas.optional(),
 });
 
 export type NuevaPieza = z.infer<typeof altaSchema>;
@@ -190,6 +212,9 @@ export type FilaPieza = {
   cta: string;
   hashtags: string;
   briefVisual: string;
+  promptImagen: string;
+  guion: unknown;
+  tarjetas: unknown;
   arte: unknown;
   estadoCliente: EstadoRevision;
   notaCliente: string | null;
@@ -198,7 +223,20 @@ export type FilaPieza = {
 };
 
 /** Lo que devuelve la API por cada pieza. */
-export type PiezaVisible = Omit<FilaPieza, 'arte'> & { arte: Arte[] };
+export type PiezaVisible = Omit<FilaPieza, 'arte' | 'guion' | 'tarjetas'> & { arte: Arte[]; guion: Escena[]; tarjetas: string[] };
+
+/** `guion` es `jsonb`: se lee con cuidado, igual que `arte`. */
+export function leerGuion(v: unknown): Escena[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter((e): e is Record<string, unknown> => !!e && typeof e === 'object')
+    .map((e) => ({ visual: typeof e.visual === 'string' ? e.visual : '', texto: typeof e.texto === 'string' ? e.texto : '' }));
+}
+
+/** `tarjetas` es `jsonb`: solo se aceptan textos. */
+export function leerTarjetas(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((t): t is string => typeof t === 'string') : [];
+}
 
 /**
  * Arma la respuesta campo por campo, como `resumenCliente` (src/lib/clientes.ts):
@@ -219,6 +257,9 @@ export function piezaVisibleJson(p: FilaPieza): PiezaVisible {
     cta: p.cta,
     hashtags: p.hashtags,
     briefVisual: p.briefVisual,
+    promptImagen: p.promptImagen,
+    guion: leerGuion(p.guion),
+    tarjetas: leerTarjetas(p.tarjetas),
     arte: (Array.isArray(p.arte) ? p.arte : []) as Arte[],
     estadoCliente: p.estadoCliente,
     notaCliente: p.notaCliente,

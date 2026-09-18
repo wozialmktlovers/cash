@@ -7,7 +7,8 @@ import FilesUploader from '@/components/FilesUploader';
 import LineaEtapas, { type TarjetaEtapaVM, type BotonResuelto } from '@/components/LineaEtapas.astro';
 import { investigacionUtil } from '@/lib/precheck';
 import { iniciales, tinte } from '@/lib/ui/cliente-visual';
-import { ETIQUETA_ESTADO } from '@/lib/ui/progreso';
+import { ETIQUETA_ESTADO, nombreTrabajo } from '@/lib/ui/progreso';
+import { destinoDeJob } from '@/lib/ui/destino-job';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { clienteVisible } from '@/lib/visibilidad';
 import { itemsPerdida } from '@/lib/borrado';
@@ -21,6 +22,8 @@ import { loteActivo } from '@/contenido/servicio';
 import { ACCION_AUTO_APROBADA, asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
 import { fechaHora as fechaHoraMx, fechaCorta } from '@/lib/ui/fecha';
 import { nombrePeriodo, periodoActual } from '@/lib/ui/periodo';
+import { FORMATOS } from '@/contenido/reglas';
+import { MAX_POR_FORMATO, NOMBRE_PLURAL, leerPaquete, totalPaquete } from '@/contenido/paquete';
 
 const usuario = Astro.locals.usuario;
 const { id } = Astro.params;
@@ -28,6 +31,9 @@ const { id } = Astro.params;
 const cliente = await clienteVisible(usuario, id!);
 if (!cliente) return new Response(null, { status: 404 });
 const operable = puedeOperarCliente(usuario, cliente);
+// El paquete mensual (diseño §3): lo hereda cada lote y lo genera la IA.
+const paquete = leerPaquete(cliente.paquete) ?? {};
+const totalDelPaquete = totalPaquete(paquete);
 const esAdmin = usuario.rol === 'admin';
 
 // Antes de leer nada del flujo: si a este cliente se le venció el plazo de
@@ -350,6 +356,33 @@ const historial: ItemHistorial[] = [
       </div>
       {operable && <div class="acciones"><button type="submit" class="btn" id="guardar">Guardar cambios</button></div>}
     </form>
+
+    {/* El paquete va aparte de los datos del cliente —tiene su propia ruta y
+        su propio botón— porque no es un dato de la ficha sino lo que se le
+        entrega cada mes: cambiarlo mueve «El mes en números» y lo que genera
+        la IA, y conviene que se guarde a propósito. */}
+    <div class="paquete" id="paquete">
+      <h2>Paquete mensual</h2>
+      <p class="sub">
+        Cuántas piezas lleva cada mes. Cada lote lo hereda, «El mes en números» lo compara con lo que hay y
+        «Generar el mes con IA» produce exactamente este paquete.
+      </p>
+      <form id="forma-paquete">
+        <div class="campos paquete-campos">
+          {FORMATOS.map((f) => (
+            <div class="campo">
+              <label for={`paquete-${f}`}>{NOMBRE_PLURAL[f]}</label>
+              <input id={`paquete-${f}`} name={f} type="number" min="0" max={MAX_POR_FORMATO} step="1" inputmode="numeric"
+                value={paquete[f] ?? 0} disabled={!operable} />
+            </div>
+          ))}
+        </div>
+        <p class="secundario" id="paquete-total" style="margin-top:10px">
+          {totalDelPaquete === 0 ? 'Sin paquete definido.' : `${totalDelPaquete} ${totalDelPaquete === 1 ? 'pieza' : 'piezas'} al mes.`}
+        </p>
+        {operable && <div class="acciones"><button type="submit" class="btn" id="guardar-paquete">Guardar paquete</button></div>}
+      </form>
+    </div>
   </section>
 
   <section class="tarjeta" role="tabpanel" id="panel-enlaces" aria-labelledby="tab-enlaces" hidden>
@@ -375,12 +408,14 @@ const historial: ItemHistorial[] = [
         {historial.map((item) => item.tipo === 'job' ? (
           <li class="renglon">
             <div class="cuerpo">
-              <strong>{item.job.tipo === 'growth' ? 'Manual de campaña' : item.job.tipo === 'pilares' ? 'Mapa de pilares' : 'Investigación'}</strong>
+              <strong>{nombreTrabajo(item.job.tipo)}{item.job.tipo === 'contenido' && destinoDeJob(item.job) ? ` · ${nombrePeriodo(destinoDeJob(item.job)!.periodo)}` : ''}</strong>
               <p class="secundario">{fechaHora(item.job.createdAt)} · <span class="cifra">{dinero(Number(item.job.costoUsd))}</span></p>
               {item.job.error && <p class="secundario" style="color:var(--rojo)">{item.job.error}</p>}
             </div>
             <span class={`etiqueta ${item.job.estado}`}>{ETIQUETA_ESTADO[item.job.estado] ?? item.job.estado}</span>
-            {manualPorJob.has(item.job.id) ? (
+            {item.job.tipo === 'contenido' && item.job.estado === 'completado' && destinoDeJob(item.job) ? (
+              <a href={destinoDeJob(item.job)!.enlace} class="btn fantasma chico">Ver el mes</a>
+            ) : manualPorJob.has(item.job.id) ? (
               <a href={`/growth/${manualPorJob.get(item.job.id)}`} class="btn fantasma chico">Ver manual</a>
             ) : mapaPorJob.has(item.job.id) ? (
               <a href={`/pilares/${mapaPorJob.get(item.job.id)}`} class="btn fantasma chico">Ver mapa</a>
@@ -531,6 +566,39 @@ const historial: ItemHistorial[] = [
       toast('No se pudo contactar al servidor.', 'error');
     }
     guardar.disabled = false;
+  });
+
+  // ── Paquete mensual. Su propia ruta (`PUT /api/clientes/[id]/paquete`), que
+  // valida y guarda `null` cuando todo queda en cero.
+  const formaPaquete = document.getElementById('forma-paquete') as HTMLFormElement | null;
+  const guardarPaquete = document.getElementById('guardar-paquete') as HTMLButtonElement | null;
+  const totalPaquete = document.getElementById('paquete-total');
+  const contarPaquete = () => {
+    if (!formaPaquete || !totalPaquete) return;
+    const n = [...formaPaquete.querySelectorAll<HTMLInputElement>('input[type="number"]')]
+      .reduce((s, i) => s + (Number.isInteger(Number(i.value)) && Number(i.value) > 0 ? Number(i.value) : 0), 0);
+    totalPaquete.textContent = n === 0 ? 'Sin paquete definido.' : `${n} ${n === 1 ? 'pieza' : 'piezas'} al mes.`;
+  };
+  formaPaquete?.addEventListener('input', contarPaquete);
+  formaPaquete?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!guardarPaquete) return;
+    guardarPaquete.disabled = true;
+    const cuerpo: Record<string, number> = {};
+    for (const [k, v] of new FormData(formaPaquete).entries()) cuerpo[k] = String(v).trim() === '' ? 0 : Number(v);
+    try {
+      const res = await fetch(`/api/clientes/${clientId}/paquete`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cuerpo),
+      });
+      const r = await res.json();
+      if (r.ok) toast(r.paquete ? 'Paquete guardado' : 'Paquete vacío: el cliente queda sin paquete');
+      else toast((r.errores ?? ['No se pudo guardar el paquete.']).join(' · '), 'error');
+    } catch {
+      toast('No se pudo contactar al servidor.', 'error');
+    }
+    guardarPaquete.disabled = false;
   });
 
   // ── Zona de peligro. Solo el admin borra clientes (regla del dueño): ni la
@@ -718,6 +786,13 @@ const historial: ItemHistorial[] = [
   .ficha-titulo h1 { overflow-wrap: anywhere; }
   .tarjeta-cabeza-flex { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .subtitulo-invitaciones { margin: 18px 0 0; font-size: 0.9rem; }
+
+  /* Paquete mensual: debajo de los datos, separado por una línea. Cuatro
+     cifras cortas que en tablet caben en un renglón; en celular, de dos en dos. */
+  .paquete { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--linea); scroll-margin-top: 80px; }
+  .paquete .sub { margin: 4px 0 14px; max-width: 70ch; }
+  .paquete-campos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (min-width: 700px) { .paquete-campos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
   /* Zona de peligro: separada del resto y con el rojo del sistema (el mismo
      de `.btn.peligro` y `.aviso.rosa`), que ya está resuelto en los dos temas. */

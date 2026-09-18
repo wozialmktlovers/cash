@@ -37,8 +37,28 @@ const PILARES: Etapa[] = [
   { clave: 'revision', titulo: 'Revisión', detalle: 'Temas repetidos y reparto por función.' },
 ];
 
+// El mes con IA (src/contenido/mes/pipeline.ts, `ETAPAS_CONTENIDO`): una tanda
+// por semana del mes. Una semana sin piezas que escribir se marca lista al pasar.
+const CONTENIDO: Etapa[] = [
+  { clave: 'plan', titulo: 'Plan del mes', detalle: 'Piezas del paquete, fechas, mix y temas del mapa.' },
+  { clave: 'semana1', titulo: 'Semana 1', detalle: 'Piezas del día 1 al 7.' },
+  { clave: 'semana2', titulo: 'Semana 2', detalle: 'Piezas del día 8 al 14.' },
+  { clave: 'semana3', titulo: 'Semana 3', detalle: 'Piezas del día 15 al 21.' },
+  { clave: 'semana4', titulo: 'Semana 4', detalle: 'Piezas del día 22 al 28.' },
+  { clave: 'semana5', titulo: 'Semana 5', detalle: 'Piezas del 29 al fin de mes.' },
+  { clave: 'guardado', titulo: 'Guardado', detalle: 'Las piezas entran al lote y los temas pasan a «En desarrollo».' },
+];
+
 export function etapasDe(tipo: string | undefined): Etapa[] {
-  return tipo === 'growth' ? GROWTH : tipo === 'pilares' ? PILARES : INVESTIGACION;
+  return tipo === 'growth' ? GROWTH : tipo === 'pilares' ? PILARES : tipo === 'contenido' ? CONTENIDO : INVESTIGACION;
+}
+
+/** Nombre visible del trabajo según su tipo (Inicio, ficha y página de progreso). */
+export function nombreTrabajo(tipo: string | undefined): string {
+  return tipo === 'growth' ? 'Manual de campaña'
+    : tipo === 'pilares' ? 'Mapa de pilares'
+    : tipo === 'contenido' ? 'Contenido del mes con IA'
+    : 'Investigación';
 }
 
 export function porcentaje(etapas: Record<string, string>, tipo: string | undefined): number {

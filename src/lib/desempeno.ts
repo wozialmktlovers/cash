@@ -27,7 +27,8 @@ export type ComentarioM = { etapaId: string; autorRol: 'admin' | 'operador' | 'c
 
 export type JobM = {
   clientId: string;
-  tipo: 'research' | 'growth' | 'pilares';
+  // `contenido` es la generación del mes con IA (src/contenido/mes/pipeline.ts).
+  tipo: 'research' | 'growth' | 'pilares' | 'contenido';
   costoUsd: number;
   creadoPor: string | null;
   creadoEn: Date;
@@ -357,14 +358,14 @@ export function costo(
 ): {
   total: number;
   porCliente: Map<string, number>;
-  porEtapa: Record<'research' | 'growth' | 'pilares', number>;
+  porEtapa: Record<JobM['tipo'], number>;
   porOperador: Map<string, number>;
 } {
   const enPeriodo = filtrarPeriodo(jobs, p);
 
   let total = 0;
   const porCliente = new Map<string, number>();
-  const porEtapa: Record<'research' | 'growth' | 'pilares', number> = { research: 0, growth: 0, pilares: 0 };
+  const porEtapa: Record<JobM['tipo'], number> = { research: 0, growth: 0, pilares: 0, contenido: 0 };
   const porOperador = new Map<string, number>();
 
   for (const j of enPeriodo) {
@@ -378,7 +379,7 @@ export function costo(
 
   total = round2(total);
   for (const [k, v] of porCliente) porCliente.set(k, round2(v));
-  for (const k of Object.keys(porEtapa) as Array<'research' | 'growth' | 'pilares'>) porEtapa[k] = round2(porEtapa[k]);
+  for (const k of Object.keys(porEtapa) as Array<JobM['tipo']>) porEtapa[k] = round2(porEtapa[k]);
   for (const [k, v] of porOperador) porOperador.set(k, round2(v));
 
   return { total, porCliente, porEtapa, porOperador };
@@ -434,11 +435,12 @@ export function agruparClientesPorOperador(clientes: { id: string; operadorId: s
 
 type TipoJob = JobM['tipo'];
 
-/** Tipo de documento (job) de cada etapa; `desarrollo_mensual` no genera jobs todavía (mismo mapa que `tipoDocumentoDe`, src/flujo/reglas.ts, repetido aquí para no importar esa lógica de negocio — a diferencia de PESOS/etapasParaAvance arriba, que sí se comparten para el % de avance, ver nota de imports). */
+/** Tipo de job de cada etapa (el de `tipoDocumentoDe`, src/flujo/reglas.ts, repetido aquí para no importar esa lógica de negocio — a diferencia de PESOS/etapasParaAvance arriba, que sí se comparten para el % de avance, ver nota de imports). `desarrollo_mensual` no tiene documento, pero sí jobs: la generación del mes con IA (`contenido`). */
 const TIPO_POR_ETAPA: Partial<Record<Etapa, TipoJob>> = {
   investigacion: 'research',
   pilares: 'pilares',
   manual_campana: 'growth',
+  desarrollo_mensual: 'contenido',
 };
 
 export type FilaDesgloseEtapa = { etapa: Etapa; dias: number | null; rondas: number | null; costo: number };
@@ -453,14 +455,15 @@ export type FilaDesgloseEtapa = { etapa: Etapa; dias: number | null; rondas: num
  *
  * No filtra por periodo: quien llama ya le pasa `eventosGrupo` recortado con
  * `enPeriodoCerrado` y `jobsGrupo` ya acotado al periodo (mismo patrón que
- * usa la página con `costo()`). `desarrollo_mensual` no tiene tipo de
- * documento todavía, así que su costo siempre es 0.
+ * usa la página con `costo()`). El costo de `desarrollo_mensual` es el de sus
+ * meses generados con IA (jobs `contenido`); las propuestas de copy sueltas no
+ * se guardan en ninguna tabla y no cuentan.
  */
 export function desglosePorEtapa(eventosGrupo: Evento[], jobsGrupo: JobM[]): Record<Etapa, FilaDesgloseEtapa> {
   const { duracion } = tiemposPorEtapa(eventosGrupo);
   const rondas = rondasPorEtapa(eventosGrupo);
 
-  const costoPorTipo: Record<TipoJob, number> = { research: 0, pilares: 0, growth: 0 };
+  const costoPorTipo: Record<TipoJob, number> = { research: 0, pilares: 0, growth: 0, contenido: 0 };
   for (const j of jobsGrupo) costoPorTipo[j.tipo] += j.costoUsd;
 
   const resultado = {} as Record<Etapa, FilaDesgloseEtapa>;

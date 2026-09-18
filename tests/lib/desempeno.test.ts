@@ -356,7 +356,7 @@ describe('costo', () => {
     expect(r.total).toBe(22);
     expect(r.porCliente.get('c1')).toBe(15);
     expect(r.porCliente.get('c2')).toBe(7);
-    expect(r.porEtapa).toEqual({ research: 10, growth: 5, pilares: 7 });
+    expect(r.porEtapa).toEqual({ research: 10, growth: 5, pilares: 7, contenido: 0 });
     // job1: creadoPor='op1' → op1. job2: creadoPor null, cliente c1 → operadorDeCliente('c1')='op2'. job3: creadoPor null, cliente c2 → null → 'sin_asignar'.
     expect(r.porOperador.get('op1')).toBe(10);
     expect(r.porOperador.get('op2')).toBe(5);
@@ -367,7 +367,7 @@ describe('costo', () => {
     const r = costo([], new Map(), { desde: null, hasta: new Date('2026-01-01T00:00:00Z') });
     expect(r.total).toBe(0);
     expect(r.porCliente.size).toBe(0);
-    expect(r.porEtapa).toEqual({ research: 0, growth: 0, pilares: 0 });
+    expect(r.porEtapa).toEqual({ research: 0, growth: 0, pilares: 0, contenido: 0 });
     expect(r.porOperador.size).toBe(0);
   });
 });

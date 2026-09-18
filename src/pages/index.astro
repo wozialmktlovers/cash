@@ -24,7 +24,7 @@ import {
   NOMBRE_TIPO_GASTO,
 } from '@/lib/ui/tablero';
 import { resumirPorCliente, resumenDe } from '@/lib/ui/estado-cliente';
-import { porcentaje, etapasDe, resumenAvance } from '@/lib/ui/progreso';
+import { porcentaje, etapasDe, resumenAvance , nombreTrabajo } from '@/lib/ui/progreso';
 import { enlacePendiente } from '@/lib/ui/enlaces';
 import { fechaLarga, fechaHora } from '@/lib/ui/fecha';
 
@@ -702,7 +702,7 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
           const actual = etapasDe(j.tipo).find((e) => e.clave === j.etapaActual)?.titulo ?? 'En cola';
           return (
             <a href={`/jobs/${j.id}`} class="tarjeta">
-              <p class="eyebrow">{j.tipo === 'growth' ? 'Manual de campaña' : j.tipo === 'pilares' ? 'Mapa de pilares' : 'Investigación'}</p>
+              <p class="eyebrow">{nombreTrabajo(j.tipo)}</p>
               <h3 style="margin:6px 0 12px">{porId.get(j.clientId)?.nombre ?? 'Cliente'}</h3>
               <div class="avance" role="progressbar" aria-label={`Avance de ${porId.get(j.clientId)?.nombre ?? 'cliente'}`} aria-valuenow={pct} aria-valuemin="0" aria-valuemax="100"><i style={`width:${pct}%`}></i></div>
               <p class="secundario" style="margin-top:10px">{actual} · {pct}% · {dinero(Number(j.costoUsd))}</p>
