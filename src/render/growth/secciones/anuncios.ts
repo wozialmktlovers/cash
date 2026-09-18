@@ -43,7 +43,9 @@ const MEDIDAS: Record<string, string> = {
  */
 const ARCHIVOS: Record<string, { cantidad: number; etiqueta: string; ratio: string }[]> = {
   imagen: [{ cantidad: 1, etiqueta: 'Pieza', ratio: '1x1' }],
-  carrusel: [{ cantidad: 5, etiqueta: 'Tarjetas', ratio: '1x1' }],
+  // 4:5, igual que dicta el agente de creativos: la tabla vieja decía 1:1 y
+  // el anuncio mostraba las dos medidas a la vez.
+  carrusel: [{ cantidad: 5, etiqueta: 'Tarjetas', ratio: '4x5' }],
   video: [
     { cantidad: 1, etiqueta: 'Video', ratio: '9x16' },
     { cantidad: 1, etiqueta: 'Portada', ratio: '4x5' },

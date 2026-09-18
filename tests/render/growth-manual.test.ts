@@ -211,7 +211,7 @@ describe('anuncios por campaña (sección A)', () => {
   });
 
   // El desglose venía de la antigua sección de creativos: un carrusel son
-  // cinco tarjetas 1:1 y un video lleva video 9:16 más portada 4:5.
+  // cinco tarjetas 4:5 y un video lleva video 9:16 más portada 4:5.
   it('cada anuncio dice cuántos archivos se producen y de qué medida', () => {
     const a = seccionA(renderizarManual(completo as any, meta));
     const archivos = (id: string) => {
@@ -224,7 +224,8 @@ describe('anuncios por campaña (sección A)', () => {
       if (c.formato === 'carrusel') {
         expect(bloque).toContain('5 archivos por producir');
         expect(bloque).toContain('5 Tarjetas');
-        expect(bloque).toContain('1:1 · 1080 × 1080 px');
+        expect(bloque).toContain('4:5 · 1080 × 1350 px');
+        expect(bloque).not.toContain('1:1');
       } else if (c.formato === 'video') {
         expect(bloque).toContain('2 archivos por producir');
         expect(bloque).toContain('Video</strong> <span>9:16 · 1080 × 1920 px');
