@@ -62,7 +62,7 @@ describe('data-ancla en los renders (B7)', () => {
     const html = renderizarManual(
       growthCompleto as any,
       { cliente: 'Ana', producto: 'Curso X', fecha: '2026-09-15' },
-      '',
+      undefined,
       true,
       { ...flujo, tipo: 'growth' },
     );

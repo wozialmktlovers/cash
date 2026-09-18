@@ -2,7 +2,6 @@
 import { eq, and, desc } from 'drizzle-orm';
 import { db, clientLinks, shareLinks } from '@/db';
 import { renderizarManual } from '@/render/growth/manual';
-import { barraOperador } from '@/render/barra-operador';
 import { slugificar } from '@/lib/slug';
 import { baseUrlPublica } from '@/lib/base-url';
 import { puedeOperarCliente } from '@/lib/permisos';
@@ -67,12 +66,14 @@ const html = renderizarManual(
     destino: sitio?.url,
     creadoEn: r.createdAt,
   },
+  // La cabecera flotante arma el botón Compartir y los de Editar/Comentar a
+  // partir de estas opciones y de `flujo`: ya no se le pasa HTML armado.
   operable
-    ? barraOperador({
+    ? {
         clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,
-        version: r.version, tipo: 'growth', tokenActivo: activo?.token ?? null, base,
-          razonNoCompartir: compartir && !compartir.ok ? compartir.razon : null,
-      }, Boolean(flujo?.puedeEditar), Boolean(flujo?.puedeComentar))
+        version: r.version, tipo: 'growth' as const, tokenActivo: activo?.token ?? null, base,
+        razonNoCompartir: compartir && !compartir.ok ? compartir.razon : null,
+      }
     : undefined,
   // No basta con `operable`: un operador viendo la etapa en revisión es
   // operable, pero no puede editar — B6, ronda de arreglos 1, punto 9.

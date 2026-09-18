@@ -71,7 +71,7 @@ describe('data-editable en los renders', () => {
     const html = renderizarManual(
       growthCompleto as any,
       { cliente: 'Ana', producto: 'Curso X', fecha: '2026-09-15' },
-      '',
+      undefined,
       true,
       { ...flujo, tipo: 'growth' },
     );

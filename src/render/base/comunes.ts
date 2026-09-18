@@ -1,74 +1,70 @@
-// Las 41 clases que el deck y el manual de campaña comparten.
-// Componentes, no envase: lo que dibuja el contenido. El envase —cómo se
-// recorre el documento— vive en cada uno.
+// Los componentes del manual de campaña: lo que dibuja el contenido —tarjetas,
+// tablas, listas, avisos, cifras—, no el envase, que ahora lo pone la base
+// editorial (`envolverDocumento`).
+//
+// Todo el color, el tipo, los radios y las sombras salen de los tokens del
+// Studio (src/styles/tokens.css, vía `ESTILOS_EDITORIAL`): ni un hex fijo. Es
+// lo que hace que el documento tenga modo noche sin una sola regla que
+// pregunte en qué tema está, y que una tarjeta de aquí pese lo mismo que una
+// de la investigación o del mapa de pilares.
+//
+// Las clases conservan los nombres del machote (.card, .lst, .tbl, .badge…):
+// las escriben las nueve secciones y renombrarlas sería tocar el contenido,
+// que es justo lo que este cambio no hace.
 
 export const CSS_COMUN = `
 /* ── Caja de contenido ───────────────────────────────── */
-/* Compartida: el deck la usa dentro de cada lámina y el manual dentro de
-   cada sección. Es el ancho de lectura, no el envase. */
-.wrap{max-width:1180px;margin:0 auto;padding:0 40px;}
-.wrap-sm{max-width:900px;margin:0 auto;padding:0 40px;}
+/* El ancho de lectura lo da el marco editorial (.pagina, al 85%); .wrap
+   envuelve el cuerpo de cada sección y ya no reparte ni ancho ni sangría. */
+.wrap,.wrap-sm{max-width:none;margin:0;padding:0;}
+
 /* ── Glows ───────────────────────────────────────────── */
 .blob{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:-1;}
-.blob-pink{background:radial-gradient(circle,rgba(212,104,138,.3) 0%,transparent 68%);}
-.blob-blue{background:radial-gradient(circle,rgba(90,110,204,.26) 0%,transparent 68%);}
-.blob-yellow{background:radial-gradient(circle,rgba(200,200,0,.16) 0%,transparent 68%);}
+.blob-pink{background:radial-gradient(circle,color-mix(in srgb,var(--rosa) 30%,transparent) 0%,transparent 68%);}
+.blob-blue{background:radial-gradient(circle,color-mix(in srgb,var(--azul) 26%,transparent) 0%,transparent 68%);}
+.blob-yellow{background:radial-gradient(circle,color-mix(in srgb,var(--amarillo) 16%,transparent) 0%,transparent 68%);}
 
 /* ── Tipografía ──────────────────────────────────────── */
-h1{font-size:clamp(2.2rem,5.5vw,4.2rem);font-weight:800;line-height:1.05;letter-spacing:-.025em;}
-h2{font-size:clamp(1.6rem,3.2vw,2.6rem);font-weight:800;line-height:1.12;letter-spacing:-.02em;}
-h3{font-size:clamp(1.1rem,1.7vw,1.4rem);font-weight:700;line-height:1.3;}
-h4{font-size:0.9rem;font-weight:700;line-height:1.4;}
-p{font-weight:300;color:var(--mid);line-height:1.75;}
-strong{color:rgba(255,255,255,.96);font-weight:600;}
-.grad{background:linear-gradient(135deg,var(--pink) 0%,var(--blue) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
-.grad-warm{background:linear-gradient(135deg,var(--yellow) 0%,var(--pink) 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
-.eyebrow{display:block;font-size:0.75rem;font-weight:700;letter-spacing:.24em;text-transform:uppercase;color:var(--dim);margin-bottom:14px;}
-.lead{font-size:clamp(1rem,1.5vw,1.12rem);color:var(--mid);max-width:68ch;}
-.tiny{font-size:0.8rem;color:var(--dim);line-height:1.7;}
+/* La escala es la del Studio (--t-*), multiplicada por --esc para la pantalla
+   compartida. Antes eran siete clamps propios que no coincidían con los de
+   ningún otro documento. */
+h1{font:var(--t-display);}
+h3{font:var(--t-h3);}
+h4{font:var(--t-h3);font-size:calc(14.5px * var(--esc));color:var(--tinta);}
+p{color:var(--texto);}
+strong{color:var(--tinta);font-weight:600;}
+/* El degradado del machote se resuelve en un acento plano: es el mismo rosa
+   que ya marca eyebrows, viñetas y filetes en los otros tres entregables, y
+   se lee igual de día que de noche (el degradado sobre fondo claro no). */
+.grad{color:var(--rosa);}
+.grad-warm{color:var(--amarillo);}
+.eyebrow{display:block;margin-bottom:14px;}
+.lead{font-size:1.06rem;line-height:1.6;color:var(--suave);max-width:68ch;}
+.tiny{font:var(--t-small);color:var(--suave);}
 
 /* ── Panel header ────────────────────────────────────── */
 .phead{margin-bottom:34px;}
-.pnum{
-  display:inline-flex;align-items:center;gap:10px;
-  font-size:0.75rem;font-weight:800;letter-spacing:.18em;color:var(--pink);
-  margin-bottom:10px;
-}
-.pnum::after{content:'';width:34px;height:1px;background:linear-gradient(90deg,var(--pink),transparent);}
+.pnum{display:inline-flex;align-items:center;gap:10px;font:var(--t-micro);letter-spacing:.18em;color:var(--rosa);margin-bottom:10px;}
+.pnum::after{content:'';width:34px;height:1px;background:var(--linea);}
 
 /* ── Cards ───────────────────────────────────────────── */
-.card{
-  background:var(--s2);border:1px solid var(--border);
-  border-radius:var(--radius);padding:24px;
-  position:relative;
-  transition:border-color .3s,background .3s,transform .3s;
-}
-/* El papel de la tarjeta se lee por su cuerpo, no por un filete. Rosa
-   hallazgo, azul mercado, ámbar cautela, verde validado. Color sólido, sin
-   contorno y con el texto en blanco. */
-.card:hover{background:var(--s3);border-color:var(--border-med);}
-.card-pink,.card-blue,.card-yellow,.card-green{border-color:transparent;}
-.card-pink{background:var(--c-pink);}
-.card-blue{background:var(--c-blue);}
-.card-yellow{background:var(--c-yellow);}
-.card-green{background:var(--c-green);}
-/* Sobre cuerpo de color el texto sube a blanco: los grises pensados para el
-   suelo oscuro pierden contraste aquí. */
-.card-pink p,.card-blue p,.card-yellow p,.card-green p,
-.card-pink li,.card-blue li,.card-yellow li,.card-green li,
-.card-pink td,.card-blue td,.card-yellow td,.card-green td{color:rgba(255,255,255,.92);}
-.card-pink .tiny,.card-blue .tiny,.card-yellow .tiny,.card-green .tiny,
-.card-pink .stat-l,.card-blue .stat-l,.card-yellow .stat-l,.card-green .stat-l,
-.card-pink .kv-k,.card-blue .kv-k,.card-yellow .kv-k,.card-green .kv-k,
-.card-pink th,.card-blue th,.card-yellow th,.card-green th{color:rgba(255,255,255,.72);}
-.card-pink:hover,.card-blue:hover,.card-yellow:hover,.card-green:hover{
-  filter:brightness(1.14);background:inherit;
-}
-.card-pink h4,.card-pink h3{color:var(--c-pink-hi);}
-.card-blue h4,.card-blue h3{color:var(--c-blue-hi);}
-.card-yellow h4,.card-yellow h3{color:var(--c-yellow-hi);}
-.card-green h4,.card-green h3{color:var(--c-green-hi);}
-.card-sm{padding:17px;border-radius:var(--radius-sm);}
+/* Misma tarjeta que .tarjeta en la base editorial: superficie, filo de una
+   línea y la sombra del sistema. */
+.card{background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--r);padding:24px;position:relative;box-shadow:var(--sombra);}
+/* El papel de la tarjeta se lee por su tinte, no por un filete: rosa
+   hallazgo, azul mercado, ámbar cautela, verde validado. Los tintes -s son
+   los mismos que usa la cabecera de cada pilar en el banco de temas, con su
+   par de contraste ya vigilado por tests/lib/ui/contraste.test.ts. */
+.card-pink,.card-blue,.card-yellow,.card-green{border-color:transparent;box-shadow:none;}
+.card-pink{background:var(--rosa-s);}
+.card-blue{background:var(--azul-s);}
+.card-yellow{background:var(--amarillo-s);}
+.card-green{background:var(--verde-s);}
+.card-pink h3,.card-pink h4{color:var(--rosa);}
+.card-blue h3,.card-blue h4{color:var(--azul);}
+.card-yellow h3,.card-yellow h4{color:var(--amarillo);}
+.card-green h3,.card-green h4{color:var(--verde);}
+.card-sm{padding:17px;border-radius:var(--r-sm);}
 
 /* ── Grids ───────────────────────────────────────────── */
 .g2{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;}
@@ -76,179 +72,121 @@ strong{color:rgba(255,255,255,.96);font-weight:600;}
 .g4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
 .g-1-2{display:grid;grid-template-columns:1fr 2fr;gap:26px;}
 .g-2-1{display:grid;grid-template-columns:2fr 1fr;gap:26px;}
-/* Dos columnas solo cuando hay ancho de sobra. Es para láminas que cargan el
-   contenido de dos y en vertical se salen del corte. El primer h3 de la
-   segunda columna pierde su margen superior: ahí ya no separa nada. */
-/* Asimétrica a propósito: la columna ancha lleva la rejilla de tres tarjetas.
-   Partida en dos mitades iguales, esas tarjetas quedaban de 170px y el texto
-   se desdoblaba tanto que la lámina crecía más que apilada. Medido: 1fr/1fr
-   deja 472px fuera del corte; 1.35fr/1fr con las tarjetas apretadas, 257. */
 .par{display:grid;grid-template-columns:1fr;gap:24px;}
 @media (min-width:1100px){
   .par{grid-template-columns:1.35fr 1fr;gap:26px;}
   .par>div>h3:first-child{margin-top:0!important;}
   .par .g3{gap:12px;}
   .par .card{padding:18px;}
-  /* Una rejilla de dos dentro de una columna de 490px da cajas de 230px:
-     el texto se vuelve una tira vertical. Dentro de .par van apiladas. */
   .par .g2{grid-template-columns:1fr;}
 }
 
 /* ── Badges ──────────────────────────────────────────── */
-.badge{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:5px 12px;border-radius:100px;
-  font-size:0.75rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
-}
-.b-pink{background:rgba(212,104,138,.18);color:#e88bab;border:1px solid rgba(212,104,138,.34);}
-.b-blue{background:rgba(90,110,204,.18);color:#9aa8ef;border:1px solid rgba(90,110,204,.34);}
-.b-yellow{background:rgba(200,200,0,.15);color:#dede3c;border:1px solid rgba(200,200,0,.32);}
-.b-green{background:rgba(16,185,129,.16);color:#45dda6;border:1px solid rgba(16,185,129,.34);}
-.b-gray{background:rgba(255,255,255,.08);color:var(--mid);border:1px solid var(--border);}
+/* La etiqueta de la base editorial, con los nombres del machote. */
+.badge{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:var(--r-pill);
+  font:var(--t-micro);letter-spacing:.04em;text-transform:uppercase;}
+.b-pink{background:var(--rosa-s);color:var(--rosa);}
+.b-blue{background:var(--azul-s);color:var(--azul);}
+.b-yellow{background:var(--amarillo-s);color:var(--amarillo);}
+.b-green{background:var(--verde-s);color:var(--verde);}
+/* El gris lleva filo: sobre la tarjeta, su fondo y el de la tarjeta casi
+   coinciden y la píldora desaparecía. */
+.b-gray{background:var(--gris);color:var(--suave);border:1px solid var(--linea);}
 
 /* ── Stats ───────────────────────────────────────────── */
-/* Las cifras de portada son dato, no titular: van en la voz de la evidencia
-   y sobre la superficie más baja, para que no compitan con el titular. */
-.stat{background:var(--s1);border:1px solid var(--border);border-radius:var(--radius-sm);padding:18px 18px 16px;position:relative;overflow:hidden;}
-.stat::after{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:linear-gradient(180deg,var(--pink),transparent);}
-.stat-v{font-family:var(--mono);font-size:clamp(1.5rem,2.6vw,2.1rem);font-weight:700;line-height:1.05;letter-spacing:-.03em;}
-.stat-l{font-size:0.75rem;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-top:6px;font-weight:600;}
+.stat{background:var(--gris);border:1px solid var(--linea);border-radius:var(--r-sm);padding:18px 18px 16px;position:relative;overflow:hidden;}
+.stat::after{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--rosa);}
+.stat-v{font-family:var(--mono);font-size:clamp(1.5rem,2.6vw,2.1rem);font-weight:700;line-height:1.05;letter-spacing:-.03em;color:var(--tinta);}
+.stat-l{font:var(--t-micro);color:var(--suave);text-transform:uppercase;letter-spacing:.1em;margin-top:6px;}
 
 /* ── Tabla ───────────────────────────────────────────── */
 .tbl{width:100%;border-collapse:collapse;font-size:0.88rem;}
-/* La cabecera de tabla se separa del cuerpo con superficie, no solo con línea. */
-.tbl thead{background:rgba(255,255,255,.028);}
-.tbl th{
-  text-align:left;padding:11px 13px;font-size:0.75rem;font-weight:800;
-  text-transform:uppercase;letter-spacing:.1em;color:var(--dim);
-  border-bottom:1px solid var(--border-med);white-space:nowrap;
-}
-.tbl td{padding:12px 13px;border-bottom:1px solid rgba(255,255,255,.08);color:var(--mid);vertical-align:top;}
+/* La cabecera se separa del cuerpo con superficie, no solo con línea. */
+.tbl thead{background:var(--gris);}
+.tbl th{text-align:left;padding:11px 13px;font:var(--t-micro);text-transform:uppercase;letter-spacing:.1em;color:var(--suave);
+  border-bottom:1px solid var(--linea);white-space:nowrap;}
+.tbl td{padding:12px 13px;border-bottom:1px solid var(--linea);color:var(--texto);vertical-align:top;}
 .tbl tbody tr:last-child td{border-bottom:none;}
-.tbl tbody tr:hover td{background:rgba(255,255,255,.04);}
-.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--s1);}
+.tbl tbody tr:hover td{background:var(--gris);}
+.tbl-wrap{overflow-x:auto;border:1px solid var(--linea);border-radius:var(--r-sm);background:var(--tarjeta);}
 .tbl-wrap::-webkit-scrollbar{height:5px;}
-.tbl-wrap::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px;}
+.tbl-wrap::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--suave) 45%,transparent);border-radius:3px;}
+.tbl-bare{border:none;background:none;box-shadow:none;}
+.tbl-bare thead th{background:transparent;}
 
 /* ── Quote / voz de cliente ──────────────────────────── */
-.quote{
-  border-left:2px solid var(--pink);padding:3px 0 3px 16px;
-  font-size:0.9rem;font-style:italic;color:rgba(255,255,255,.86);line-height:1.7;
-}
-.quote-src{display:block;font-style:normal;font-size:0.75rem;color:var(--dim);margin-top:6px;letter-spacing:.03em;}
+.quote{border-left:2px solid var(--rosa);padding:3px 0 3px 16px;font-style:italic;color:var(--texto);}
+.quote-src{display:block;font-style:normal;font:var(--t-small);color:var(--suave);margin-top:6px;letter-spacing:.03em;}
 
 /* ── Listas ──────────────────────────────────────────── */
+/* Misma viñeta que .lista en la base editorial. */
 .lst{list-style:none;display:grid;gap:9px;}
-.lst li{position:relative;padding-left:22px;font-size:0.9rem;color:var(--mid);line-height:1.65;font-weight:300;}
-.lst li::before{
-  content:'';position:absolute;left:0;top:9px;
-  width:6px;height:6px;border-radius:50%;background:var(--pink);
-}
-.lst-blue li::before{background:var(--blue);}
-.lst-green li::before{background:var(--green);}
-.lst-yellow li::before{background:var(--yellow);}
-.lst-x li::before{
-  content:'✕';background:none;width:auto;height:auto;top:0;
-  color:var(--pink);font-size:0.78rem;font-weight:700;
-}
-.lst-ok li::before{
-  content:'✓';background:none;width:auto;height:auto;top:0;
-  color:var(--green);font-size:0.82rem;font-weight:700;
-}
+.lst li{position:relative;padding-left:22px;color:var(--texto);}
+.lst li::before{content:'';position:absolute;left:0;top:.62em;width:8px;height:8px;border-radius:50%;background:var(--rosa);}
+.lst-blue li::before{background:var(--azul);}
+.lst-green li::before{background:var(--verde);}
+.lst-yellow li::before{background:var(--amarillo);}
+.lst-x li::before{content:'✕';background:none;width:auto;height:auto;top:0;color:var(--rojo);font-size:0.78rem;font-weight:700;}
+.lst-ok li::before{content:'✓';background:none;width:auto;height:auto;top:0;color:var(--verde);font-size:0.82rem;font-weight:700;}
 
 /* ── Diagrama ciclo ──────────────────────────────────── */
 .flow{display:flex;align-items:stretch;gap:0;overflow-x:auto;padding-bottom:8px;}
 .flow::-webkit-scrollbar{height:5px;}
-.flow::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:3px;}
+.flow::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--suave) 45%,transparent);border-radius:3px;}
 .flow-step{flex:1;min-width:170px;position:relative;padding:0 9px;}
-.flow-step:not(:last-child)::after{
-  content:'';position:absolute;right:-6px;top:34px;
-  width:12px;height:12px;border-top:1.5px solid rgba(212,104,138,.45);
-  border-right:1.5px solid rgba(212,104,138,.45);transform:rotate(45deg);z-index:2;
-}
-.flow-box{
-  background:var(--glass);border:1px solid var(--border);
-  border-radius:var(--radius-sm);padding:15px;height:100%;
-}
-.flow-n{
-  width:26px;height:26px;border-radius:50%;
-  background:rgba(212,104,138,.18);border:1px solid rgba(212,104,138,.38);
-  display:flex;align-items:center;justify-content:center;
-  font-size:0.75rem;font-weight:800;color:var(--pink);margin-bottom:10px;
-}
+.flow-step:not(:last-child)::after{content:'';position:absolute;right:-6px;top:34px;width:12px;height:12px;
+  border-top:1.5px solid var(--rosa);border-right:1.5px solid var(--rosa);transform:rotate(45deg);z-index:2;}
+.flow-box{background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--r-sm);padding:15px;height:100%;}
+.flow-n{width:26px;height:26px;border-radius:50%;background:var(--rosa-s);display:flex;align-items:center;justify-content:center;
+  font:var(--t-micro);color:var(--rosa);margin-bottom:10px;}
 
 /* ── Timeline semanas ────────────────────────────────── */
-.week{
-  display:grid;grid-template-columns:78px 1fr;gap:16px;
-  padding:15px 0;border-bottom:1px solid rgba(255,255,255,.08);
-}
+.week{display:grid;grid-template-columns:78px 1fr;gap:16px;padding:15px 0;border-bottom:1px solid var(--linea);}
 .week:last-child{border-bottom:none;}
-.week-tag{
-  font-size:0.75rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--pink);padding-top:2px;
-}
+.week-tag{font:var(--t-micro);letter-spacing:.08em;text-transform:uppercase;color:var(--rosa);padding-top:2px;}
 
 /* ── Barra comparativa ───────────────────────────────── */
 .bar-row{display:grid;grid-template-columns:1fr 2.4fr auto;gap:12px;align-items:center;padding:7px 0;font-size:0.84rem;}
-.bar-track{height:7px;background:rgba(255,255,255,.08);border-radius:4px;overflow:hidden;}
-.bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--pink),var(--blue));}
-.bar-val{font-size:0.82rem;font-weight:700;color:var(--white);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.bar-track{height:7px;background:var(--gris);border-radius:4px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:4px;background:var(--rosa);}
+.bar-val{font-size:0.82rem;font-weight:700;color:var(--tinta);font-variant-numeric:tabular-nums;white-space:nowrap;}
 
 /* ── Persona ─────────────────────────────────────────── */
 .persona-hd{display:flex;align-items:center;gap:18px;margin-bottom:22px;}
-.persona-av{
-  width:66px;height:66px;border-radius:50%;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
-  font-size:1.6rem;font-weight:800;
-}
-.av-pink{background:linear-gradient(135deg,rgba(212,104,138,.85),rgba(90,110,204,.6));}
-.av-blue{background:linear-gradient(135deg,rgba(90,110,204,.85),rgba(200,200,0,.5));}
+.persona-av{width:66px;height:66px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:1.6rem;font-weight:800;color:var(--sobre-acento);}
+.av-pink{background:var(--rosa);}
+.av-blue{background:var(--azul);}
 
 /* ── Fuente ──────────────────────────────────────────── */
-.src{font-family:var(--mono);font-size:0.75rem;color:rgba(255,255,255,.5);margin-top:9px;letter-spacing:0;line-height:1.7;}
-.src a{color:rgba(255,255,255,.6);text-decoration:underline;text-underline-offset:2px;}
+.src{font-family:var(--mono);font-size:0.75rem;color:var(--suave);margin-top:9px;line-height:1.7;}
+.src a{color:var(--suave);text-decoration:underline;text-underline-offset:2px;}
 
 /* ── Alert ───────────────────────────────────────────── */
-.alert{
-  border-radius:var(--radius-sm);padding:16px 19px;
-  border-left:3px solid;font-size:0.88rem;line-height:1.7;
-}
-/* Los avisos siguen el mismo criterio: cuerpo sólido y texto en blanco. La
-   barra lateral se mantiene porque ahí sí codifica el tipo de aviso. */
-.alert{color:rgba(255,255,255,.92);}
-.alert strong{color:#fff;}
-.alert-red{background:var(--c-pink);border-color:var(--c-pink-hi);}
-.alert-green{background:var(--c-green);border-color:var(--c-green-hi);}
-.alert-yellow{background:var(--c-yellow);border-color:var(--c-yellow-hi);}
+/* Cuerpo en el tinte del color y filo a la izquierda en el tono pleno: es
+   donde se codifica el tipo de aviso. El texto se queda en el color de
+   lectura, que es el par de contraste que los tests vigilan. */
+.alert{border-radius:var(--r-sm);padding:16px 19px;border-left:3px solid;color:var(--texto);}
+.alert strong{color:var(--tinta);}
+.alert-red{background:var(--rojo-s);border-color:var(--rojo);}
+.alert-green{background:var(--verde-s);border-color:var(--verde);}
+.alert-yellow{background:var(--amarillo-s);border-color:var(--amarillo);}
 
 /* ── Guía metodológica (solo plantilla) ──────────────── */
-.guia{
-  background:rgba(200,200,0,.06);border:1px dashed rgba(200,200,0,.34);
-  border-radius:var(--radius-sm);padding:15px 17px;margin-bottom:14px;
-}
-.guia-t{
-  font-size:0.75rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
-  color:var(--yellow);margin-bottom:9px;display:flex;align-items:center;gap:7px;
-}
-.guia p,.guia li{font-size:0.84rem;color:var(--mid);line-height:1.7;}
-.ph{
-  color:var(--pink);font-weight:700;background:rgba(212,104,138,.14);
-  padding:1px 6px;border-radius:4px;font-size:.93em;
-}
+.guia{background:var(--amarillo-s);border:1px dashed var(--amarillo);border-radius:var(--r-sm);padding:15px 17px;margin-bottom:14px;}
+.guia-t{font:var(--t-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--amarillo);margin-bottom:9px;display:flex;align-items:center;gap:7px;}
+.guia p,.guia li{color:var(--texto);}
+.ph{color:var(--rosa);font-weight:700;background:var(--rosa-s);padding:1px 6px;border-radius:4px;}
 .fuente-lst{list-style:none;display:grid;gap:6px;margin-top:8px;}
 .fuente-lst li{position:relative;padding-left:18px;font-size:0.8rem;}
-.fuente-lst li::before{content:'→';position:absolute;left:0;color:var(--yellow);font-weight:700;}
+.fuente-lst li::before{content:'→';position:absolute;left:0;color:var(--amarillo);font-weight:700;}
 
 @media (max-width:1024px){
   .g4{grid-template-columns:repeat(2,1fr);}
   .g-1-2,.g-2-1{grid-template-columns:1fr;}
 }
 @media (max-width:768px){
-  /* En pantalla chica la escala del operador estorba: el ancho manda. */
-  html{font-size:16px;}
-  .wrap,.wrap-sm{padding:0 22px;}
   h1{font-size:clamp(1.85rem,7.6vw,2.6rem);}
-  h2{font-size:clamp(1.35rem,5.6vw,1.9rem);}
   .g2,.g3,.g4{grid-template-columns:1fr;gap:14px;}
   .card{padding:19px;}
   .phead{margin-bottom:26px;}
@@ -257,8 +195,5 @@ strong{color:rgba(255,255,255,.96);font-weight:600;}
   .persona-hd{gap:14px;}
   .persona-av{width:54px;height:54px;font-size:1.3rem;}
   .bar-row{grid-template-columns:1fr;gap:5px;}
-}
-@media (max-width:420px){
-  .wrap,.wrap-sm{padding:0 17px;}
 }
 `;

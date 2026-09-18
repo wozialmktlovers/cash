@@ -1,65 +1,54 @@
-// Tokens y cimientos compartidos por el deck y el manual de campaña.
-// Aquí vive la escala de videollamada: los dos documentos se presentan
-// compartiendo pantalla, así que ninguno puede quedarse sin ella.
+// Cimientos propios del manual de campaña, encima de la línea del Studio.
+//
+// Los colores, la familia tipográfica, los radios y las sombras ya no viven
+// aquí: los pone `ESTILOS_EDITORIAL` (src/render/editorial/estilos.ts, que a
+// su vez incrusta src/styles/tokens.css), la misma base que ya comparten la
+// investigación, el mapa de pilares y el contenido mensual. De ahí viene
+// también el modo noche: ningún componente pregunta en qué tema está.
+//
+// Aquí queda solo lo que es de este documento y de ningún otro:
+//
+//  - la escala de videollamada (`--esc`), que el operador sube desde la
+//    cabecera porque el manual se presenta compartiendo pantalla;
+//  - la voz de la evidencia (`--mono`): lo verificable —UTMs, identificadores,
+//    medidas, prompts— va en monoespaciada y lo juzgado en Poppins;
+//  - la escala vertical (`--e1`…`--e5`), que las secciones usan en línea
+//    (`style="margin-top:var(--e3)"`), así que no se puede quitar sin tocar
+//    el contenido.
 
 export const TOKENS = `
 :root{
-  --black:#08080b; --white:#fff;
-  --pink:#d4688a; --blue:#5a6ecc; --yellow:#c8c800; --green:#10b981;
-  /* Escala de superficies. Antes había un solo negro y todo flotaba al mismo
-     valor, así que ninguna sección se separaba de la siguiente. Cuatro
-     niveles: suelo, banda de sección, tarjeta y tarjeta elevada. */
-  --s0:#08080b; --s1:#0e0e14; --s2:#14141c; --s3:#1c1c26;
-
-  /* Cuerpos de tarjeta a color sólido, sin transparencia ni contorno. Son el
-     tono profundo de cada color de marca, no el color a plena saturación:
-     blanco sobre #d4688a da 2.6:1, que no es legible y empeora al comprimirse
-     el video. Estos pasan de 8:1 y siguen leyéndose como su color. */
-  --c-pink:#4a1a2a; --c-blue:#1e2450; --c-yellow:#38380c; --c-green:#0e3a2c;
-  --c-pink-hi:#f0a2bd; --c-blue-hi:#a5b2f5; --c-yellow-hi:#e4e44a; --c-green-hi:#4fe0ac;
-  --glass:var(--s2); --glass-deep:var(--s1);
-
-  /* Tipografía de evidencia. Lo verificable —fuentes, identificadores, UTMs,
-     medidas, conteos— va en monoespaciada; lo juzgado va en Poppins. Es la
-     distinción que define este producto, así que la carga la tipografía. */
+  /* Tipografía de evidencia. */
   --mono:ui-monospace,'SF Mono',SFMono-Regular,Menlo,Consolas,monospace;
-  --border:rgba(255,255,255,.14); --border-med:rgba(255,255,255,.24);
-  /* Subidos desde .45 y .72 del machote: es el detalle que primero se pierde
-     al recomprimirse la pantalla compartida. */
-  --dim:rgba(255,255,255,.6); --mid:rgba(255,255,255,.82);
-  --radius:16px; --radius-sm:10px;
 
-  /* Escala vertical. Antes los márgenes eran valores sueltos entre 6 y 30px
-     sin relación entre sí, y todos cortos: el documento se leía apretado y
-     nada indicaba qué separaba de qué. Cinco pasos, y cada salto se nota. */
+  /* Escala vertical. Cinco pasos, y cada salto se nota. */
   --e1:12px;   /* dentro de un bloque */
   --e2:20px;   /* entre elementos hermanos */
   --e3:34px;   /* entre bloques */
   --e4:58px;   /* entre apartados con título propio */
   --e5:110px;  /* aire de sección */
-  /* Escala tipográfica global. La cambia el botón de la barra. */
+
+  /* Escala tipográfica global: la mueve el botón de la cabecera. */
   --esc:1;
 }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-html{
-  -webkit-font-smoothing:antialiased;
-  font-size:calc(16px * var(--esc));
-}
-body{
-  font-family:'Poppins',-apple-system,sans-serif;
-  background:var(--s0); color:var(--white);
-  line-height:1.65;
-  /* El alto y el overflow NO van aquí: el deck bloquea el scroll del body
-     porque desplaza láminas, y el manual de campaña se lee de corrido y tiene
-     que poder desplazarse. Cada envase pone el suyo. */
-}
-body::before{
-  content:''; position:fixed; inset:0; z-index:0; pointer-events:none;
-  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
-  background-size:256px 256px;
+
+/* La escala de videollamada multiplica la escala tipográfica del Studio. Los
+   tokens --t-* de tokens.css vienen en px (no en rem), así que subir el
+   font-size de la raíz por sí solo no los movería: se redeclaran con el
+   factor, sin tocar familia, pesos ni interlineados. El término fluido de
+   cada clamp se queda igual a propósito — en pantalla chica manda el ancho,
+   no la comodidad del operador. */
+:root{
+  --t-display:700 clamp(calc(30px * var(--esc)),6vw,calc(42px * var(--esc)))/1.06 var(--fuente);
+  --t-h1:700 clamp(calc(25px * var(--esc)),5vw,calc(34px * var(--esc)))/1.14 var(--fuente);
+  --t-h2:700 clamp(calc(19px * var(--esc)),3.6vw,calc(22px * var(--esc)))/1.2 var(--fuente);
+  --t-h3:600 calc(16.5px * var(--esc))/1.25 var(--fuente);
+  --t-body:400 calc(15.5px * var(--esc))/1.6 var(--fuente);
+  --t-small:500 calc(13px * var(--esc))/1.45 var(--fuente);
+  --t-micro:700 calc(11.5px * var(--esc))/1.3 var(--fuente);
 }
 
-@media (prefers-reduced-motion:reduce){
-  *{animation:none!important;transition:none!important;}
-}
+/* Lo que este documento mide en rem —tamaños del machote que no tienen token
+   propio— sigue a la misma escala. */
+html{font-size:calc(16px * var(--esc));}
 `;

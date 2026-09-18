@@ -1,52 +1,18 @@
 /**
- * Navegación del manual de campaña.
+ * Controles de videollamada del manual de campaña.
  *
- * No es la del deck: aquí no se pasan láminas, se lee de corrido. Lo que hace
- * falta es saber en qué sección estás (scroll-spy sobre el nav de anclas),
- * cuánto llevas leído, y los mismos controles de videollamada que el deck,
- * porque este documento también se presenta compartiendo pantalla.
+ * Lo que antes hacía este script —barra de anclas, progreso de lectura,
+ * scroll-spy— lo pone ahora la base editorial: `SCRIPT_CABECERA_BASE` lleva el
+ * progreso en la cápsula y `SCRIPT_EDITORIAL` enciende la entrada del índice
+ * lateral por la que vas pasando. Aquí queda solo lo que es de este documento
+ * y de ningún otro: se presenta compartiendo pantalla, así que el operador
+ * sube el tipo y lo pone a pantalla completa sin salir del manual.
  *
  * Sin backticks ni interpolaciones dentro del literal: cortarían la cadena y
- * el documento saldría sin navegación sin que fallara ningún test de tipos.
+ * el documento saldría sin controles sin que fallara ningún test de tipos.
  */
 export const NAVEGACION_GROWTH = `
 (function(){
-  var secciones=document.querySelectorAll('.sec');
-  if(!secciones.length) return;
-  var enlaces=document.querySelectorAll('.nav-links a');
-  var fill=document.getElementById('pf');
-
-  // ── Progreso de lectura ──────────────────────────────
-  function progreso(){
-    if(!fill) return;
-    var alto=document.documentElement.scrollHeight-window.innerHeight;
-    var pct=alto>0 ? (window.scrollY/alto)*100 : 100;
-    fill.style.width=Math.max(0,Math.min(100,pct))+'%';
-  }
-
-  // ── Scroll-spy ───────────────────────────────────────
-  // Se marca la sección cuyo inicio quedó más arriba sin pasarse del tercio
-  // superior de la ventana. Con IntersectionObserver a secas, dos secciones
-  // visibles a la vez encienden las dos y el operador no sabe dónde está.
-  function activa(){
-    var y=window.scrollY+window.innerHeight/3;
-    var actual=secciones[0];
-    for(var i=0;i<secciones.length;i++){
-      if(secciones[i].offsetTop<=y) actual=secciones[i];
-    }
-    for(var k=0;k<enlaces.length;k++){
-      var href=enlaces[k].getAttribute('href')||'';
-      enlaces[k].classList.toggle('on', href==='#'+actual.id);
-    }
-  }
-
-  var pendiente=false;
-  window.addEventListener('scroll',function(){
-    if(pendiente) return;
-    pendiente=true;
-    requestAnimationFrame(function(){ progreso(); activa(); pendiente=false; });
-  },{passive:true});
-
   // ── Escala tipográfica para pantalla compartida ──────
   var PASOS=[
     {k:'normal', v:1,    ttl:'Tamano normal'},
@@ -60,22 +26,28 @@ export const NAVEGACION_GROWTH = `
     for(var q=0;q<PASOS.length;q++) if(PASOS[q].k===guardado) p=q;
   }catch(e){}
 
+  // En pantalla chica la escala del operador estorba: manda el ancho. Los dos
+  // botones ya se ocultan por CSS bajo 900px; esto evita además que una
+  // escala guardada en el escritorio llegue agrandando el texto en celular.
+  var anchoSuficiente=window.matchMedia ? window.matchMedia('(min-width:900px)') : null;
+  function cabe(){ return !anchoSuficiente || anchoSuficiente.matches; }
+
   function aplicarEscala(){
     var paso=PASOS[p];
-    document.documentElement.style.setProperty('--esc',String(paso.v));
+    document.documentElement.style.setProperty('--esc', cabe() ? String(paso.v) : '1');
     if(esc){
       esc.textContent=String(paso.v)+'x';
       esc.title=paso.ttl;
       esc.classList.toggle('on',p>0);
     }
     try{ localStorage.setItem('wozial-esc',paso.k); }catch(e){}
-    progreso();
   }
   function moverEscala(d){
     p=Math.max(0,Math.min(PASOS.length-1,p+d));
     aplicarEscala();
   }
   if(esc) esc.onclick=function(){ p=(p+1)%PASOS.length; aplicarEscala(); };
+  if(anchoSuficiente&&anchoSuficiente.addEventListener) anchoSuficiente.addEventListener('change',aplicarEscala);
 
   // ── Pantalla completa ────────────────────────────────
   var pant=document.getElementById('pantalla');
@@ -104,7 +76,5 @@ export const NAVEGACION_GROWTH = `
   });
 
   aplicarEscala();
-  progreso();
-  activa();
 })();
 `;

@@ -60,7 +60,7 @@ describe('portal del cliente: documento aprobado (C2)', () => {
     const html = renderizarManual(
       growthCompleto as any,
       { cliente: 'Ana Villa', producto: 'Diplomado', fecha: '2026-09-15' },
-      '', false, flujo,
+      undefined, false, flujo,
       { volverHref: '/portal', volverTexto: '← Mi portal', ayudaComentarios: AYUDA },
     );
     expect(html).not.toContain('Compartir');
@@ -83,7 +83,7 @@ describe('portal del cliente: documento aprobado (C2)', () => {
     const html = renderizarManual(
       growthCompleto as any,
       { cliente: 'Ana Villa', producto: 'Diplomado', fecha: '2026-09-15' },
-      '', false, flujo,
+      undefined, false, flujo,
       { volverHref: '/portal?cliente=c1', volverTexto: '← Mi portal' },
     );
     expect(decodificar(html)).toContain('"puedeComentar":false');
@@ -145,7 +145,7 @@ describe('portal del cliente: banda «Vista previa» (fix menores, punto 3)', ()
     const conPrevia = renderizarManual(
       growthCompleto as any,
       { cliente: 'Ana Villa', producto: 'Diplomado', fecha: '2026-09-15' },
-      '', false, undefined,
+      undefined, false, undefined,
       { volverHref: '/portal', volverTexto: '← Mi portal', vistaPrevia: true },
     );
     expect(conPrevia).toContain(BANDA);
@@ -154,7 +154,7 @@ describe('portal del cliente: banda «Vista previa» (fix menores, punto 3)', ()
     const sinPrevia = renderizarManual(
       growthCompleto as any,
       { cliente: 'Ana Villa', producto: 'Diplomado', fecha: '2026-09-15' },
-      '', false, undefined,
+      undefined, false, undefined,
       { volverHref: '/portal', volverTexto: '← Mi portal' },
     );
     expect(sinPrevia).not.toContain(BANDA);

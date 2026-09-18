@@ -127,7 +127,7 @@ if (listaParaCliente) {
             cliente: cliente.nombre, producto: cliente.producto, fecha: creadoEnGrowth.toISOString().slice(0, 10),
             ciudad: cliente.ciudad ?? undefined, destino: sitio?.url, creadoEn: creadoEnGrowth,
           },
-          '', false, flujo,
+          undefined, false, flujo,
           { volverHref, volverTexto: VOLVER_TEXTO, ayudaComentarios: permiteObservaciones ? AYUDA_OBSERVACIONES : undefined, vistaPrevia },
         );
       }

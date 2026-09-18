@@ -91,6 +91,13 @@ export function cabeceraDocumento(o: {
   volver?: { href: string; texto: string };
   /** Texto de ayuda sobre el panel de comentarios — solo en el portal (C2, spec §4). */
   ayudaComentarios?: string;
+  /**
+   * Botones propios del documento, delante del switch de tema. Hasta hoy solo
+   * los usa el manual de campaña (escala de texto y pantalla completa): se
+   * presenta compartiendo pantalla en videollamada y esos dos controles son
+   * suyos, no de la base. Quien no los manda, no los tiene.
+   */
+  accionesExtra?: string;
 }): string {
   return `<header class="cabecera" id="cabecera">
   <div class="cabecera-marca">
@@ -99,6 +106,7 @@ export function cabeceraDocumento(o: {
     <span class="titulo">${escapar(o.etiqueta)} · <b>${escapar(o.cliente)}</b></span>
   </div>
   <div class="cabecera-acciones">
+    ${o.accionesExtra ?? ''}
     <div class="tema-switch" role="radiogroup" aria-label="Tema de color">
       <button type="button" role="radio" aria-checked="false" data-tema-valor="claro" aria-label="Día">${SOL}</button>
       <button type="button" role="radio" aria-checked="false" data-tema-valor="oscuro" aria-label="Noche">${LUNA}</button>

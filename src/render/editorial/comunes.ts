@@ -49,6 +49,8 @@ export function envolverDocumento(o: {
   volver?: { href: string; texto: string; vistaPrevia?: boolean };
   /** Texto de ayuda sobre el panel de comentarios — solo en el portal (C2, spec §4). */
   ayudaComentarios?: string;
+  /** Botones propios del documento en la cabecera (ver `cabeceraDocumento`). */
+  accionesExtra?: string;
 }): string {
   return `<!DOCTYPE html>
 <html lang="es-MX"><head>
@@ -69,7 +71,7 @@ ${o.volver?.vistaPrevia ? bandaVistaPrevia(o.volver.href) : ''}
 ${cabeceraDocumento({
   etiqueta: o.etiqueta, cliente: o.cliente, operador: o.operador,
   puedeEditar: o.flujo?.puedeEditar, puedeComentar: o.flujo?.puedeComentar,
-  volver: o.volver, ayudaComentarios: o.ayudaComentarios,
+  volver: o.volver, ayudaComentarios: o.ayudaComentarios, accionesExtra: o.accionesExtra,
 })}
 <div class="pagina"><div class="marco">
   <nav class="indice-lateral" aria-label="Secciones">
