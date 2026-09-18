@@ -74,7 +74,16 @@ export function renderizarContenido(
   opciones: OpcionesContenido,
 ): string {
   const base = opciones.baseArchivos;
-  const revision = opciones.revision ?? REVISION_SOLO_LECTURA;
+  const pedida = opciones.revision ?? REVISION_SOLO_LECTURA;
+
+  // **Un mes cerrado no pinta controles, aunque quien lo abra sea el cliente en
+  // su portal.** La decisión de si el mes admite decisiones es del servidor
+  // —`aceptaDecision`, src/contenido/revision.ts, y la API contesta 409—, y aquí
+  // llega resuelta en `meta.cerrado`. Unos botones que siempre fallan son peor
+  // que no tenerlos: el cliente los pulsa, se lleva un error y no entiende qué
+  // hizo mal, cuando lo único que pasa es que el mes se cerró. Apagarlos también
+  // deja fuera `SCRIPT_REVISION`, así que ese documento no habla de la API.
+  const revision: Revision = pedida.controles && meta.cerrado ? { ...pedida, controles: false } : pedida;
 
   const cuerpo = [
     seccionPortada(piezas, meta, revision),

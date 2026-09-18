@@ -19,8 +19,16 @@ import {
  * claridad y con el camino, no dejar que el cliente busque unos botones que no
  * existen y concluya que el plazo corre sin que él pueda hacer nada. El porqué
  * de que no existan está en el tipo `Revision` (./datos.ts).
+ *
+ * Y el mes **cerrado** manda sobre los dos: ahí no hay botones en ninguna de las
+ * dos pantallas, porque el servidor rechazaría la decisión (`aceptaDecision`,
+ * src/contenido/revision.ts). Decirlo es lo que evita el peor de los mensajes
+ * posibles, que es ninguno: el cliente buscando unos botones que estaban ayer.
  */
-function avisoComoDecidir(revision: Revision): string {
+function avisoComoDecidir(revision: Revision, cerrado: boolean): string {
+  if (cerrado) {
+    return `<p class="como-decidir cerrado">En este mes <strong>ya no se puede aprobar ni pedir cambios</strong>: se cerró al terminar el plazo. Si todavía necesitas cambiar algo, <strong>escríbele a tu equipo de Wozial</strong> y lo vemos.</p>`;
+  }
   if (revision.controles) {
     return `<p class="como-decidir">Abajo, en cada pieza, tienes <strong>Aprobar</strong> y <strong>Solicitar cambios</strong>. No hace falta que lo hagas todo de una sentada: cada decisión se guarda al momento y puedes volver cuando quieras.</p>`;
   }
@@ -61,7 +69,7 @@ function cifraTarjeta(valor: string, etiqueta: string): string {
 function mensajeAlCliente(meta: MetaContenido, revision: Revision): string {
   const dias = `${meta.diasRevision} ${meta.diasRevision === 1 ? 'día hábil' : 'días hábiles'}`;
   const mes = nombreMes(meta.periodo);
-  const comoDecidir = avisoComoDecidir(revision);
+  const comoDecidir = avisoComoDecidir(revision, meta.cerrado);
 
   if (!meta.compartidoEn) {
     return `<section class="mensaje-cliente aparece">
@@ -69,6 +77,25 @@ function mensajeAlCliente(meta: MetaContenido, revision: Revision): string {
       <p>Aquí vas a poder revisar pieza por pieza: el arte, el copy, el llamado a la acción y los hashtags de cada publicación del mes.</p>
       <p>El plazo de ${escapar(dias)} para revisarlo empieza a correr cuando te compartamos el mes, no antes. En cuanto eso pase, verás aquí mismo la fecha límite y el tiempo que te queda.</p>
       ${comoDecidir}
+    </section>`;
+  }
+
+  if (meta.cerrado) {
+    const cuando = meta.limiteRevision ? ` el ${fechaHora(meta.limiteRevision)}` : '';
+    return `<section class="mensaje-cliente aparece">
+      <h2>Tu contenido de ${escapar(mes)} quedó cerrado.</h2>
+      <p>El plazo de ${escapar(dias)} para revisarlo terminó${escapar(cuando)}, y con él se cerró el mes: sus piezas quedaron aprobadas y ya seguimos con la programación.</p>
+      ${comoDecidir}
+      <div class="plazo">
+        <div class="plazo-dato">
+          <span>Compartido</span>
+          <strong>${escapar(fechaHora(meta.compartidoEn))}</strong>
+        </div>
+        <div class="plazo-dato cuenta-regresiva vencido">
+          <span>Tiempo para revisar</span>
+          <strong>El plazo terminó</strong>
+        </div>
+      </div>
     </section>`;
   }
 

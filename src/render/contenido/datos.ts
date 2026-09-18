@@ -45,6 +45,22 @@ export type MetaContenido = {
   limiteRevision: Date | null;
   /** Días hábiles de revisión de este cliente, para decirlo en el mensaje. */
   diasRevision: number;
+  /**
+   * Si el mes **ya no admite decisiones del cliente**: el lote está `aprobada` y
+   * su plazo venció (`aceptaDecision`, src/contenido/revision.ts).
+   *
+   * Llega calculado y no se deduce aquí a propósito. La regla vive en un solo
+   * sitio —el mismo que contesta el 409 de la API— y el documento se limita a
+   * pintar lo que esa regla dijo: si lo dedujera por su cuenta de `estado` y
+   * `limite_revision`, tendríamos dos versiones de «este mes está cerrado» que
+   * pueden desincronizarse, y la que vería el cliente sería la equivocada.
+   *
+   * No es lo mismo que «el lote está aprobada». Un mes aprobado con el plazo
+   * vivo —el cliente aprobó todo por su cuenta y todavía puede arrepentirse de
+   * una pieza— **no** está cerrado y conserva sus controles; uno aprobado sin
+   * fecha límite, tampoco. Lo que cierra es el plazo, no el estado.
+   */
+  cerrado: boolean;
 };
 
 /**

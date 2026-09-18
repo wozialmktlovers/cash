@@ -324,6 +324,28 @@ describe('compartirLote', () => {
     expect(espia.cambiosLote).toEqual([]);
   });
 
+  // El quinto caso: el mes aprobado al que `registrarRevision` le APAGÓ el
+  // plazo. Ese no está cerrado —sin fecha, el cliente todavía puede retirar una
+  // aprobación—, y compartirlo otra vez es lo que lo cierra. La secuencia
+  // completa está en `tests/contenido/plazo-mes-aprobado.test.ts`.
+  it('un lote aprobado SIN fecha límite sí recibe una nueva, y sigue aprobado', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'aprobada' }];
+    const compartidoEn = new Date('2026-09-01T20:00:00.000Z');
+    const r = await compartirLote(
+      { ...base, estado: 'aprobada', compartidoEn, limiteRevision: null }, 2, VIERNES,
+    );
+
+    expect(r.arrancoElPlazo).toBe(true);
+    // No vuelve a `en_revision`: un mes aprobado que caducara dejaría una
+    // constancia de auto-aprobación diciendo que el cliente no respondió.
+    expect(r.estado).toBe('aprobada');
+    expect(r.limiteRevision).toEqual(limiteRevision(VIERNES, 2));
+    expect(espia.cambiosLote[0]).toMatchObject({
+      compartidoEn: VIERNES, limiteRevision: limiteRevision(VIERNES, 2),
+    });
+    expect(espia.cambiosLote[0]?.estado).toBeUndefined();
+  });
+
   it('un lote con cambios SÍ reinicia el plazo: es una ronda nueva', async () => {
     espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];
     const viejo = new Date('2026-09-01T20:00:00.000Z');

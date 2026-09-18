@@ -63,6 +63,7 @@ export function metaFalsa(extra: Partial<MetaContenido> = {}): MetaContenido {
     compartidoEn: new Date('2026-09-16T18:00:00.000Z'),
     limiteRevision: new Date('2026-09-19T05:59:59.999Z'),
     diasRevision: 2,
+    cerrado: false,
     ...extra,
   };
 }

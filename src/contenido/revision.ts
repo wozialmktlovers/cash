@@ -98,14 +98,26 @@ export function textoComentarioCambios(numero: number, nota: string): string {
 }
 
 /**
- * Por qué un lote ya no admite decisiones: se le venció el plazo y quedó
- * aprobado solo (diseño §6). Se dice con la fecha exacta y sin reproche —el
- * plazo estaba anunciado en el propio entregable, con cuenta regresiva— y con
- * una salida: escribirle al equipo.
+ * Por qué un lote ya no admite decisiones: **se le terminó el plazo** y el mes
+ * quedó cerrado con todo aprobado (diseño §6). Se dice con la fecha exacta y sin
+ * reproche —el plazo estaba anunciado en el propio entregable, con cuenta
+ * regresiva— y con una salida: escribirle al equipo.
+ *
+ * **Lo que NO dice, y es deliberado: quién aprobó el mes.** A este estado se
+ * llega por dos caminos y el texto tiene que ser cierto en los dos: el mes que
+ * se auto-aprobó porque nadie contestó, y el mes que el cliente aprobó él mismo
+ * pieza por pieza y cuyo plazo venció después. Decirle a este segundo que «el
+ * contenido quedó aprobado» al terminar el plazo sería contarle su propia
+ * aprobación como un vencimiento. Lo que cerró la puerta es el plazo, y eso es
+ * lo único que se afirma.
+ *
+ * El caso sin fecha es defensa y no debería ocurrir: `aceptaDecision` admite
+ * siempre un lote sin `limite_revision`, así que nunca llega aquí con `null`. Si
+ * llegara, la frase se queda sin fecha en vez de inventar una.
  */
 export function razonPlazoVencido(limite: Date | null): string {
   const cuando = limite ? ` el ${fechaHora(limite)}` : '';
-  return `El plazo de revisión de este mes terminó${cuando} y el contenido quedó aprobado.` +
+  return `El plazo de revisión de este mes terminó${cuando} y el mes quedó cerrado, con todo aprobado.` +
     ' Si todavía necesitas cambiar algo, escríbele a tu equipo de Wozial y lo vemos.';
 }
 
@@ -115,13 +127,34 @@ type LoteFresco = { estado: Estado; compartidoEn: Date | null; limiteRevision: D
 /**
  * ¿Este lote sigue admitiendo una decisión del cliente?
  *
- * Es el cierre del riesgo que dejó abierto C3: **un lote que se auto-aprobó
- * por vencimiento no acepta cambios a destiempo**. La condición es la del
- * vencimiento y no «está aprobado» a secas, para no cerrarle la puerta al
- * cliente que aprobó todo por su cuenta y, dentro de su plazo, se arrepiente de
- * una pieza: ahí el lote también está `aprobada`, pero el plazo sigue siendo
- * suyo y `estadoTrasComentarioCliente` (src/flujo/reglas.ts) ya dice que en
- * esta etapa una observación del cliente reabre lo aprobado.
+ * La regla, en una línea: **el cliente puede retractarse de una pieza mientras
+ * su plazo siga vivo.** Lo que cierra la puerta es el plazo, no el estado: un
+ * lote `aprobada` es un mes con todas sus piezas aprobadas, y eso no dice nada
+ * de si al cliente todavía le corre el reloj. Los tres casos, que es lo que
+ * fija `tests/contenido/plazo-mes-aprobado.test.ts`:
+ *
+ * - **Límite en el futuro:** acepta. Es el cierre del riesgo de C3 hecho al
+ *   revés: el cliente que aprobó todo por su cuenta y se arrepiente de una pieza
+ *   dentro de su plazo sigue a tiempo, y `estadoTrasComentarioCliente`
+ *   (src/flujo/reglas.ts) ya dice que en esta etapa una observación del cliente
+ *   reabre lo aprobado. El mes vuelve al estado que le toque por sus piezas.
+ * - **Límite vencido:** no acepta. Es el riesgo que C3 dejó abierto —un mes
+ *   auto-aprobado por vencimiento no admite cambios a destiempo— y también el
+ *   mes que el cliente aprobó entero y cuyo plazo venció después. En los dos, el
+ *   plazo se acabó de verdad; `razonPlazoVencido` lo dice sin atribuirle a nadie
+ *   una aprobación que no hizo.
+ * - **Límite nulo:** acepta. Un lote sin fecha es uno al que `registrarRevision`
+ *   le APAGÓ el plazo porque se consumió mientras el mes esperaba al operador
+ *   (ver la explicación larga de abajo). Ese reloj se detuvo a favor del cliente
+ *   y nunca venció para él, así que oponérselo sería cobrarle una espera ajena.
+ *
+ * **Sí: un mes aprobado sin fecha queda reabrible mientras no la tenga, y es lo
+ * correcto.** No es un descuido ni un estado al que se llegue solo: se llega
+ * porque el equipo dejó correr el reloj en su turno, y mientras eso no se
+ * arregle el cliente conserva su derecho a opinar. El arreglo es del equipo y ya
+ * existe: **volver a compartir el mes** le pone fecha nueva y, cuando esa fecha
+ * pasa, la puerta se cierra sola por el caso de arriba (`compartirLote`,
+ * ./servicio.ts, sabe arrancar un plazo también desde este estado).
  *
  * Quien llama tiene que haber corrido antes `asegurarLotesAlDia`: es lo que
  * convierte un `en_revision` vencido en el `aprobada` que esto mira.
@@ -160,16 +193,20 @@ export function aceptaDecision(lote: LoteFresco, ahora: Date): boolean {
  * están y vuelve a `con_cambios` en cuanto una se devuelve, sin esperar al
  * resto. Después, `sincronizarEtapa` copia ese estado a `cliente_etapas`.
  *
- * ── El lote puede volver a `en_revision` por aquí, y el plazo se apaga ────
+ * ── El lote puede salir de `con_cambios` por aquí, y el plazo se apaga ────
  *
- * Hay un caso en que este recálculo devuelve el lote a `en_revision` desde
- * `con_cambios`: el cliente aprueba él mismo la pieza que había devuelto y no
- * queda ninguna en `cambios`, pero sí pendientes. Si el plazo de aquella ronda
- * ya venció —y suele haber vencido, porque un mes `con_cambios` no se
- * auto-aprueba y el reloj corrió igual—, el lote quedaba `en_revision` con una
- * fecha límite muerta, y el siguiente barrido aprobaba en el acto las piezas que
- * el cliente aún no había mirado, con constancia de que «no respondió» justo
- * cuando acababa de responder.
+ * Hay un caso en que este recálculo saca el lote de `con_cambios` sin que medie
+ * un reparto: el cliente **se retracta** y aprueba él mismo la pieza que había
+ * devuelto, de modo que no queda ninguna en `cambios`. El destino depende de lo
+ * que quede sin mirar: con piezas pendientes, `en_revision`; sin ninguna,
+ * `aprobada`. Si el plazo de aquella ronda ya venció —y suele haber vencido,
+ * porque un mes `con_cambios` no se auto-aprueba y el reloj corrió igual—, el
+ * lote se quedaba con una fecha límite muerta, y eso hacía daño por los dos
+ * destinos: el `en_revision` dejaba que el siguiente barrido aprobara en el acto
+ * las piezas que el cliente aún no había mirado, con constancia de que «no
+ * respondió» justo cuando acababa de responder; y el `aprobada` le cerraba la
+ * puerta a golpe de `aceptaDecision`, con un mensaje que le contaba su propia
+ * aprobación como un vencimiento.
  *
  * Buena parte de esos casos ya no llegan hasta aquí: si el operador atendió la
  * petición, al hacerlo marcó `contenido_actualizado_en`
@@ -183,13 +220,15 @@ export function aceptaDecision(lote: LoteFresco, ahora: Date): boolean {
  * sino **«¿corrió el reloj mientras era mi turno?»**: el mes estuvo esperando al
  * operador y el plazo se consumió con la pelota del otro lado.
  *
- * Así que ahí el plazo se apaga: el lote queda `en_revision` con
- * `limite_revision` **nulo**. Un lote sin fecha no se auto-aprueba
- * —`loteAutoAprobado` lo descarta en su primera línea, y el prefiltro de
- * `autoAprobarVencidos` ni lo trae— y `aceptaDecision` lo sigue admitiendo, así
- * que el cliente continúa revisando las piezas que le quedan. Para que el mes
- * vuelva a tener fecha hay que repartirlo otra vez, que es quien arranca un
- * plazo (`compartirLote`, ./servicio.ts, sabe hacerlo desde este estado).
+ * Así que ahí el plazo se apaga: el lote se queda con `limite_revision`
+ * **nulo**, vaya a `en_revision` o a `aprobada`. Un lote sin fecha no se
+ * auto-aprueba —`loteAutoAprobado` lo descarta en su primera línea, y el
+ * prefiltro de `autoAprobarVencidos` ni lo trae— y `aceptaDecision` lo sigue
+ * admitiendo, así que el cliente continúa opinando: sobre las piezas que le
+ * quedan si las hay, o retractándose de una que aprobó si ya no queda ninguna.
+ * Para que el mes vuelva a tener fecha hay que repartirlo otra vez, que es quien
+ * arranca un plazo (`compartirLote`, ./servicio.ts, sabe hacerlo desde los dos
+ * estados).
  *
  * Se descartó la alternativa —devolver el mes a `en_proceso` con el plazo
  * limpio, como hace `refrescarLote`—: es coherente, pero le quita el mes de las
@@ -284,13 +323,23 @@ export async function registrarRevision(o: {
 
     // El plazo que se consumió mientras el mes era del operador no revive con
     // la retractación del cliente (ver la explicación larga de arriba). La
-    // condición es estrecha a propósito: solo el regreso a `en_revision` desde
-    // `con_cambios` —el único que devuelve la pelota al cliente sin pasar por
-    // un reparto— y solo si la fecha que arrastra ya está vencida. Si todavía
-    // corre, es el plazo de esta misma ronda y sigue siendo bueno. La
-    // comparación es estricta, como la de `loteAutoAprobado`: el instante
-    // exacto del límite todavía es del cliente.
-    const plazoConsumidoEnTurnoAjeno = estadoLote === 'en_revision'
+    // condición es estrecha a propósito: solo la SALIDA de `con_cambios` —el
+    // único estado que tiene la pelota del lado del operador y del que se sale
+    // por aquí, sin pasar por un reparto— y solo si la fecha que arrastra ya
+    // está vencida. Si todavía corre, es el plazo de esta misma ronda y sigue
+    // siendo bueno. La comparación es estricta, como la de `loteAutoAprobado`:
+    // el instante exacto del límite todavía es del cliente.
+    //
+    // **Los dos destinos cuentan, y el segundo es la puerta hermana.** Si al
+    // retractarse el cliente quedan piezas pendientes, el mes vuelve a
+    // `en_revision`; si no queda ninguna, `estadoLoteSegunPiezas` deduce
+    // `aprobada`. Mirar solo el primero dejaba el segundo `aprobada` con el
+    // límite muerto, y a partir de ahí `aceptaDecision` le cerraba la puerta
+    // diciéndole que el mes «quedó aprobado» al vencer el plazo: ni se
+    // auto-aprobó —lo aprobó él, pieza por pieza, un minuto antes— ni ese plazo
+    // venció en su turno. El reloj se detuvo a su favor en los dos casos, así
+    // que se apaga en los dos. Lo cubre `tests/contenido/plazo-mes-aprobado.test.ts`.
+    const plazoConsumidoEnTurnoAjeno = (estadoLote === 'en_revision' || estadoLote === 'aprobada')
       && fresco.estado === 'con_cambios'
       && fresco.limiteRevision !== null
       && ahora.getTime() > fresco.limiteRevision.getTime();

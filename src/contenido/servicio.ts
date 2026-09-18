@@ -354,13 +354,15 @@ export type ResultadoCompartir = {
  *   auto-aprobación a merced de cuántas veces se pulse «Compartir»: bastaría
  *   con recompartir cada dos días para que el mes no venza nunca. El plazo lo
  *   arranca el reparto del mes, no cada copia del enlace.
- * - **`aprobada`**: compartir entrega una copia de lectura de un mes cerrado.
- *   Reabrir en silencio una aprobación —del cliente o por vencimiento— desde un
- *   botón que solo dice «Compartir» sería lo contrario de lo que espera quien
- *   lo pulsa. Si hay que rehacer un mes aprobado, se abre trabajo nuevo, no se
- *   recomparte. Y cuando ese trabajo nuevo llega —una pieza de más o de menos—,
- *   es `refrescarLote` quien devuelve el mes a `en_proceso` y le borra el plazo;
- *   a partir de ahí este botón vuelve a arrancarlo, que es el primer caso.
+ * - **`aprobada` con su fecha límite puesta**: compartir entrega una copia de
+ *   lectura de un mes cerrado. Reabrir en silencio una aprobación —del cliente o
+ *   por vencimiento— desde un botón que solo dice «Compartir» sería lo contrario
+ *   de lo que espera quien lo pulsa. Si hay que rehacer un mes aprobado, se abre
+ *   trabajo nuevo, no se recomparte. Y cuando ese trabajo nuevo llega —una pieza
+ *   de más o de menos—, es `refrescarLote` quien devuelve el mes a `en_proceso` y
+ *   le borra el plazo; a partir de ahí este botón vuelve a arrancarlo, que es el
+ *   primer caso. El `aprobada` **sin** fecha es otra cosa y tiene su propio
+ *   párrafo abajo: ese mes no está cerrado, y compartirlo es lo que lo cierra.
  *
  * `con_cambios` sí reinicia, y es el caso que justifica la regla: el cliente ya
  * contestó, el operador rehízo lo que le pidieron y lo que se comparte es una
@@ -406,6 +408,22 @@ export type ResultadoCompartir = {
  * enlace más que no mueve nada. Recompartir dos veces seguidas no alarga un
  * plazo vivo: hace falta que el sistema lo haya apagado antes, y eso solo pasa
  * una vez por retractación.
+ *
+ * ── Y el quinto: el mes APROBADO al que se le apagó el plazo ──────────────
+ *
+ * El mismo apagón tiene otro destino. Si al retractarse el cliente no queda
+ * ninguna pieza pendiente, `registrarRevision` deja el lote `aprobada` —lo
+ * aprobó él, pieza por pieza— y también sin `limite_revision`. Un mes así está
+ * aprobado pero **no cerrado**: `aceptaDecision` admite siempre un lote sin
+ * fecha, así que el cliente puede seguir cambiando de opinión mientras no la
+ * tenga, que es lo correcto —el reloj se detuvo porque el equipo dejó correr el
+ * suyo—, pero no puede quedarse así para siempre.
+ *
+ * Compartirlo otra vez es el remedio, y aquí hace algo distinto que en los otros
+ * cuatro casos: estampa la fecha y **deja el mes `aprobada`**. El porqué está
+ * junto al código que lo escribe, y se resume en que mandarlo a `en_revision`
+ * acabaría con una constancia de auto-aprobación diciendo que el cliente no
+ * respondió sobre un mes que acababa de aprobar entero.
  *
  * ── La ronda nueva también reinicia las PIEZAS ────────────────────────────
  *
@@ -479,9 +497,18 @@ export async function compartirLote(
   // con fecha.
   const sinPlazo = lote.estado === 'en_revision' && lote.limiteRevision === null;
 
+  // Y el quinto, la otra mitad de ese mismo apagón: `aprobada` sin fecha
+  // límite. Es el mes que el cliente terminó de aprobar al retractarse, con el
+  // plazo ya apagado porque se había consumido esperando al operador. Vale lo
+  // mismo que el cuarto —solo `registrarRevision` deja un lote así, y ningún
+  // reparto pone un `aprobada` sin fecha—, con un matiz que cambia el efecto:
+  // aquí el mes NO vuelve a `en_revision` (el porqué, más abajo, donde escribe).
+  const aprobadoSinPlazo = lote.estado === 'aprobada' && lote.limiteRevision === null;
+
   const arranca = lote.estado === 'en_proceso'
     || lote.estado === 'con_cambios'
-    || (lote.estado === 'en_revision' && (contenidoNuevo || sinPlazo));
+    || (lote.estado === 'en_revision' && (contenidoNuevo || sinPlazo))
+    || aprobadoSinPlazo;
   if (!arranca) {
     return {
       estado: lote.estado,
@@ -495,6 +522,38 @@ export async function compartirLote(
     ? (diasRevision as number)
     : DIAS_REVISION_POR_OMISION;
   const limite = limiteRevision(ahora, dias);
+
+  // ── El quinto caso: cerrar un mes aprobado al que se le apagó el plazo ───
+  //
+  // El mes ya está aprobado por el cliente, pieza por pieza; lo que le falta no
+  // es una ronda de revisión, es una fecha a partir de la cual deje de poder
+  // cambiar de opinión (`aceptaDecision`, ./revision.ts, admite siempre un lote
+  // sin límite). Así que esto estampa el plazo y **deja el lote `aprobada`**, en
+  // vez de mandarlo a `en_revision` como los otros cuatro.
+  //
+  // La diferencia no es cosmética. Un `en_revision` con todas sus piezas
+  // aprobadas sí vencería, y al vencer `autoAprobarVencidos` dejaría en
+  // `etapa_eventos` una constancia diciendo que «el cliente no respondió» y que
+  // «nadie del lado del cliente revisó estas piezas» sobre un mes que el cliente
+  // acababa de aprobar entero: exactamente el historial indefendible que esta
+  // familia de arreglos existe para evitar. Quedándose `aprobada`, no hay nada
+  // que auto-aprobar —`loteAutoAprobado` solo mira `en_revision`— y la puerta se
+  // cierra sola en cuanto la fecha pasa.
+  //
+  // Tampoco reabre la puerta del anti-juego (ver arriba, el caso `aprobada`):
+  // esto no reabre una aprobación, la CIERRA, y solo se dispara sobre el mes al
+  // que el sistema le quitó la fecha. Un `aprobada` con su límite puesto —el
+  // normal, el cerrado— sigue cayendo en el `if (!arranca)` de arriba, y
+  // compartirlo sigue siendo repartir una copia de lectura.
+  if (aprobadoSinPlazo) {
+    await ejecutor.update(contenidoLotes)
+      .set({ compartidoEn: ahora, limiteRevision: limite, actualizadoEn: ahora })
+      .where(eq(contenidoLotes.id, lote.id));
+    // El estado no se mueve, pero la etapa se sincroniza igual: es barata y el
+    // lote activo del cliente pudo cambiar por otra vía.
+    await sincronizarEtapa(lote.clientId, ejecutor);
+    return { estado: 'aprobada', compartidoEn: ahora, limiteRevision: limite, arrancoElPlazo: true };
+  }
 
   // Primero las piezas de la ronda anterior, y solo las que el cliente devolvió.
   await ejecutor.update(contenidoPiezas)

@@ -4,6 +4,7 @@ import { leerShareLink, resolverShareLink, type DocumentoTipo } from '@/lib/shar
 import { esUuid } from '@/lib/visibilidad';
 import { DIAS_REVISION_POR_OMISION } from '@/contenido/reglas';
 import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
+import { aceptaDecision } from '@/contenido/revision';
 import { renderizarInvestigacion } from '@/render/investigacion/documento';
 import { renderizarManual } from '@/render/growth/manual';
 import { renderizarPilares } from '@/render/pilares/documento';
@@ -110,6 +111,12 @@ async function entregableDelLote(loteId: string, token: string): Promise<{ html:
     compartidoEn: lote.compartidoEn,
     limiteRevision: lote.limiteRevision,
     diasRevision: c.diasRevision ?? DIAS_REVISION_POR_OMISION,
+    // Aquí no hay controles que apagar —este documento es de solo lectura
+    // siempre—, pero el mensaje de la portada sí cambia: un mes cerrado no puede
+    // seguir anunciando un plazo que ya terminó. La regla es la misma que usa el
+    // portal y que contesta la API (`aceptaDecision`), y se pregunta después de
+    // `asegurarLotesAlDia`, que es quien deja el estado al día.
+    cerrado: !aceptaDecision(lote, new Date()),
   }, { baseArchivos: baseArchivosPublica(token) });
 
   return { html, slug: slugificar(c.nombre) };

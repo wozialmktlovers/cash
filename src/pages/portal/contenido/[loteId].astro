@@ -21,6 +21,7 @@ import Icono from '@/components/Icono.astro';
 import { db, contenidoLotes, contenidoPiezas } from '@/db';
 import { DIAS_REVISION_POR_OMISION } from '@/contenido/reglas';
 import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
+import { aceptaDecision } from '@/contenido/revision';
 import { loteVisible } from '@/lib/visibilidad';
 import { nombrePeriodo } from '@/lib/ui/periodo';
 import { renderizarContenido, type PiezaEntregable } from '@/render/contenido/documento';
@@ -88,6 +89,13 @@ try {
     compartidoEn: lote.compartidoEn,
     limiteRevision: lote.limiteRevision,
     diasRevision: cliente.diasRevision ?? DIAS_REVISION_POR_OMISION,
+    // Si el mes ya no admite decisiones, y por la MISMA regla que contesta la
+    // API (`aceptaDecision`): así el documento no le ofrece unos botones que el
+    // servidor va a rechazar. Se pregunta después de `asegurarLotesAlDia`, que
+    // es quien convierte un `en_revision` vencido en el `aprobada` que la regla
+    // mira. Un mes aprobado con el plazo vivo —o sin fecha— no está cerrado y
+    // conserva sus controles: el cliente todavía puede cambiar de opinión.
+    cerrado: !aceptaDecision(lote, new Date()),
   }, {
     // Absoluta y no relativa al documento (a diferencia del enlace público):
     // esta página no depende de que la URL termine sin barra, así que no hace

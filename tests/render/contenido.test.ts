@@ -88,6 +88,30 @@ describe('entregable del mes · portada', () => {
     expect(marcado(html)).not.toContain('data-limite=');
     expect(marcado(html)).not.toContain('data-cuenta');
   });
+
+  // El mes cerrado: `aprobada` con el plazo ya vencido (`aceptaDecision`,
+  // src/contenido/revision.ts). Aquí el cliente ya no puede decidir nada, así
+  // que el documento no puede seguir diciéndole «tienes 2 días hábiles» con la
+  // cuenta regresiva en cero — ni ofrecerle unos botones que la API rechaza.
+  it('cerrado: lo dice con su fecha, sin cuenta regresiva y sin prometer plazo', () => {
+    const html = render(piezasFalsas(), metaFalsa({ cerrado: true }));
+    // Con `marcado`: el script en línea también dice «El plazo terminó» al
+    // agotarse la cuenta, y aquí lo que importa es que lo diga el documento.
+    expect(marcado(html)).toContain('El plazo terminó');
+    expect(html).toContain('18 sep 2026, 11:59 p.m.');
+    expect(html).toContain('escríbele a tu equipo');
+    expect(html).not.toContain('damos el mes por aprobado');
+    expect(marcado(html)).not.toContain('data-limite=');
+    expect(marcado(html)).not.toContain('data-cuenta');
+  });
+
+  // Y lo que NO es un mes cerrado: el que el cliente aprobó dentro de su plazo.
+  // Ese sigue teniendo su fecha viva, así que conserva la cuenta regresiva.
+  it('aprobado pero con el plazo vivo sigue siendo un mes normal', () => {
+    const html = render(piezasFalsas(), metaFalsa());
+    expect(html).toContain('data-cuenta');
+    expect(html).not.toContain('El plazo de revisión de este mes terminó');
+  });
 });
 
 describe('entregable del mes · 01 vista del feed', () => {
@@ -256,6 +280,40 @@ describe('entregable del mes · revisión del cliente', () => {
 
   it('el enlace público no lleva ni una línea que hable de la API de revisión', () => {
     expect(render()).not.toContain('/api/contenido/piezas/');
+  });
+
+  /**
+   * Un mes cerrado no pinta controles **aunque haya sesión**: el servidor
+   * rechaza la decisión con un 409, y unos botones que siempre fallan son peor
+   * que no tenerlos. Es cortesía de la pantalla, no el candado — el candado es
+   * `aceptaDecision` (src/contenido/revision.ts).
+   */
+  it('el mes cerrado no trae controles ni en el portal, y dice por qué', () => {
+    const html = renderizarContenido(piezasFalsas(), metaFalsa({ cerrado: true }), {
+      baseArchivos: BASE, revision: { controles: true, accesoHref: '/portal' },
+    });
+    expect(marcado(html)).not.toContain('data-revision');
+    expect(marcado(html)).not.toContain('Solicitar cambios');
+    expect(html).not.toContain('/api/contenido/piezas/');
+    expect(html).toContain('class="como-decidir cerrado"');
+    expect(html).toContain('ya no se puede aprobar ni pedir cambios');
+  });
+
+  /**
+   * Y el contrario, que es la decisión del dueño: un mes **aprobado con el
+   * plazo vivo** conserva sus controles. El cliente que aprobó todo por su
+   * cuenta y se arrepiente de una pieza sigue a tiempo, y el documento tiene que
+   * dejarle hacerlo en vez de felicitarlo y esconder los botones.
+   */
+  it('el mes aprobado con el plazo vivo conserva sus controles', () => {
+    const html = renderizarContenido(
+      piezasFalsas().map((p) => ({ ...p, estadoCliente: 'aprobada' as const, notaCliente: null })),
+      metaFalsa(),
+      { baseArchivos: BASE, revision: { controles: true, accesoHref: '/portal' } },
+    );
+    expect(html).toContain('data-revision');
+    expect(html).toContain('Solicitar cambios');
+    expect(html).toContain('6 de 6 aprobadas');
   });
 
   it('con controles, cada pieza trae Aprobar y Solicitar cambios con su id', () => {
