@@ -57,7 +57,7 @@ p{max-width:68ch;}
    El anillo de foco va hacia dentro porque .cabecera-marca recorta con
    overflow:hidden y el común (hacia fuera) quedaría cortado arriba y abajo;
    el relleno vertical le da sitio sin mover el logo de lado. */
-.cabecera-inicio{display:flex;align-items:center;flex-shrink:0;padding-block:4px;border-radius:6px;text-decoration:none;}
+.cabecera-inicio{display:flex;align-items:center;flex-shrink:0;min-height:44px;padding-block:4px;border-radius:6px;text-decoration:none;}
 .cabecera-inicio:focus-visible{box-shadow:inset var(--foco);}
 .cabecera .logo{height:24px;width:auto;flex-shrink:0;filter:brightness(0);transition:height .2s ease;}
 .cabecera.compacta .logo{height:20px;}
@@ -66,11 +66,58 @@ p{max-width:68ch;}
 .cabecera .titulo b{color:var(--tinta);font-weight:600;}
 
 .cabecera-acciones{display:flex;align-items:center;gap:8px;flex-shrink:0;}
-.cabecera-compartir{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:var(--r-pill);
-  border:1px solid var(--linea);background:var(--gris);color:var(--tinta);font:var(--t-small);font-weight:600;cursor:pointer;}
-.cabecera-compartir:hover{border-color:var(--rosa);color:var(--rosa);}
-.cabecera-compartir svg{width:16px;height:16px;flex-shrink:0;}
-@media (max-width:520px){.cabecera-compartir{width:44px;padding:0;justify-content:center;}.cabecera-compartir .texto-compartir{display:none;}}
+.cabecera-accion{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:var(--r-pill);
+  border:1px solid var(--linea);background:var(--gris);color:var(--tinta);font:var(--t-small);font-weight:600;cursor:pointer;white-space:nowrap;}
+.cabecera-accion:hover{border-color:var(--rosa);color:var(--rosa);}
+.cabecera-accion svg{width:16px;height:16px;flex-shrink:0;}
+
+/* Menú de acciones del documento. En escritorio no existe a la vista: el
+   botón de tres puntos va oculto y el contenedor se pinta en línea con el
+   switch de tema primero, igual que antes. */
+.cabecera-menu{display:none;flex-shrink:0;width:44px;height:44px;border-radius:50%;align-items:center;justify-content:center;position:relative;
+  border:1px solid var(--linea);background:var(--gris);color:var(--tinta);cursor:pointer;}
+.cabecera-menu:hover{border-color:var(--rosa);color:var(--rosa);}
+.cabecera-menu svg{width:18px;height:18px;}
+.menu-acciones{display:flex;align-items:center;gap:8px;}
+.menu-tema{display:contents;}
+.menu-tema-texto{display:none;}
+.menu-acciones .tema-switch{order:-1;}
+/* La barra de progreso vive en su propia pista recortada: así la cápsula
+   puede dejar de recortar (overflow visible en celular) para que el menú
+   se despliegue debajo sin que la barra se salga de las esquinas. */
+.cabecera-pista{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none;}
+
+/* Pantallas angostas: las acciones del documento (editar, versiones,
+   comentar, comentarios, compartir link) y el switch de tema se recogen en un desplegable
+   bajo la cápsula. Fuera quedan volver, el logo, el título y el botón. El
+   corte está en 1199 px porque con todas las acciones (más «Salir de
+   comentar» y los dos controles de videollamada del manual) la fila pide
+   unos 850 px más logo y título: por debajo de ahí el logo se salía. */
+@media (max-width:1199px){
+  .cabecera{overflow:visible;}
+  /* Etiqueta y cliente en dos renglones: en una sola línea, a 375 px, el
+     nombre del cliente quedaba cortado a las pocas letras. */
+  .cabecera .titulo{display:flex;flex-direction:column;min-width:0;line-height:1.25;}
+  .cabecera .titulo > *{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .cabecera .titulo-sep{display:none;}
+  .cabecera-menu{display:inline-flex;}
+  .menu-acciones{position:absolute;top:calc(100% + 8px);right:0;z-index:62;display:none;flex-direction:column;align-items:stretch;gap:4px;
+    width:min(280px,calc(100vw - 24px));max-height:calc(100vh - 120px);overflow-y:auto;padding:8px;
+    background:var(--tarjeta);border:1px solid var(--linea);border-radius:var(--r);box-shadow:var(--sombra);}
+  .cabecera.menu-abierto .menu-acciones{display:flex;}
+  .menu-acciones .cabecera-accion{width:100%;justify-content:flex-start;border-radius:var(--r-sm);border-color:transparent;background:transparent;padding:0 12px;font:var(--t-body);font-weight:600;}
+  .menu-acciones .cabecera-accion:hover{background:var(--gris);}
+  .menu-acciones .texto-compartir{display:inline;}
+  .menu-acciones .cabecera-compartir svg{display:none;}
+  .menu-tema{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 4px 4px 12px;margin-top:4px;border-top:1px solid var(--linea);}
+  /* En el portal sin acciones el tema va solo: sin filete encima. */
+  .menu-tema:first-child{margin-top:0;padding-top:4px;border-top:none;}
+  .menu-tema-texto{display:inline;font:var(--t-small);font-weight:600;color:var(--suave);}
+  .menu-acciones .tema-switch{order:0;}
+  /* Un modo activo (Editar o Comentar) queda escondido dentro del menú:
+     un punto rosa en el botón avisa que hay algo encendido ahí dentro. */
+  html.modo-edicion .cabecera-menu::after,html.modo-comentar .cabecera-menu::after{content:"";position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%;background:var(--rosa);}
+}
 
 /* Enlace de vuelta al portal del cliente (C2, spec §4): botón icono fijo de
    44 px, nunca texto — siempre en la cabecera angosta del portal, así que
@@ -151,7 +198,10 @@ body[data-vista-previa] .cabecera{top:54px;}
   color:var(--tinta);text-decoration:none;font:var(--t-small);font-weight:600;}
 .accesos a:hover{border-color:var(--rosa);color:var(--rosa);}
 
-.seccion{padding:72px 0;display:grid;gap:36px;}
+/* minmax(0,1fr) y no la columna implícita (auto): con auto, una fila de
+   pestañas más ancha que la pantalla (sección «detalle» de la investigación)
+   estiraba la sección y, con ella, toda la página a 443 px en un celular. */
+.seccion{padding:72px 0;display:grid;grid-template-columns:minmax(0,1fr);gap:36px;}
 .seccion.alterna{background:var(--gris);box-shadow:0 0 0 100vmax var(--gris);clip-path:inset(0 -100vmax);}
 .seccion-cabeza{display:flex;gap:24px;align-items:flex-start;}
 .seccion-num{font:700 clamp(44px,5vw,76px)/.9 var(--fuente);color:var(--linea);letter-spacing:-0.04em;}
@@ -238,10 +288,25 @@ html.modo-edicion [data-editable]:focus-visible{outline-style:solid;}
   background:transparent;color:inherit;font:inherit;font-weight:600;cursor:pointer;}
 .barra-edicion-botones .barra-guardar{background:var(--rosa);border-color:var(--rosa);color:var(--sobre-acento);}
 .barra-edicion-botones button:hover{opacity:.85;}
+/* Celular: barra de lado a lado, con el contador a la izquierda, los dos
+   botones a la derecha y el estado (si hay) en un renglón debajo. Centrada y con flex-wrap se
+   partía en dos renglones y quedaba como una burbuja deforme. */
+@media (max-width:640px){
+  .barra-edicion:not([hidden]){left:12px;right:12px;translate:none;display:grid;grid-template-columns:minmax(0,1fr) auto;
+    column-gap:10px;row-gap:0;padding:8px 8px 8px 16px;border-radius:var(--r);}
+  .barra-edicion #barra-edicion-contador{grid-column:1;grid-row:1;align-self:center;}
+  .barra-edicion-botones{grid-column:2;grid-row:1;}
+  .barra-edicion-estado{grid-column:1 / span 2;grid-row:2;padding-top:4px;font-size:.8rem;}
+  .barra-edicion-estado:empty{display:none;}
+  .barra-edicion-botones button{padding:0 14px;}
+}
 @media print{.barra-edicion{display:none!important;}}
 
 dialog.dialogo-versiones{width:min(520px,calc(100vw - 32px));border:1px solid var(--linea);border-radius:var(--r);
   padding:24px;display:grid;gap:14px;background:var(--tarjeta);color:var(--texto);box-shadow:var(--sombra);}
+/* margin:auto de vuelta: el reset «*{margin:0}» le quitaba al <dialog> el
+   centrado del navegador y lo dejaba pegado a la esquina de arriba. */
+dialog.dialogo-versiones{margin:auto;max-height:calc(100vh - 32px);overflow-y:auto;}
 dialog.dialogo-versiones:not([open]){display:none;}
 dialog.dialogo-versiones::backdrop{background:color-mix(in srgb,var(--tinta) 45%,transparent);}
 .dialogo-cabecera{display:flex;align-items:center;justify-content:space-between;gap:12px;}
@@ -295,6 +360,18 @@ dialog.dialogo-comentarios::backdrop{background:transparent;}
 
 .recuadro-comentario{position:fixed;z-index:80;width:min(320px,calc(100vw - 32px));display:grid;gap:10px;padding:16px;
   border-radius:var(--r);border:1px solid var(--linea);background:var(--tarjeta);color:var(--texto);box-shadow:var(--sombra);}
+/* Aviso de modo Comentar en celular: ahí «Salir de comentar» vive dentro
+   del menú de acciones, y sin él no habría salida a la vista. */
+.aviso-comentar{display:none;}
+@media (max-width:1199px){
+  html.modo-comentar .aviso-comentar{position:fixed;left:50%;translate:-50% 0;bottom:16px;z-index:70;width:max-content;max-width:calc(100vw - 24px);
+    display:flex;align-items:center;gap:12px;padding:6px 6px 6px 18px;border-radius:var(--r-pill);
+    background:var(--tinta);color:var(--fondo);box-shadow:var(--sombra);font:var(--t-small);font-weight:600;}
+  /* Mientras se escribe un comentario, el recuadro manda: el aviso se quita. */
+  html.modo-comentar .recuadro-comentario:not([hidden]) ~ .aviso-comentar{display:none;}
+  html.modo-comentar .aviso-comentar .panel-boton{background:var(--rosa);border-color:var(--rosa);color:var(--sobre-acento);border-radius:var(--r-pill);}
+}
+@media print{.aviso-comentar{display:none!important;}}
 .recuadro-comentario-ancla{font:var(--t-small);font-family:monospace;color:var(--suave);word-break:break-all;}
 .recuadro-comentario textarea{width:100%;min-height:90px;padding:10px;border-radius:var(--r-sm);border:1px solid var(--linea);background:var(--fondo);color:var(--texto);font:inherit;resize:vertical;}
 @media print{.dialogo-comentarios,.recuadro-comentario,.marcador-comentario{display:none!important;}}

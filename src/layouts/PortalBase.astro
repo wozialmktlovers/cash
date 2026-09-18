@@ -65,7 +65,7 @@ const usuario = Astro.locals.usuario;
             <img class="logo" src="/logo-wozial.png" alt="Wozial" width="545" height="194" />
           </a>
           <span class="portal-empresa">{nombreEmpresa}</span>
-          <a href="/perfil" class="portal-usuario" aria-label={`${nombreVisible(usuario)} · Mi perfil`}>{nombreVisible(usuario)}</a>
+          <a href="/perfil" class="portal-usuario" aria-label={`${nombreVisible(usuario)} · Mi perfil`} title={`${nombreVisible(usuario)} · Mi perfil`}><Icono nombre="usuarios" class="portal-usuario-icono" /><span class="portal-usuario-nombre">{nombreVisible(usuario)}</span></a>
           <TemaSwitch />
           <Campana client:load />
           <form method="POST" action="/api/logout">
@@ -90,7 +90,10 @@ const usuario = Astro.locals.usuario;
     padding: 10px 16px; background: var(--tinta); color: var(--fondo); font: var(--t-small); font-weight: 600; text-align: center;
   }
   .portal-vista-previa span, .portal-vista-previa a { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; }
-  .portal-vista-previa svg { width: 16px; height: 16px; }
+  /* :global porque el <svg> lo pinta Icono.astro y no lleva el atributo de
+     alcance de este archivo: sin él la regla no aplicaba y el ojo salía a
+     tamaño natural, partiendo la banda en columnas de una palabra. */
+  .portal-vista-previa :global(svg) { width: 16px; height: 16px; flex-shrink: 0; }
   .portal-vista-previa a { color: var(--fondo); text-decoration: underline; text-underline-offset: 3px; }
 
   .portal-app { min-height: 100dvh; }
@@ -105,6 +108,9 @@ const usuario = Astro.locals.usuario;
     position: sticky; top: 12px; z-index: 40;
     display: flex; justify-content: center; padding: 0 16px; margin-bottom: 8px;
   }
+  /* Con la banda de vista previa (también sticky, arriba de todo) la
+     cápsula se queda debajo de ella en vez de meterse detrás al bajar. */
+  .portal-vista-previa ~ .portal-app .portal-cabecera-envoltura { top: 76px; }
   .portal-cabecera {
     width: min(85%, 1100px); display: flex; align-items: center; gap: 12px; min-height: 64px;
     padding: 8px 16px; border-radius: var(--r-pill); flex-wrap: wrap;
@@ -128,15 +134,30 @@ const usuario = Astro.locals.usuario;
   }
   .portal-usuario:hover, .portal-usuario:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
 
+  .portal-usuario :global(.portal-usuario-icono) { display: none; width: 18px; height: 18px; flex-shrink: 0; }
+
+  /* Celular (revisión móvil): antes la cápsula se partía en dos renglones
+     y quedaba como una burbuja deforme, con el correo del cliente cortado
+     a media palabra. Ahora va en una sola fila de lado a lado: logo a la
+     izquierda y, a la derecha, el acceso al perfil como botón con icono
+     (el nombre sigue en su aria-label y en el title), el tema, los avisos
+     y Salir. Con 375 px de pantalla caben justos, sin encoger ninguno por
+     debajo de los 44 px. */
+  @media (max-width: 899px) {
+    .portal-cabecera { width: 100%; }
+  }
   @media (max-width: 560px) {
-    .portal-cabecera { gap: 6px; padding: 8px; }
-    /* Con la empresa fuera, el nombre toma el hueco y se recorta él: es el
-       único acceso del cliente a su perfil, así que no se esconde. El mínimo
-       de 90 px evita que la cabecera lo apriete hasta dejarlo ilegible; si
-       hace falta, algún control se va al segundo renglón (la cabecera ya
-       venía envolviendo a este ancho). */
+    .portal-cabecera-envoltura { padding: 0 12px; }
+    .portal-cabecera { gap: 6px; padding: 8px 8px 8px 14px; flex-wrap: nowrap; min-height: 60px; }
     .portal-empresa { display: none; }
-    .portal-usuario { flex: 1; max-width: none; min-width: 90px; }
+    .portal-cabecera .marca { margin-right: auto; }
+    .portal-usuario {
+      width: 44px; height: 44px; max-width: none; justify-content: center; border-radius: 50%;
+      border: 1px solid var(--linea); background: var(--gris);
+    }
+    .portal-usuario :global(.portal-usuario-icono) { display: block; }
+    .portal-usuario-nombre { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .portal-cabecera form :global(.btn) { padding-inline: 12px; }
   }
 
   .portal-contenido {

@@ -210,6 +210,32 @@ describe('anuncios por campaña (sección A)', () => {
     expect(video).toContain(completo.promptsImagen.porCreativo[4]);
   });
 
+  // El desglose venía de la antigua sección de creativos: un carrusel son
+  // cinco tarjetas 1:1 y un video lleva video 9:16 más portada 4:5.
+  it('cada anuncio dice cuántos archivos se producen y de qué medida', () => {
+    const a = seccionA(renderizarManual(completo as any, meta));
+    const archivos = (id: string) => {
+      const t = a.slice(a.indexOf(`id="${id}"`));
+      return t.slice(t.indexOf('arte-archivos'), t.indexOf('</ul>'));
+    };
+    for (const [i, c] of completo.creativos.entries()) {
+      const n = completo.creativos.slice(0, i + 1).filter((x: { grupo: string }) => x.grupo === c.grupo).length;
+      const bloque = archivos(`anuncio-${c.grupo}-${n}`);
+      if (c.formato === 'carrusel') {
+        expect(bloque).toContain('5 archivos por producir');
+        expect(bloque).toContain('5 Tarjetas');
+        expect(bloque).toContain('1:1 · 1080 × 1080 px');
+      } else if (c.formato === 'video') {
+        expect(bloque).toContain('2 archivos por producir');
+        expect(bloque).toContain('Video</strong> <span>9:16 · 1080 × 1920 px');
+        expect(bloque).toContain('Portada</strong> <span>4:5 · 1080 × 1350 px');
+      } else {
+        expect(bloque).toContain('1 archivo por producir');
+        expect(bloque).toContain('Pieza</strong> <span>1:1 · 1080 × 1080 px');
+      }
+    }
+  });
+
   it('no inventa un CTA que el sistema no genera', () => {
     const a = seccionA(renderizarManual(completo as any, meta));
     expect(a).not.toMatch(/\bCTA\b|Llamado a la acción/);

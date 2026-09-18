@@ -190,6 +190,13 @@ const CSS_GROWTH = `
 .arte-hueco-k{font:var(--t-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--suave);}
 .arte-hueco-r{font:700 clamp(1.8rem,3vw,2.4rem)/1 var(--fuente);letter-spacing:-.03em;color:var(--tinta);}
 .arte-hueco-m{font-family:var(--mono);font-size:0.8rem;color:var(--suave);}
+/* Desglose de archivos por formato: cuántas piezas salen de este anuncio. */
+.arte-archivos{display:grid;gap:6px;width:100%;}
+.arte-archivos .kv-k{padding-top:0;}
+.arte-archivos ul{list-style:none;margin:0;padding:0;display:grid;gap:4px;}
+.arte-archivos li{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:2px 10px;padding:8px 12px;
+  border-radius:var(--r-sm);background:var(--fondo);border:1px solid var(--linea);font:var(--t-small);color:var(--tinta);}
+.arte-archivos li span{font-family:var(--mono);font-size:0.8rem;color:var(--suave);}
 .arte-brief{display:grid;gap:8px;width:100%;}
 .arte-brief-hd,.anuncio-panel-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;}
 .arte-brief .kv-k{padding-top:0;}

@@ -59,6 +59,10 @@ const CONTENIDO = `
 .feed-marca svg{width:13px;height:13px;}
 .feed-perfil{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;}
 .feed-perfil .pila{flex:1;min-width:260px;}
+/* La retícula es hija de un flex: sin base propia se encogía a lo que medían
+   sus celdas (con columnas minmax(0,1fr), casi nada) y quedaba en 96 px de
+   ancho, tres cuadritos de 30 px en el celular. */
+.feed-perfil .feed-rejilla{flex:1 1 300px;}
 
 /* 02 · Calendario -------------------------------------------------------- */
 .calendario{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;}
@@ -78,7 +82,8 @@ const CONTENIDO = `
    número y los puntos de color, no las etiquetas. */
 @media (max-width:699px){
   .dia{min-height:54px;padding:4px;}
-  .dia-pieza{justify-content:center;padding:2px;}
+  /* 24 px de alto como mínimo (WCAG 2.5.8): con 16 px el dedo no atinaba. */
+  .dia-pieza{justify-content:center;padding:2px;min-height:24px;}
   .dia-pieza .dia-pieza-num{display:none;}
 }
 .sin-fecha{display:flex;flex-wrap:wrap;gap:8px;}

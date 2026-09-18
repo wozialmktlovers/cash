@@ -213,6 +213,10 @@ const desplazamiento = Math.round(CIRCUNFERENCIA * (1 - avance / 100) * 100) / 1
 </PortalBase>
 
 <style>
+  /* Una etapa sin nada que abrir todavía dejaba su fila de acciones vacía,
+     con sus 24 px de margen: en el celular, cada tarjeta cargaba un hueco en
+     blanco debajo del texto. */
+  .portal-etapa .acciones:not(:has(*)) { display: none; }
   .portal-resumen { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; margin: 18px 0 8px; }
 
   .anillo-envoltura { position: relative; width: 132px; height: 132px; flex-shrink: 0; }

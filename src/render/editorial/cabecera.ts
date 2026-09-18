@@ -29,8 +29,11 @@ export function bandaVistaPrevia(hrefVolver: string): string {
   </div>`;
 }
 
+// Tres puntos: el botón que abre el menú de acciones en pantallas angostas.
+const ICONO_MENU = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+
 function botonCompartir(): string {
-  return `<button type="button" class="cabecera-compartir" id="btn-compartir" aria-haspopup="dialog" aria-expanded="false" aria-controls="panel-compartir" aria-label="Compartir">
+  return `<button type="button" class="cabecera-accion cabecera-compartir" id="btn-compartir" aria-haspopup="dialog" aria-expanded="false" aria-controls="panel-compartir" aria-label="Compartir">
     ${ICONO_COMPARTIR}
     <span class="texto-compartir" aria-hidden="true">Compartir</span>
   </button>`;
@@ -113,22 +116,41 @@ export function cabeceraDocumento(o: {
   inicio?: string;
 }): string {
   const logo = `<img class="logo" src="${LOGO_WOZIAL_SRC}" alt="Wozial" width="545" height="194">`;
+  const temaSwitch = `<div class="tema-switch" role="radiogroup" aria-label="Tema de color">
+      <button type="button" role="radio" aria-checked="false" data-tema-valor="claro" aria-label="Día">${SOL}</button>
+      <button type="button" role="radio" aria-checked="false" data-tema-valor="oscuro" aria-label="Noche">${LUNA}</button>
+    </div>`;
+  const acciones = `${o.puedeEditar || o.puedeComentar ? botonesFlujo(Boolean(o.puedeEditar), Boolean(o.puedeComentar)) : ''}${o.operador ? botonCompartir() : ''}`;
+  // Menú de acciones (revisión móvil). En escritorio no se nota: el botón de
+  // los tres puntos no se ve y `.menu-acciones` se pinta en línea, igual que
+  // antes. En pantallas angostas (≤1199 px, ver estilos) las acciones del
+  // documento y el switch de tema se recogen en un desplegable bajo la
+  // cápsula, y fuera quedan solo volver, el logo, el título y ese botón:
+  // cinco o seis botones no caben en 351 px y apretarlos se comía el logo.
+  // El switch entra al menú porque ocupa 96 px que el título necesita; es
+  // una preferencia, no algo que se toque a cada rato. En el enlace público
+  // (sin acciones ni volver) no hay menú y el switch se queda a la vista.
+  // En el portal (con «volver») el menú existe aunque no haya acciones, solo
+  // con el tema: volver + logo + switch dejaban al título unos 60 px en el
+  // contenido del mes. En el enlace público no hay volver y el switch cabe.
+  const bloqueAcciones = acciones || o.volver
+    ? `<button type="button" class="cabecera-menu" id="btn-menu-acciones" aria-expanded="false" aria-controls="menu-acciones" aria-label="Acciones del documento" title="Acciones del documento">${ICONO_MENU}</button>
+    <div class="menu-acciones" id="menu-acciones">
+      ${acciones}
+      <div class="menu-tema"><span class="menu-tema-texto" aria-hidden="true">Tema</span>${temaSwitch}</div>
+    </div>`
+    : temaSwitch;
   return `<header class="cabecera" id="cabecera">
   <div class="cabecera-marca">
     ${o.volver ? `<a class="cabecera-volver" href="${escapar(o.volver.href)}" aria-label="${escapar(o.volver.texto)}" title="${escapar(o.volver.texto)}">${ICONO_VOLVER}</a>` : ''}
     ${o.inicio ? `<a class="cabecera-inicio" href="${escapar(o.inicio)}" aria-label="Wozial Studio · inicio">${logo}</a>` : logo}
-    <span class="titulo">${escapar(o.etiqueta)} · <b>${escapar(o.cliente)}</b></span>
+    <span class="titulo"><span class="titulo-etiqueta">${escapar(o.etiqueta)}</span><span class="titulo-sep"> · </span><b>${escapar(o.cliente)}</b></span>
   </div>
   <div class="cabecera-acciones">
     ${o.accionesExtra ?? ''}
-    <div class="tema-switch" role="radiogroup" aria-label="Tema de color">
-      <button type="button" role="radio" aria-checked="false" data-tema-valor="claro" aria-label="Día">${SOL}</button>
-      <button type="button" role="radio" aria-checked="false" data-tema-valor="oscuro" aria-label="Noche">${LUNA}</button>
-    </div>
-    ${o.puedeEditar || o.puedeComentar ? botonesFlujo(Boolean(o.puedeEditar), Boolean(o.puedeComentar)) : ''}
-    ${o.operador ? botonCompartir() : ''}
+    ${bloqueAcciones}
   </div>
-  <div class="cabecera-progreso" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de lectura"></div>
+  <div class="cabecera-pista"><div class="cabecera-progreso" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Progreso de lectura"></div></div>
 </header>
 ${o.operador ? panelCompartir(o.operador, o.etiqueta) : ''}
 ${o.puedeEditar ? panelVersiones() + barraEdicion() : ''}
@@ -169,6 +191,74 @@ export const SCRIPT_CABECERA_BASE = `(function () {
   window.addEventListener('scroll', pedirCuadro, { passive: true });
   window.addEventListener('resize', pedirCuadro);
   actualizar();
+
+  // Menú de acciones (pantallas angostas). Patrón de «disclosure»: un botón
+  // con aria-expanded que muestra u oculta la lista; no es role="menu",
+  // que obligaría a navegar con flechas. Se cierra con Escape (devolviendo
+  // el foco al botón), al tocar fuera y al elegir una acción.
+  var botonMenu = document.getElementById('btn-menu-acciones');
+  var menu = document.getElementById('menu-acciones');
+  if (!botonMenu || !menu) return;
+  var menuAbierto = false;
+
+  function visible(el) { return !!(el && el.getClientRects && el.getClientRects().length); }
+  // Tras cerrar un diálogo o un panel abierto desde el menú, el foco volvería
+  // a un botón que ya no se ve (quedaría perdido en <body>): va al de los
+  // tres puntos, que es por donde se entró.
+  function rescatarFoco() {
+    if (!visible(botonMenu)) return;
+    var a = document.activeElement;
+    // Tras cerrar un <dialog>, Chrome deja un rato el foco en su botón
+    // «Cerrar», ya invisible: cuenta igual que un foco perdido.
+    if (!a || a === document.body || !visible(a)) botonMenu.focus();
+  }
+  // Captura, como el panel de compartir link: corre antes que el Escape de
+  // SCRIPT_FLUJO y lo corta, para no salir del modo Editar/Comentar
+  // mientras solo se cierra el menú.
+  function alEscapeMenu(e) {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    cerrarMenu();
+    botonMenu.focus();
+  }
+  function alClicFueraMenu(e) {
+    if (menu.contains(e.target) || botonMenu.contains(e.target)) return;
+    cerrarMenu();
+  }
+  function abrirMenu() {
+    menuAbierto = true;
+    cabecera.classList.add('menu-abierto');
+    botonMenu.setAttribute('aria-expanded', 'true');
+    var primero = menu.querySelector('button:not([disabled])');
+    if (primero) primero.focus();
+    document.addEventListener('keydown', alEscapeMenu, true);
+    document.addEventListener('click', alClicFueraMenu, true);
+  }
+  function cerrarMenu() {
+    if (!menuAbierto) return;
+    menuAbierto = false;
+    cabecera.classList.remove('menu-abierto');
+    botonMenu.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('keydown', alEscapeMenu, true);
+    document.removeEventListener('click', alClicFueraMenu, true);
+  }
+  botonMenu.addEventListener('click', function () {
+    if (menuAbierto) { cerrarMenu(); botonMenu.focus(); } else abrirMenu();
+  });
+  // En burbuja: el manejador propio de la acción (abrir un diálogo, entrar
+  // a Comentar...) ya corrió cuando esto cierra el menú. El switch de tema
+  // no cierra: se ve el cambio con el menú abierto.
+  menu.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t || !t.closest || !t.closest('.cabecera-accion')) return;
+    cerrarMenu();
+    rescatarFoco();
+  });
+  var dialogos = document.querySelectorAll('dialog');
+  for (var d = 0; d < dialogos.length; d++) {
+    dialogos[d].addEventListener('close', function () { setTimeout(rescatarFoco, 0); });
+  }
+  window.addEventListener('resize', function () { if (!visible(botonMenu)) cerrarMenu(); });
 })();`;
 
 /**
@@ -201,9 +291,10 @@ export const SCRIPT_CABECERA_COMPARTIR = `(function () {
     // en pantallas anchas la cápsula no llega al borde (min(85%,1600px) y
     // centrada), así que un «right:16px» fijo del viewport lo dejaba volando
     // lejos del botón que lo abre. Con un mínimo de 16px se conserva el
-    // margen de antes en pantallas angostas, donde la cápsula sí casi toca el borde.
+    // margen de antes en pantallas angostas, donde la cápsula sí casi toca el
+    // borde. 12 y no 16: el panel mide 100vw - 24px, así queda centrado.
     var margenDerecho = window.innerWidth - r.right;
-    panel.style.right = Math.max(16, margenDerecho) + 'px';
+    panel.style.right = Math.max(12, margenDerecho) + 'px';
   }
 
   // El panel se reposiciona en su propio scroll/resize (independiente del
@@ -254,7 +345,11 @@ export const SCRIPT_CABECERA_COMPARTIR = `(function () {
     boton.setAttribute('aria-expanded', 'false');
     document.removeEventListener('keydown', alEscape, true);
     document.removeEventListener('click', alClicFuera, true);
-    if (devolverFoco) boton.focus();
+    if (!devolverFoco) return;
+    // En celular Compartir vive dentro del menú de acciones, ya cerrado: el
+    // foco vuelve al botón de los tres puntos, no a uno que no se ve.
+    var menuBoton = document.getElementById('btn-menu-acciones');
+    if (!menuBoton || !boton.getClientRects || boton.getClientRects().length) boton.focus(); else menuBoton.focus();
   }
   boton.addEventListener('click', function () {
     if (panelAbierto) cerrar(true); else abrir();

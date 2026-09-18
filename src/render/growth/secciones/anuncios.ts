@@ -26,6 +26,40 @@ const FORMATO_TEXTO: Record<string, string> = {
   imagen: 'Imagen', video: 'Video', carrusel: 'Carrusel',
 };
 
+const MEDIDAS: Record<string, string> = {
+  '1x1': '1080 × 1080 px', '4x5': '1080 × 1350 px', '9x16': '1080 × 1920 px',
+};
+
+/**
+ * Archivos que hay que producir por cada anuncio, según su formato. Es la
+ * tabla `ARCHIVOS` de la antigua sección de creativos (quitada en 2d4cc85),
+ * con los mismos datos: se perdió con aquella sección y es justo lo que
+ * necesita quien produce el arte.
+ *
+ * Un carrusel no es una imagen: son cinco tarjetas. Un video necesita además
+ * su fotograma de portada, que es lo que se ve en el feed antes de
+ * reproducir. Sin este desglose, «un anuncio» deja al diseñador calculando
+ * cuántos archivos son en realidad.
+ */
+const ARCHIVOS: Record<string, { cantidad: number; etiqueta: string; ratio: string }[]> = {
+  imagen: [{ cantidad: 1, etiqueta: 'Pieza', ratio: '1x1' }],
+  carrusel: [{ cantidad: 5, etiqueta: 'Tarjetas', ratio: '1x1' }],
+  video: [
+    { cantidad: 1, etiqueta: 'Video', ratio: '9x16' },
+    { cantidad: 1, etiqueta: 'Portada', ratio: '4x5' },
+  ],
+};
+
+/** «3 archivos · Video 9:16 … · Portada 4:5 …»: lo que se entrega por este anuncio. */
+function bloqueArchivos(c: Creativo): string {
+  const archivos = ARCHIVOS[c.formato] ?? [{ cantidad: 1, etiqueta: 'Pieza', ratio: c.ratio }];
+  const total = archivos.reduce((n, a) => n + a.cantidad, 0);
+  return `<div class="arte-archivos">
+      <span class="kv-k">${total} ${total === 1 ? 'archivo' : 'archivos'} por producir</span>
+      <ul>${archivos.map((a) => `<li><strong>${a.cantidad > 1 ? `${a.cantidad} ` : ''}${escapar(a.etiqueta)}</strong> <span>${escapar(a.ratio.replace('x', ':'))} · ${escapar(MEDIDAS[a.ratio] ?? c.medidas)}</span></li>`).join('')}</ul>
+    </div>`;
+}
+
 const ICONO_COPIAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>';
 
 /**
@@ -57,6 +91,7 @@ function bloqueArte(c: Creativo, prompt: string | undefined, i: number, id: stri
       <strong class="arte-hueco-r">${escapar(ratio)}</strong>
       <span class="arte-hueco-m">${escapar(c.medidas)}</span>
     </div>
+    ${bloqueArchivos(c)}
     ${brief}
   </div>`;
 }

@@ -49,20 +49,26 @@ export function rutaAncla(anclas: boolean, ancla: string): string {
 }
 
 /**
- * Botones del panel de la cabecera (o de la barra de operador, en Growth):
+ * Botones de acciones de la cabecera del documento:
  * Editar + Versiones si se puede editar; Comentar (modo anclado) +
  * Comentarios (panel lateral) si se puede comentar. Los dos pares son
  * independientes entre sí — puede haber solo edición, solo comentarios, o
  * ambos, según `puedeEditar`/`puedeComentar` de la etapa (B6/B7).
+ *
+ * Llevan `cabecera-accion`, no `cabecera-compartir`: antes reusaban la clase
+ * de Compartir y su regla de celular (caja de 44 px que esconde un `<span>`
+ * de texto que estos botones no tienen) los encogía hasta encabalgarse. En
+ * pantallas angostas viven dentro del menú de acciones de la cabecera
+ * (`cabeceraDocumento`), así que siempre enseñan su texto completo.
  */
 export function botonesFlujo(puedeEditarDocumento: boolean, puedeComentarDocumento = false): string {
   const editar = puedeEditarDocumento
-    ? `<button type="button" class="cabecera-compartir" id="btn-flujo-editar" aria-pressed="false">Editar</button>
-    <button type="button" class="cabecera-compartir" id="btn-flujo-versiones" aria-haspopup="dialog" aria-controls="dialog-versiones">Versiones</button>`
+    ? `<button type="button" class="cabecera-accion" id="btn-flujo-editar" aria-pressed="false">Editar</button>
+    <button type="button" class="cabecera-accion" id="btn-flujo-versiones" aria-haspopup="dialog" aria-controls="dialog-versiones">Versiones</button>`
     : '';
   const comentar = puedeComentarDocumento
-    ? `<button type="button" class="cabecera-compartir" id="btn-flujo-comentar" aria-pressed="false">Comentar</button>
-    <button type="button" class="cabecera-compartir" id="btn-flujo-comentarios" aria-haspopup="dialog" aria-controls="dialog-comentarios">Comentarios</button>`
+    ? `<button type="button" class="cabecera-accion" id="btn-flujo-comentar" aria-pressed="false">Comentar</button>
+    <button type="button" class="cabecera-accion" id="btn-flujo-comentarios" aria-haspopup="dialog" aria-controls="dialog-comentarios">Comentarios</button>`
     : '';
   return `${editar}${comentar}`;
 }
@@ -83,6 +89,11 @@ export function panelVersiones(): string {
  * recuadro flotante de «nuevo comentario» que abre un clic sobre `[data-ancla]`
  * en modo Comentar: vive fuera del `<dialog>` a propósito, porque se abre
  * sobre el propio documento, no dentro del panel.
+ *
+ * El aviso «Toca un bloque para comentarlo · Listo» solo se ve en pantallas
+ * angostas y en modo Comentar (lo decide el CSS): ahí el botón «Salir de
+ * comentar» queda escondido dentro del menú de acciones de la cabecera, y
+ * sin Escape (celular) no habría otra salida a la vista.
  *
  * `ayuda`: párrafo opcional antes de los filtros — el portal del cliente lo
  * usa para explicar cómo dejar una observación (C2, spec §4); la vista
@@ -108,6 +119,10 @@ export function panelComentarios(ayuda?: string): string {
       <button type="button" class="panel-boton panel-primario" id="recuadro-comentario-enviar">Enviar</button>
     </div>
     <p class="panel-estado" id="recuadro-comentario-estado" role="status" aria-live="polite"></p>
+  </div>
+  <div class="aviso-comentar" id="aviso-comentar" role="status">
+    <span>Toca un bloque para comentarlo</span>
+    <button type="button" class="panel-boton" id="btn-salir-comentar">Listo</button>
   </div>`;
 }
 
@@ -193,6 +208,7 @@ export const SCRIPT_FLUJO = `(function () {
   var recuadroEnviar = document.getElementById('recuadro-comentario-enviar');
   var recuadroCancelar = document.getElementById('recuadro-comentario-cancelar');
   var recuadroEstado = document.getElementById('recuadro-comentario-estado');
+  var btnSalirComentar = document.getElementById('btn-salir-comentar');
 
   // Todas las funciones se declaran aquí arriba, fuera de cualquier bloque
   // 'if': una function declaration dentro de un bloque no es válida en ES5
@@ -733,7 +749,11 @@ export const SCRIPT_FLUJO = `(function () {
     var topMinimo = 12;
     var topMaximo = Math.max(topMinimo, altoVentana - altoRecuadro - 12);
     var top = Math.min(topMaximo, Math.max(topMinimo, r.bottom + 10));
-    var left = Math.min(anchoVentana - 20, Math.max(20, r.left));
+    // El borde derecho también cuenta: con 'anchoVentana - 20' como tope,
+    // a 375 px un bloque que empezaba a la derecha dejaba el recuadro (320 px)
+    // saliéndose de la pantalla y abría desplazamiento horizontal.
+    var anchoRecuadro = recuadro.offsetWidth || 320;
+    var left = Math.min(Math.max(12, anchoVentana - anchoRecuadro - 12), Math.max(12, r.left));
     recuadro.style.top = top + 'px';
     recuadro.style.left = left + 'px';
   }
@@ -864,6 +884,7 @@ export const SCRIPT_FLUJO = `(function () {
       if (enComentar) salirComentar(); else entrarComentar();
     });
   }
+  if (btnSalirComentar) btnSalirComentar.addEventListener('click', salirComentar);
   if (recuadroEnviar) recuadroEnviar.addEventListener('click', enviarNuevoComentario);
   if (recuadroCancelar) recuadroCancelar.addEventListener('click', cerrarRecuadro);
   document.addEventListener('click', alClicDocumento, true);

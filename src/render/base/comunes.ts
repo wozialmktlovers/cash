@@ -67,9 +67,9 @@ strong{color:var(--tinta);font-weight:600;}
 .card-sm{padding:17px;border-radius:var(--r-sm);}
 
 /* ── Grids ───────────────────────────────────────────── */
-.g2{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;}
-.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
-.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;}
+.g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;}
 .g-1-2{display:grid;grid-template-columns:1fr 2fr;gap:26px;}
 .g-2-1{display:grid;grid-template-columns:2fr 1fr;gap:26px;}
 .par{display:grid;grid-template-columns:1fr;gap:24px;}
@@ -183,11 +183,13 @@ strong{color:var(--tinta);font-weight:600;}
 
 @media (max-width:1024px){
   .g4{grid-template-columns:repeat(2,1fr);}
-  .g-1-2,.g-2-1{grid-template-columns:1fr;}
+  .g-1-2,.g-2-1{grid-template-columns:minmax(0,1fr);}
 }
 @media (max-width:768px){
   h1{font-size:clamp(1.85rem,7.6vw,2.6rem);}
-  .g2,.g3,.g4{grid-template-columns:1fr;gap:14px;}
+  /* minmax(0,1fr): con 1fr a secas, una tabla dentro de la tarjeta (con su
+     propio desplazamiento) estiraba la columna más allá de la pantalla. */
+  .g2,.g3,.g4{grid-template-columns:minmax(0,1fr);gap:14px;}
   .card{padding:19px;}
   .phead{margin-bottom:26px;}
   .week{grid-template-columns:1fr;gap:7px;}

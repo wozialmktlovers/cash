@@ -52,6 +52,9 @@ legend { font: var(--t-small); font-weight: 600; color: var(--tinta); margin-bot
 :root[data-tema="oscuro"] .logo { filter: none; }
 
 .marca { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
+/* El logo es enlace al inicio y en el celular es blanco de dedo. Solo el
+   enlace: `.etiqueta.marca` (un chip) comparte la clase. */
+a.marca { min-height: 44px; }
 .marca span {
   font: var(--t-micro); letter-spacing: 0.22em; text-transform: uppercase;
   color: var(--rosa); padding-left: 10px; border-left: 1px solid var(--linea);

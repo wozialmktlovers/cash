@@ -156,6 +156,14 @@ const PILARES = `
 .pilar-conteo{flex-shrink:0;margin-left:auto;padding:6px 12px;border-radius:var(--r-pill);
   background:var(--tarjeta);font:var(--t-small);color:var(--suave);}
 .pilar-bloque > .pestanas,.pilar-bloque > .panel-tema{margin:0 22px;}
+/* Celular: número y conteo arriba, el texto del pilar debajo a todo lo
+   ancho. En una sola fila el objetivo quedaba en una columna de 125 px, una
+   palabra por renglón (flex:1 con min-width:0 nunca dejaba envolver). */
+@media (max-width:640px){
+  .pilar-cabecera{padding:16px 16px 18px;gap:12px;}
+  .pilar-info{order:1;flex-basis:100%;}
+  .pilar-bloque > .pestanas,.pilar-bloque > .panel-tema{margin:0 16px;}
+}
 .pilar-bloque > .panel-tema:last-child{padding-bottom:22px;}
 .pilar-bloque.vacio{border-style:dashed;}
 .pilar-vacio-cuerpo{display:grid;gap:10px;padding:0 22px 22px;justify-items:start;}

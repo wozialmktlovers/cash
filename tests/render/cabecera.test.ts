@@ -74,7 +74,7 @@ describe('cabecera del documento', () => {
 
   it('el panel de compartir se alinea con el borde derecho de la cápsula, no con el del viewport', () => {
     expect(SCRIPT_CABECERA).toContain('window.innerWidth - r.right');
-    expect(SCRIPT_CABECERA).toContain("panel.style.right = Math.max(16, margenDerecho) + 'px'");
+    expect(SCRIPT_CABECERA).toContain("panel.style.right = Math.max(12, margenDerecho) + 'px'");
   });
 });
 
@@ -116,5 +116,43 @@ describe('bandaVistaPrevia', () => {
   it('escapa el href', () => {
     const h = bandaVistaPrevia('/clientes/"><script>alert(1)</script>');
     expect(h).not.toContain('<script>alert(1)</script>');
+  });
+});
+
+// Revisión móvil: en pantallas angostas las acciones del documento viven en
+// un menú (botón de tres puntos) y el switch de tema entra con ellas. En el
+// enlace público no hay acciones: ni menú, ni switch escondido.
+describe('menú de acciones de la cabecera', () => {
+  const menu = (h: string) => h.slice(h.indexOf('id="menu-acciones"'), h.indexOf('cabecera-pista'));
+
+  it('vista interna: Editar, Versiones, Comentar, Comentarios, Compartir y el tema van dentro del menú', () => {
+    const h = cabeceraEditorial({ etiqueta: 'Investigación', cliente: 'Ana', operador, puedeEditar: true, puedeComentar: true });
+    expect(h).toContain('id="btn-menu-acciones" aria-expanded="false" aria-controls="menu-acciones"');
+    const m = menu(h);
+    for (const id of ['btn-flujo-editar', 'btn-flujo-versiones', 'btn-flujo-comentar', 'btn-flujo-comentarios', 'btn-compartir']) {
+      expect(m).toContain(`id="${id}"`);
+    }
+    expect(m).toContain('role="radiogroup"');
+  });
+
+  it('portal: solo Comentar y Comentarios dentro del menú; volver y logo fuera', () => {
+    const h = cabeceraEditorial({ etiqueta: 'Mapa', cliente: 'Ana', puedeComentar: true, volver: { href: '/portal', texto: '← Mi portal' }, inicio: '/portal' });
+    const m = menu(h);
+    expect(m).toContain('id="btn-flujo-comentar"');
+    expect(m).not.toContain('id="btn-flujo-editar"');
+    expect(m).not.toContain('id="btn-compartir"');
+    expect(m).not.toContain('cabecera-volver');
+    expect(m).not.toContain('class="logo"');
+  });
+
+  it('enlace público: sin acciones no hay menú y el switch queda a la vista', () => {
+    const h = cabeceraEditorial({ etiqueta: 'Investigación', cliente: 'Ana' });
+    expect(h).not.toContain('btn-menu-acciones');
+    expect(h).toContain('role="radiogroup"');
+  });
+
+  it('los botones de flujo no reusan la clase de Compartir (se encabalgaban a 375 px)', () => {
+    const h = cabeceraEditorial({ etiqueta: 'Investigación', cliente: 'Ana', puedeEditar: true, puedeComentar: true });
+    expect(h).not.toMatch(/class="[^"]*cabecera-compartir[^"]*" id="btn-flujo-/);
   });
 });
