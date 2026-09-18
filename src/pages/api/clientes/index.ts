@@ -7,8 +7,9 @@ import { condicionClientes } from '@/lib/visibilidad';
 import { ETAPAS, type Etapa } from '@/flujo/reglas';
 import { aplicarPlanContratacion } from '@/flujo/servicio';
 
-// Por omisión, un cliente nuevo se contrata con las tres etapas que ya
-// existen (desarrollo mensual todavía no se puede vender: «Próximamente»).
+// Por omisión, un cliente nuevo se contrata con estas tres. El desarrollo
+// mensual ya se puede vender, pero no se marca solo: es trabajo recurrente y
+// se contrata a propósito, no por descuido al dar de alta.
 const ETAPAS_ALTA_DEFECTO: Etapa[] = ['investigacion', 'pilares', 'manual_campana'];
 const etapasSchema = z.array(z.enum(ETAPAS)).min(1, 'Selecciona al menos una etapa').optional();
 

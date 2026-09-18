@@ -62,7 +62,7 @@ const ETIQUETA_BOTON: Record<BotonResuelto['id'], string> = {
   reabrir: 'Reabrir',
 };
 
-const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'manual_campana'];
+const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'desarrollo_mensual', 'manual_campana'];
 ---
 
 <section class="linea-etapas" data-client-id={clientId}>
@@ -143,11 +143,6 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'manual_campan
               {NOMBRE_ETAPA[e]}
             </label>
           ))}
-          <label class="casilla deshabilitada">
-            <input type="checkbox" disabled />
-            {NOMBRE_ETAPA.desarrollo_mensual}
-            <span class="etiqueta marca">Próximamente</span>
-          </label>
         </div>
       </fieldset>
       <div class="acciones">
