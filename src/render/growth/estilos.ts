@@ -193,6 +193,9 @@ const CSS_GROWTH = `
 .arte-brief{display:grid;gap:8px;width:100%;}
 .arte-brief-hd,.anuncio-panel-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;}
 .arte-brief .kv-k{padding-top:0;}
+/* El prompt base va una vez, sobre las campañas, con la misma pieza que el
+   brief de cada anuncio: rótulo, botón Copiar y el texto en monoespaciada. */
+.prompt-base{margin-top:var(--e2);}
 .anuncio-info{display:grid;align-content:start;gap:16px;padding:26px;min-width:0;}
 .anuncio-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:14px;border-bottom:1px solid var(--linea);}
 .anuncio-hd .eyebrow{margin-bottom:4px;}

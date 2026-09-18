@@ -30,7 +30,7 @@ export function seccionTraza(urls: UrlEtiquetada[]): string {
 
   return `
     ${cabeceraSeccion({
-      numero: '06', kicker: 'Trazabilidad', titulo: 'Nomenclatura UTM',
+      numero: '04', kicker: 'Trazabilidad', titulo: 'Nomenclatura UTM',
       lead: 'Sin esto, el reporte no dice qué funcionó. Con esto, lo dice al tercer día.',
     })}
 

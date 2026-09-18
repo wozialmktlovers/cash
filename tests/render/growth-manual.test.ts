@@ -10,16 +10,34 @@ const meta = {
 const clonar = () => JSON.parse(JSON.stringify(completo));
 
 describe('manual de campaña', () => {
-  it('produce las diez secciones: las nueve del machote más la de anuncios', () => {
+  // Ocho y no diez: las secciones de creativos y de prompts salieron del
+  // manual. Sus copys, ángulos y briefs se leen y se editan en la de anuncios.
+  it('produce las ocho secciones: portada, anuncios y las seis del detalle', () => {
     const html = renderizarManual(completo as any, meta);
-    expect((html.match(/class="sec"/g) ?? []).length).toBe(10);
+    expect((html.match(/class="sec"/g) ?? []).length).toBe(8);
   });
 
-  it('trae las diez anclas del nav, una por sección', () => {
+  it('trae las ocho anclas del nav, una por sección, y ya no las de creativos ni prompts', () => {
     const html = renderizarManual(completo as any, meta);
-    for (const id of ['setup','anuncios','meta','creativos','prompts','google','rsa','traza','tecnico','seguimiento']) {
+    for (const id of ['setup','anuncios','meta','google','rsa','traza','tecnico','seguimiento']) {
       expect(html, `falta el ancla ${id}`).toContain(`id="${id}"`);
       expect(html, `falta el enlace a ${id}`).toContain(`href="#${id}"`);
+    }
+    for (const id of ['creativos', 'prompts']) {
+      expect(html).not.toContain(`id="${id}"`);
+      expect(html).not.toContain(`href="#${id}"`);
+    }
+  });
+
+  it('numera seguido, sin huecos, y el índice dice lo mismo que las placas', () => {
+    for (const datos of [completo, { ...clonar(), tecnico: undefined }]) {
+      const html = renderizarManual(datos as any, meta);
+      const indice = [...html.matchAll(/<li><a href="#[a-z]+"><span>([^<]+)<\/span>/g)].map((m) => m[1]);
+      expect(indice).toEqual(['00', 'A', '01', '02', '03', '04', '05', '06']);
+      // La placa de cada sección (la portada no lleva): el mismo numeral, en
+      // el mismo orden, con o sin arquitectura de medición.
+      const placas = [...html.matchAll(/class="shead-n"><span class="grad">([^<]+)</g)].map((m) => m[1]);
+      expect(placas).toEqual(indice.slice(1));
     }
   });
 
@@ -33,18 +51,6 @@ describe('manual de campaña', () => {
   it('un cambio de semanas se refleja en la portada', () => {
     const g = clonar(); g.semanas = 7;
     expect(renderizarManual(g, meta)).toContain('>7<');
-  });
-
-  it('rinde los nueve huecos de creativo con su ratio aunque falten los copys', () => {
-    const g = clonar();
-    delete g.creativos;
-    g._huecos = { creativos: 'El agente no devolvió datos válidos tras dos intentos.' };
-    const html = renderizarManual(g, meta);
-    // 3 grupos × (1 imagen + 5 tarjetas de carrusel + 2 del video) = 24 archivos
-    expect((html.match(/class="slot ar-/g) ?? []).length).toBe(24);
-    expect(html).toContain('ar-1x1');
-    expect(html).toContain('ar-9x16');
-    expect(html).toMatch(/no devolvió datos/i);
   });
 
   it('no inventa URLs cuando falta el destino', () => {
@@ -74,9 +80,9 @@ describe('manual de campaña', () => {
     expect(html).toMatch(/investigación de origen venía incompleta/i);
   });
 
-  it('con todo vacío sigue produciendo diez secciones y ningún dato inventado', () => {
+  it('con todo vacío sigue produciendo ocho secciones y ningún dato inventado', () => {
     const html = renderizarManual({ _huecos: { estructura: 'No se ejecutó.', creativos: 'No se ejecutó.' } }, meta);
-    expect((html.match(/class="sec"/g) ?? []).length).toBe(10);
+    expect((html.match(/class="sec"/g) ?? []).length).toBe(8);
     expect((html.match(/Sin datos/g) ?? []).length).toBeGreaterThanOrEqual(3);
   });
 
@@ -124,12 +130,15 @@ describe('manual de campaña', () => {
   });
 });
 
-describe('URL etiquetada junto a cada pieza', () => {
-  it('cada creativo de Meta lleva la URL de su grupo y formato', () => {
+describe('URL etiquetada de cada pieza', () => {
+  // Antes esto se comprobaba en la sección de creativos, que rendía la URL
+  // junto a cada pieza. Esa sección salió del manual; las nueve URLs de Meta
+  // siguen en la tabla de trazabilidad, que es donde viven todas.
+  it('cada creativo de Meta tiene su URL de grupo y formato en trazabilidad', () => {
     const html = renderizarManual(completo as any, meta);
-    const seccion = html.slice(html.indexOf('id="creativos"'), html.indexOf('id="prompts"'));
+    const seccion = html.slice(html.indexOf('id="traza"'), html.indexOf('id="tecnico"'));
     for (const c of ['ga_imagen', 'gb_video', 'gc_carrusel']) {
-      expect(seccion, `falta la URL de ${c} en la sección de creativos`).toContain(`utm_content=${c}`);
+      expect(seccion, `falta la URL de ${c} en trazabilidad`).toContain(`utm_content=${c}`);
     }
     // Nueve piezas, nueve URLs, sin repetir ninguna.
     const encontradas = [...seccion.matchAll(/utm_content=(g[abc]_[a-z]+)/g)].map((m) => m[1]);
@@ -236,9 +245,45 @@ describe('anuncios por campaña (sección A)', () => {
     expect(a).toContain('&lt;img src=x');
   });
 
-  it('es de solo lectura: la edición sigue en la sección 02', () => {
+  // Con la sección de creativos fuera, la edición de los copys vive aquí, con
+  // las rutas de siempre para que la API los guarde igual.
+  it('en modo edición, cada anuncio edita ángulo, copy A, copy B y brief con las rutas de siempre', () => {
+    const a = seccionA(renderizarManual(completo as any, meta, undefined, true));
+    completo.creativos.forEach((_: unknown, i: number) => {
+      for (const campo of ['angulo', 'copyA', 'copyB']) {
+        expect(a, `falta creativos.${i}.${campo}`).toContain(`data-editable="creativos.${i}.${campo}"`);
+      }
+      expect(a).toContain(`data-editable="promptsImagen.porCreativo.${i}"`);
+    });
+    expect(a).toContain('data-editable="promptsImagen.base"');
+  });
+
+  it('el copy B, en el panel que arranca oculto, también es editable', () => {
+    const a = seccionA(renderizarManual(completo as any, meta, undefined, true));
+    const panelB = a.slice(a.indexOf('id="anuncio-a-1-copy-B"'), a.indexOf('</div>', a.indexOf('id="anuncio-a-1-texto-B"')));
+    expect(panelB).toContain('data-editable="creativos.0.copyB"');
+  });
+
+  it('cada ruta editable sale una sola vez en todo el manual', () => {
     const html = renderizarManual(completo as any, meta, undefined, true);
-    expect(seccionA(html)).not.toContain('data-editable="');
-    expect(html).toContain('data-editable="creativos.0.copyA"');
+    const rutas = [...html.matchAll(/data-editable="([^"]+)"/g)].map((m) => m[1]);
+    expect(rutas.length).toBeGreaterThan(0);
+    expect(new Set(rutas).size).toBe(rutas.length);
+  });
+
+  it('sin modo edición (link público, portal) no marca nada editable', () => {
+    expect(renderizarManual(completo as any, meta)).not.toContain('data-editable="');
+  });
+
+  it('conserva el prompt base y la regla de la cara, que venían de la sección de prompts', () => {
+    const a = seccionA(renderizarManual(completo as any, meta));
+    expect(a).toContain(completo.promptsImagen.base);
+    expect(a).toContain('la cara del cliente no se genera con IA');
+  });
+
+  it('con flujo, cada anuncio lleva el ancla creativos.N de siempre', () => {
+    const flujo = { tipo: 'growth', id: 'r1', etapaId: 'e1', puedeEditar: true, puedeComentar: true, rol: 'admin', esOperadorAsignado: false };
+    const a = seccionA(renderizarManual(completo as any, meta, undefined, true, flujo as any));
+    expect(a).toContain('id="anuncio-a-1" data-ancla="creativos.0"');
   });
 });

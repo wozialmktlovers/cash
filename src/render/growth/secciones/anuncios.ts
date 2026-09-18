@@ -1,4 +1,5 @@
 import { escapar, cabeceraSeccion, hueco } from './comunes';
+import { rutaEditable, rutaAncla } from '@/render/editorial/flujo-cliente';
 import { GRUPOS, type Growth, type Creativo, type CampanaMeta } from '@/growth/schemas';
 
 // La vista que el cliente entiende sin traducción: campaña → anuncios, cada
@@ -8,9 +9,14 @@ import { GRUPOS, type Growth, type Creativo, type CampanaMeta } from '@/growth/s
 // arte y pestañas Copy A / Copy B.
 //
 // No es un dato nuevo: sale de `campanasMeta`, `creativos` y
-// `promptsImagen.porCreativo`, lo mismo que ya rinden las secciones 01, 02 y
-// 03. Por eso es de solo lectura: el modo edición sigue en la sección 02, y
-// dos `data-editable` apuntando a la misma ruta del JSON se pisarían.
+// `promptsImagen`. Desde que el manual dejó de traer las secciones de
+// creativos y de prompts, es AQUÍ donde se editan el ángulo, los copys A y B
+// y el brief visual de cada anuncio (y el prompt base), con las mismas rutas
+// del JSON que usaban aquellas (`creativos.N.copyA`,
+// `promptsImagen.porCreativo.N`...): el guardado de la API no cambia. N es el
+// índice ORIGINAL en `datos.creativos`, no la posición dentro de la campaña.
+// Cada ruta sale una sola vez en el documento: dos `data-editable` con la
+// misma ruta se pisarían al guardar.
 //
 // Lo que el machote de Natú trae y aquí no está, porque el sistema no lo
 // genera y un hueco relleno de plausibilidad es una mentira: el CTA de cada
@@ -36,12 +42,12 @@ function botonCopiar(destino: string, etiqueta: string): string {
  * el hueco dice qué falta (la pieza, con su proporción y sus medidas) y trae
  * debajo el brief visual con el que se produce.
  */
-function bloqueArte(c: Creativo, prompt: string | undefined, id: string, nombre: string, razonPrompt: string): string {
+function bloqueArte(c: Creativo, prompt: string | undefined, i: number, id: string, nombre: string, razonPrompt: string, editable: boolean): string {
   const ratio = c.ratio.replace('x', ':');
   const brief = prompt
     ? `<div class="arte-brief">
         <div class="arte-brief-hd"><span class="kv-k">Brief visual</span>${botonCopiar(`${id}-brief`, `Copiar el brief visual del ${nombre}`)}</div>
-        <p class="pre" id="${escapar(`${id}-brief`)}" data-copia>${escapar(prompt)}</p>
+        <p class="pre" id="${escapar(`${id}-brief`)}" data-copia${rutaEditable(editable, `promptsImagen.porCreativo.${i}`)}>${escapar(prompt)}</p>
       </div>`
     : `<p class="tiny">Sin brief visual: ${escapar(razonPrompt)}</p>`;
 
@@ -60,8 +66,14 @@ function bloqueArte(c: Creativo, prompt: string | undefined, id: string, nombre:
  * `hidden` en el panel que no toca) lo pone `SCRIPT_EDITORIAL` sobre cualquier
  * `[role="tablist"]`, y `.pestanas` ya se esconde sin JS: entonces los dos
  * paneles se leen uno tras otro, cada uno con su título.
+ *
+ * En modo edición el copy del panel oculto también es editable: `SCRIPT_FLUJO`
+ * enciende `contenteditable` en todos los `[data-editable]` al entrar, estén
+ * a la vista o no, así que al cambiar de pestaña el Copy B ya está listo para
+ * escribir, y un cambio hecho en un panel sigue contando (y guardándose)
+ * aunque se vuelva al otro.
  */
-function bloqueCopys(c: Creativo, id: string, nombre: string): string {
+function bloqueCopys(c: Creativo, i: number, id: string, nombre: string, editable: boolean): string {
   const opciones: ['A' | 'B', string][] = [['A', c.copyA], ['B', c.copyB]];
   const tabs = opciones.map(([o], i) =>
     `<button type="button" role="tab" id="${escapar(`${id}-tab-${o}`)}" aria-controls="${escapar(`${id}-copy-${o}`)}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">Copy ${o}</button>`,
@@ -72,7 +84,7 @@ function bloqueCopys(c: Creativo, id: string, nombre: string): string {
         <span class="anuncio-panel-titulo">Copy ${o}</span>
         ${botonCopiar(`${id}-texto-${o}`, `Copiar el copy ${o} del ${nombre}`)}
       </div>
-      <p class="copy" id="${escapar(`${id}-texto-${o}`)}" data-copia>${escapar(texto)}</p>
+      <p class="copy" id="${escapar(`${id}-texto-${o}`)}" data-copia${rutaEditable(editable, `creativos.${i}.copy${o}`)}>${escapar(texto)}</p>
     </div>`,
   ).join('');
 
@@ -80,14 +92,19 @@ function bloqueCopys(c: Creativo, id: string, nombre: string): string {
     ${paneles}`;
 }
 
-function tarjetaAnuncio(c: Creativo, n: number, prompt: string | undefined, razonPrompt: string): string {
+function tarjetaAnuncio(
+  c: Creativo, i: number, n: number, prompt: string | undefined, razonPrompt: string, editable: boolean, anclas: boolean,
+): string {
   const letra = c.grupo.toUpperCase();
   const id = `anuncio-${c.grupo}-${n}`;
   const nombre = `anuncio ${n} de la campaña ${letra}`;
   const formato = FORMATO_TEXTO[c.formato] ?? c.formato;
 
-  return `<article class="anuncio" id="${escapar(id)}">
-    ${bloqueArte(c, prompt, id, nombre, razonPrompt)}
+  // El ancla `creativos.N` es la que llevaba cada pieza en la antigua sección
+  // de creativos: así un comentario ya dejado sobre un anuncio sigue
+  // encontrando su sitio.
+  return `<article class="anuncio" id="${escapar(id)}"${rutaAncla(anclas, `creativos.${i}`)}>
+    ${bloqueArte(c, prompt, i, id, nombre, razonPrompt, editable)}
     <div class="anuncio-info">
       <div class="anuncio-hd">
         <div>
@@ -96,8 +113,8 @@ function tarjetaAnuncio(c: Creativo, n: number, prompt: string | undefined, razo
         </div>
         <span class="badge b-pink anuncio-formato">${escapar(formato)} · ${escapar(c.ratio.replace('x', ':'))}</span>
       </div>
-      <p class="anuncio-proposito"><span class="kv-k">Ángulo</span><span>${escapar(c.angulo)}</span></p>
-      ${bloqueCopys(c, id, nombre)}
+      <p class="anuncio-proposito"><span class="kv-k">Ángulo</span><span${rutaEditable(editable, `creativos.${i}.angulo`)}>${escapar(c.angulo)}</span></p>
+      ${bloqueCopys(c, i, id, nombre, editable)}
     </div>
   </article>`;
 }
@@ -123,7 +140,12 @@ function cabeceraCampana(grupo: string, campana: CampanaMeta | undefined, total:
  * por el índice ORIGINAL del creativo, que es como se generan (mismo orden).
  * Si falta un trozo, se declara en su sitio en vez de rellenarlo.
  */
-export function seccionAnuncios(g: Partial<Growth>, huecos: Record<string, string>): string {
+export function seccionAnuncios(
+  g: Partial<Growth>,
+  huecos: Record<string, string>,
+  editable = false,
+  anclas = false,
+): string {
   const cabecera = cabeceraSeccion({
     numero: 'A', kicker: 'Lo que se publica', titulo: 'Los anuncios, campaña por campaña',
     lead: 'Cada campaña de Meta con sus anuncios: formato y medidas, el ángulo que defiende, el brief de su arte y dos copys para probar uno contra otro.',
@@ -147,7 +169,7 @@ export function seccionAnuncios(g: Partial<Growth>, huecos: Record<string, strin
     const campana = campanaPorGrupo.get(grupo);
     if (!suyos.length && !campana) return '';
     const tarjetas = suyos.length
-      ? suyos.map(({ c, i }, n) => tarjetaAnuncio(c, n + 1, prompts[i], razonPrompts)).join('')
+      ? suyos.map(({ c, i }, n) => tarjetaAnuncio(c, i, n + 1, prompts[i], razonPrompts, editable, anclas)).join('')
       : `<p class="tiny">Sin anuncios para esta campaña: ${escapar(razonCreativos)}</p>`;
     return `<section class="campana campana-${escapar(grupo)}" aria-label="${escapar(`Campaña ${grupo.toUpperCase()}`)}">
       ${cabeceraCampana(grupo, campana, suyos.length, razonCampanas)}
@@ -157,5 +179,25 @@ export function seccionAnuncios(g: Partial<Growth>, huecos: Record<string, strin
 
   return `${cabecera}
   ${g.campanasMeta?.length ? '' : `<div style="margin-top:var(--e2);">${hueco(razonCampanas)}</div>`}
+  ${bloquePromptBase(g, editable)}
   <div class="campanas">${campanas}</div>`;
+}
+
+/**
+ * El prompt base y la regla de la cara, que vivían en la antigua sección de
+ * prompts. El brief de cada anuncio está escrito para ir DETRÁS de este
+ * prompt: sin él, lo que se copia de cada tarjeta es un brief a medias. Por
+ * eso se quedan aquí, antes de las campañas, y no se perdieron con la sección.
+ */
+function bloquePromptBase(g: Partial<Growth>, editable: boolean): string {
+  const base = g.promptsImagen?.base;
+  if (base === undefined) return '';
+  return `<div class="alert alert-red" style="margin-top:var(--e2);">
+      <strong>Regla que no se rompe: la cara del cliente no se genera con IA.</strong>
+      Es una persona real y su credibilidad es el activo central de la campaña. Los briefs visuales producen fondos, texturas y escenas sin rostros identificables. La foto real se fotografía aparte y se compone encima.
+    </div>
+    <div class="arte-brief prompt-base">
+      <div class="arte-brief-hd"><span class="kv-k">Prompt base · anteponer a todos los briefs</span>${botonCopiar('prompt-base', 'Copiar el prompt base')}</div>
+      <p class="pre" id="prompt-base" data-copia${rutaEditable(editable, 'promptsImagen.base')}>${escapar(base)}</p>
+    </div>`;
 }

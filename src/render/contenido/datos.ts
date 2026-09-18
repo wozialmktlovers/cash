@@ -35,6 +35,12 @@ export type PiezaEntregable = {
 /** Cabecera del documento: de quién es el mes y qué plazo corre. */
 export type MetaContenido = {
   cliente: string;
+  /**
+   * Destino del logo de la cabecera: `/` en la vista interna, el `/portal`
+   * de quien mira en el portal. Ausente en el enlace público (`/p/...`), donde
+   * el logo queda sin enlace — ver `cabeceraDocumento`.
+   */
+  inicio?: string;
   /** El mes del lote, `YYYY-MM`. */
   periodo: string;
   /** Fecha del pie del documento, ya escrita para leerse. */

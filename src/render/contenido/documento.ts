@@ -106,6 +106,7 @@ export function renderizarContenido(
     scriptsExtra: revision.controles ? `${SCRIPT_CONTENIDO}\n${SCRIPT_REVISION}` : SCRIPT_CONTENIDO,
     flujo: opciones.flujo,
     volver: opciones.volver,
+    inicio: meta.inicio,
   });
 }
 

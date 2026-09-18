@@ -51,6 +51,12 @@ export function envolverDocumento(o: {
   ayudaComentarios?: string;
   /** Botones propios del documento en la cabecera (ver `cabeceraDocumento`). */
   accionesExtra?: string;
+  /**
+   * Destino del logo de la cabecera (ver `cabeceraDocumento`): `/` en la
+   * vista interna, el `/portal` de quien mira en el portal, y ausente en el
+   * enlace público, donde el logo queda sin enlace.
+   */
+  inicio?: string;
 }): string {
   return `<!DOCTYPE html>
 <html lang="es-MX"><head>
@@ -72,6 +78,7 @@ ${cabeceraDocumento({
   etiqueta: o.etiqueta, cliente: o.cliente, operador: o.operador,
   puedeEditar: o.flujo?.puedeEditar, puedeComentar: o.flujo?.puedeComentar,
   volver: o.volver, ayudaComentarios: o.ayudaComentarios, accionesExtra: o.accionesExtra,
+  inicio: o.inicio,
 })}
 <div class="pagina"><div class="marco">
   <nav class="indice-lateral" aria-label="Secciones">

@@ -67,7 +67,11 @@ describe('data-ancla en los renders (B7)', () => {
       { ...flujo, tipo: 'growth' },
     );
     expect(html).toContain('data-ancla="seccion:meta"');
-    expect(html).toContain('data-ancla="seccion:creativos"');
+    // La sección de creativos salió del manual; sus piezas conservan su
+    // ancla `creativos.N` en las tarjetas de la sección de anuncios.
+    expect(html).toContain('data-ancla="seccion:anuncios"');
+    expect(html).toContain('data-ancla="creativos.0"');
+    expect(html).not.toContain('data-ancla="seccion:creativos"');
   });
 
   it('manual de Growth: sin flujo (vista pública) no lleva ningún data-ancla', () => {

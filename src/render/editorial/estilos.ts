@@ -52,6 +52,13 @@ p{max-width:68ch;}
 @media (prefers-reduced-motion:reduce){.cabecera{transition:none;}}
 
 .cabecera-marca{display:flex;align-items:center;gap:10px;min-width:0;flex:1;overflow:hidden;}
+/* El enlace del logo no aporta nada visual: solo envuelve la imagen. flex
+   para que no meta la línea de base de un elemento en línea bajo el logo.
+   El anillo de foco va hacia dentro porque .cabecera-marca recorta con
+   overflow:hidden y el común (hacia fuera) quedaría cortado arriba y abajo;
+   el relleno vertical le da sitio sin mover el logo de lado. */
+.cabecera-inicio{display:flex;align-items:center;flex-shrink:0;padding-block:4px;border-radius:6px;text-decoration:none;}
+.cabecera-inicio:focus-visible{box-shadow:inset var(--foco);}
 .cabecera .logo{height:24px;width:auto;flex-shrink:0;filter:brightness(0);transition:height .2s ease;}
 .cabecera.compacta .logo{height:20px;}
 @media (prefers-reduced-motion:reduce){.cabecera .logo{transition:none;}}

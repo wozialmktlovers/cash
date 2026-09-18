@@ -4,7 +4,7 @@ import type { Growth } from '@/growth/schemas';
 /** Extensiones y estacionalidad: cuándo invertir más y qué acompaña a cada anuncio. */
 export function seccionRsa(g: Partial<Growth>, huecos: Record<string, string>): string {
   const cab = cabeceraSeccion({
-    numero: '05', kicker: 'Google Ads', titulo: 'Extensiones y estacionalidad',
+    numero: '03', kicker: 'Google Ads', titulo: 'Extensiones y estacionalidad',
     lead: 'Las extensiones son gratis y suben el CTR. La estacionalidad decide dónde va el presupuesto anual.',
   });
 

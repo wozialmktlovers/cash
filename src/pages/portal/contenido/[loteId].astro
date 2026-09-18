@@ -84,6 +84,8 @@ let html: string | null = null;
 try {
   html = renderizarContenido(piezas, {
     cliente: cliente.nombre,
+    // El logo lleva al inicio del portal, con su `?cliente=` en vista previa.
+    inicio: volverHref,
     periodo: lote.periodo,
     fecha: lote.compartidoEn.toISOString().slice(0, 10),
     compartidoEn: lote.compartidoEn,

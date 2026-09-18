@@ -128,6 +128,8 @@ async function entregableDelLote(
 
   const piezas = await piezasDelLote(lote.id);
 
+  // Sin `inicio`: enlace público, sin sesión — el logo queda sin enlace (ver
+  // `resolverDocumentoPublico` y `cabeceraDocumento`).
   const html = renderizarContenido(piezas, {
     cliente: c.nombre,
     periodo: lote.periodo,
@@ -186,6 +188,9 @@ export async function resolverDocumentoPublico(token: string): Promise<
     : [undefined];
 
   // El link público nunca lleva barra de operador: es lo que ve el cliente.
+  // Tampoco `inicio`: quien abre el enlace no tiene cuenta, y un logo que
+  // llevara a `/` lo mandaría a una pantalla de acceso que no puede usar.
+  // Sin `inicio`, la cabecera deja el logo como imagen (ver `cabeceraDocumento`).
   const html = link.documentoTipo === 'growth'
     ? renderizarManual(r.datos as any, {
         cliente: c.nombre, producto: c.producto, fecha,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { cabeceraDocumento, SCRIPT_CABECERA } from '@/render/investigacion/cabecera';
-import { bandaVistaPrevia } from '@/render/editorial/cabecera';
+import { bandaVistaPrevia, cabeceraDocumento as cabeceraEditorial } from '@/render/editorial/cabecera';
 import type { OpcionesBarra } from '@/render/barra-operador';
 
 const meta = { cliente: 'Ana Villa', giro: 'Cosmetología', fecha: '2026-08-12' };
@@ -75,6 +75,30 @@ describe('cabecera del documento', () => {
   it('el panel de compartir se alinea con el borde derecho de la cápsula, no con el del viewport', () => {
     expect(SCRIPT_CABECERA).toContain('window.innerWidth - r.right');
     expect(SCRIPT_CABECERA).toContain("panel.style.right = Math.max(16, margenDerecho) + 'px'");
+  });
+});
+
+// El logo lleva al inicio de quien mira: `/` en la vista interna, `/portal`
+// en el portal. En el enlace público no hay `inicio` y el logo queda como
+// imagen: quien lo abre no tiene cuenta y `/` lo mandaría al acceso.
+describe('logo de la cabecera', () => {
+  const base = { etiqueta: 'Investigación', cliente: 'Ana' };
+
+  it('vista interna: enlace a / con nombre accesible, envolviendo el mismo logo', () => {
+    const h = cabeceraEditorial({ ...base, inicio: '/' });
+    expect(h).toMatch(/<a class="cabecera-inicio" href="\/" aria-label="Wozial Studio · inicio"><img class="logo" /);
+  });
+
+  it('portal: enlace a /portal, con su ?cliente= en vista previa', () => {
+    expect(cabeceraEditorial({ ...base, inicio: '/portal' })).toContain('<a class="cabecera-inicio" href="/portal"');
+    expect(cabeceraEditorial({ ...base, inicio: '/portal?cliente=c1' })).toContain('href="/portal?cliente=c1"');
+  });
+
+  it('enlace público (sin inicio): el logo es una imagen suelta, sin enlace', () => {
+    const h = cabeceraEditorial(base);
+    expect(h).toContain('<img class="logo"');
+    expect(h).not.toContain('cabecera-inicio');
+    expect(h).not.toContain('Wozial Studio · inicio');
   });
 });
 

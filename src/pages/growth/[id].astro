@@ -65,6 +65,8 @@ const html = renderizarManual(
     ciudad: c.ciudad ?? undefined,
     destino: sitio?.url,
     creadoEn: r.createdAt,
+    // Vista interna, con sesión: el logo lleva al inicio del equipo.
+    inicio: '/',
   },
   // La cabecera flotante arma el botón Compartir y los de Editar/Comentar a
   // partir de estas opciones y de `flujo`: ya no se le pasa HTML armado.

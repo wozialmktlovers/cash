@@ -11,7 +11,15 @@ import { SCRIPT_PILARES } from './script';
 
 export { SCRIPT_PILARES };
 
-export type MetaPilares = { cliente: string; fecha: string };
+export type MetaPilares = {
+  cliente: string; fecha: string;
+  /**
+   * Destino del logo de la cabecera: `/` en la vista interna, el `/portal`
+   * de quien mira en el portal. Ausente en el enlace público (`/p/...`), donde
+   * el logo queda sin enlace — ver `cabeceraDocumento`.
+   */
+  inicio?: string;
+};
 export type OpcionesPilares = {
   operador?: OpcionesBarra;
   avance?: Record<string, AvanceTema>;
@@ -87,5 +95,6 @@ export function renderizarPilares(mapa: MapaPilares, meta: MetaPilares, opciones
     scriptsExtra: SCRIPT_PILARES,
     flujo: opciones?.flujo,
     volver: opciones?.volver,
+    inicio: meta.inicio,
   });
 }

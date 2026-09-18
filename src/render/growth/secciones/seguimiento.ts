@@ -7,7 +7,7 @@ export function seccionSeguimiento(g: Partial<Growth>): string {
 
   return `
     ${cabeceraSeccion({
-      numero: '09', kicker: 'Seguimiento', titulo: 'Qué medir y cuándo cortar',
+      numero: '06', kicker: 'Seguimiento', titulo: 'Qué medir y cuándo cortar',
       lead: 'Decidido por adelantado, para que la decisión no dependa del ánimo del día.',
     })}
 

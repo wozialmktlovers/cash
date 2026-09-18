@@ -78,7 +78,8 @@ if (operable) {
 
 const html = renderizarPilares(
   r.datos as any,
-  { cliente: c.nombre, fecha: r.createdAt.toISOString().slice(0, 10) },
+  // `inicio`: vista interna, con sesión — el logo lleva al inicio del equipo.
+  { cliente: c.nombre, fecha: r.createdAt.toISOString().slice(0, 10), inicio: '/' },
   {
     operador: operable
       ? {

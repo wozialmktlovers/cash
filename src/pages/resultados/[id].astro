@@ -58,7 +58,8 @@ if (operable) {
 // de operar, se le pasa `undefined` y esa cabecera queda como la ve el cliente.
 const html = renderizarInvestigacion(
   r.datos as any,
-  { cliente: c.nombre, giro: c.giro, fecha: r.createdAt.toISOString().slice(0, 10) },
+  // `inicio`: vista interna, con sesión — el logo lleva al inicio del equipo.
+  { cliente: c.nombre, giro: c.giro, fecha: r.createdAt.toISOString().slice(0, 10), inicio: '/' },
   operable
     ? {
         clienteId: c.id, clienteNombre: c.nombre, clienteSlug: slugificar(c.nombre), documentoId: r.id,

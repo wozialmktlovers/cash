@@ -15,7 +15,7 @@ export function seccionTecnico(meta: MetaManual, g: Partial<Growth> = {}): strin
   if (t) {
     return `
     ${cabeceraSeccion({
-      numero: '07', kicker: 'Implementación', titulo: 'GTM, GA4, píxel y etiquetas',
+      numero: '05', kicker: 'Implementación', titulo: 'GTM, GA4, píxel y etiquetas',
       lead: 'Todo pasa por un solo contenedor de Tag Manager. Nada se instala directo en el código: así se cambia sin tocar el sitio.',
     })}
 
@@ -53,7 +53,7 @@ export function seccionTecnico(meta: MetaManual, g: Partial<Growth> = {}): strin
 
   return `
     ${cabeceraSeccion({
-      numero: '08', kicker: 'Implementación', titulo: 'GTM, GA4, píxel y etiquetas',
+      numero: '05', kicker: 'Implementación', titulo: 'GTM, GA4, píxel y etiquetas',
       lead: 'El orden importa: sin el contenedor publicado, todo lo demás mide en el vacío.',
     })}
 

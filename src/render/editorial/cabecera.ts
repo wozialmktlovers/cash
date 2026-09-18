@@ -98,11 +98,25 @@ export function cabeceraDocumento(o: {
    * suyos, no de la base. Quien no los manda, no los tiene.
    */
   accionesExtra?: string;
+  /**
+   * A dónde lleva el logo: el inicio de quien mira. `/` en la vista interna
+   * (equipo con sesión) y `/portal` —con su `?cliente=` en vista previa— en
+   * el portal del cliente. Lo decide quien llama, que es quien sabe desde
+   * qué ruta y con qué sesión se rinde; la base no lo deduce de la URL.
+   *
+   * Sin él, el logo queda como imagen suelta, y eso es lo que corresponde al
+   * enlace público (`/p/...`): quien lo abre no tiene cuenta, y `/` lo
+   * mandaría a una pantalla de acceso que no puede usar. Por eso la ausencia
+   * es el valor por omisión: un llamador que se olvide de pasarlo deja un
+   * logo sin enlace, nunca un enlace a una puerta cerrada.
+   */
+  inicio?: string;
 }): string {
+  const logo = `<img class="logo" src="${LOGO_WOZIAL_SRC}" alt="Wozial" width="545" height="194">`;
   return `<header class="cabecera" id="cabecera">
   <div class="cabecera-marca">
     ${o.volver ? `<a class="cabecera-volver" href="${escapar(o.volver.href)}" aria-label="${escapar(o.volver.texto)}" title="${escapar(o.volver.texto)}">${ICONO_VOLVER}</a>` : ''}
-    <img class="logo" src="${LOGO_WOZIAL_SRC}" alt="Wozial" width="545" height="194">
+    ${o.inicio ? `<a class="cabecera-inicio" href="${escapar(o.inicio)}" aria-label="Wozial Studio · inicio">${logo}</a>` : logo}
     <span class="titulo">${escapar(o.etiqueta)} · <b>${escapar(o.cliente)}</b></span>
   </div>
   <div class="cabecera-acciones">

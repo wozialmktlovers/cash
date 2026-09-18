@@ -19,7 +19,7 @@ export function seccionGoogle(
 ): string {
   const urlPorClave = new Map(urls.map((u) => [u.clave, u.url]));
   const cab = cabeceraSeccion({
-    numero: '04', kicker: 'Google Ads', titulo: 'Estructura y keywords',
+    numero: '02', kicker: 'Google Ads', titulo: 'Estructura y keywords',
     lead: 'Meta genera demanda; Google la cosecha. Aquí solo se puja por intención, nunca por curiosidad.',
   });
 

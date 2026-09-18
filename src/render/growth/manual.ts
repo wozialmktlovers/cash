@@ -9,8 +9,6 @@ import { seccion } from './secciones/comunes';
 import { seccionPortada, type MetaManual } from './secciones/portada';
 import { seccionAnuncios } from './secciones/anuncios';
 import { seccionMeta } from './secciones/meta';
-import { seccionCreativos } from './secciones/creativos';
-import { seccionPrompts } from './secciones/prompts';
 import { seccionGoogle } from './secciones/google';
 import { seccionRsa } from './secciones/rsa';
 import { seccionTraza } from './secciones/traza';
@@ -31,26 +29,28 @@ const ACCIONES_VIDEOLLAMADA = `<button type="button" class="cabecera-escala" id=
 /**
  * Índice lateral: mismo numeral que la placa de cada sección, para que la
  * columna y el documento digan lo mismo. El «00» es la portada, que no lleva
- * placa. El salto del 07 al 09 no es un error de aquí: lo traen los propios
- * encabezados de las secciones (`secciones/tecnico.ts` numera 07 u 08 según
- * haya arquitectura de medición, y `seguimiento.ts` numera 09). Se deja tal
- * cual: esto es un cambio de piel, no de contenido.
+ * placa. Si se quita o se agrega una sección, se renumeran aquí Y en su
+ * `cabeceraSeccion`: las dos listas tienen que decir lo mismo.
+ *
+ * Las secciones de creativos (02) y de prompts (03) salieron del manual: sus
+ * copys, ángulos y briefs se leen y se editan en la de anuncios, y el prompt
+ * base con la regla de la cara van en su cabecera. Al quitarlas se cerraron
+ * también los saltos que traía la numeración (del 07 al 09, y el 08 que
+ * `tecnico.ts` usaba sin arquitectura de medición): ahora corre seguida.
  *
  * La «A» es la sección de anuncios por campaña, la primera después de la
- * portada. Va con letra y no con número para no renumerar las nueve de
- * detrás: es la vista de conjunto, y las numeradas son el detalle.
+ * portada. Va con letra y no con número porque es la vista de conjunto, y las
+ * numeradas son el detalle.
  */
 const INDICE: [string, string, string][] = [
   ['00', 'setup', 'Setup'],
   ['A', 'anuncios', 'Campañas'],
   ['01', 'meta', 'Meta'],
-  ['02', 'creativos', 'Creativos'],
-  ['03', 'prompts', 'Prompts'],
-  ['04', 'google', 'Google'],
-  ['05', 'rsa', 'Anuncios'],
-  ['06', 'traza', 'Trazabilidad'],
-  ['07', 'tecnico', 'Implementación'],
-  ['09', 'seguimiento', 'Seguimiento'],
+  ['02', 'google', 'Google'],
+  ['03', 'rsa', 'Anuncios'],
+  ['04', 'traza', 'Trazabilidad'],
+  ['05', 'tecnico', 'Implementación'],
+  ['06', 'seguimiento', 'Seguimiento'],
 ];
 
 /**
@@ -82,7 +82,15 @@ export type OpcionesPortalManual = {
  */
 export function renderizarManual(
   datos: Partial<Growth> & { _huecos?: Record<string, string> },
-  meta: MetaManual & { destino?: string; ciudad?: string; creadoEn?: Date },
+  meta: MetaManual & {
+    destino?: string; ciudad?: string; creadoEn?: Date;
+    /**
+     * Destino del logo de la cabecera: `/` en la vista interna, el `/portal`
+     * de quien mira en el portal. Ausente en el enlace público (`/p/...`), donde
+     * el logo queda sin enlace — ver `cabeceraDocumento`.
+     */
+    inicio?: string;
+  },
   operador?: OpcionesBarra,
   editable = false,
   flujo?: FlujoDatos,
@@ -109,10 +117,8 @@ export function renderizarManual(
   const anclas = Boolean(flujo);
   const cuerpo = [
     seccion('setup', seccionPortada(datos, meta, urls.length, huecos, editable), anclas),
-    seccion('anuncios', seccionAnuncios(datos, huecos), anclas),
+    seccion('anuncios', seccionAnuncios(datos, huecos, editable, anclas), anclas),
     seccion('meta', seccionMeta(datos, huecos, editable), anclas),
-    seccion('creativos', seccionCreativos(datos, huecos, urls, editable, anclas), anclas),
-    seccion('prompts', seccionPrompts(datos, huecos, editable), anclas),
     seccion('google', seccionGoogle(datos, huecos, urls), anclas),
     seccion('rsa', seccionRsa(datos, huecos), anclas),
     seccion('traza', seccionTraza(urls), anclas),
@@ -134,5 +140,6 @@ export function renderizarManual(
     volver: portal ? { href: portal.volverHref, texto: portal.volverTexto, vistaPrevia: portal.vistaPrevia } : undefined,
     ayudaComentarios: portal?.ayudaComentarios,
     accionesExtra: ACCIONES_VIDEOLLAMADA,
+    inicio: meta.inicio,
   });
 }

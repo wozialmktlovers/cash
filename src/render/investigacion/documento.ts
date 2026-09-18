@@ -8,7 +8,15 @@ import { ESTILOS_INVESTIGACION } from './estilos';
 import { seccionPortada, seccionDescubrimos, seccionClienteIdeal, seccionRecomendamos } from './lectura';
 import { seccionDetalle, sintesisEditorial } from './detalle';
 
-export type MetaInvestigacion = { cliente: string; giro: string; fecha: string };
+export type MetaInvestigacion = {
+  cliente: string; giro: string; fecha: string;
+  /**
+   * Destino del logo de la cabecera: `/` en la vista interna, el `/portal`
+   * de quien mira en el portal. Ausente en el enlace público (`/p/...`), donde
+   * el logo queda sin enlace — ver `cabeceraDocumento`.
+   */
+  inicio?: string;
+};
 
 /**
  * Alias histórico: la interacción (tema, pestañas, índice activo,
@@ -77,5 +85,6 @@ export function renderizarInvestigacion(
     operador,
     flujo,
     volver,
+    inicio: meta.inicio,
   });
 }
