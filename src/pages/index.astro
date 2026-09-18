@@ -1,20 +1,31 @@
 ---
-import { desc, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, ne, sql } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import TarjetaCliente from '@/components/TarjetaCliente.astro';
-import { db, clients, researchJobs } from '@/db';
-import { NOMBRE_ETAPA } from '@/flujo/reglas';
+import {
+  db, clients, researchJobs, users, clienteEtapas, etapaEventos, comentarios, contenidoLotes, contenidoPiezas,
+  pilaresTemas, pilaresResults,
+} from '@/db';
+import { NOMBRE_ETAPA, ESTADOS, ETIQUETA_ESTADO_ETAPA } from '@/flujo/reglas';
+import { COLOR_ESTADO, type ColorEstado } from '@/flujo/ui';
+import { plazoOponible } from '@/contenido/reglas';
+import { periodo, type EtapaM, type Evento, type JobM } from '@/lib/desempeno';
+import { nombrePeriodo, periodoActual, periodoVecino } from '@/lib/ui/periodo';
 import { etapasDeClientes } from '@/flujo/servicio';
 import { listarPendientes, type MotivoPendiente } from '@/lib/pendientes';
 import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
 import { nombreVisible } from '@/lib/usuarios';
 import { condicionClientes } from '@/lib/visibilidad';
-import { gastoDelMes } from '@/lib/ui/tablero';
+import {
+  ultimaActividad, diasSinMovimiento, estaAtascado, textoDias, UMBRAL_ATASCADO_DIAS,
+  repartoPorEtapa, comparativoGastos, filasPorOperador, mesesPorVencer, cuentaRegresiva,
+  NOMBRE_TIPO_GASTO,
+} from '@/lib/ui/tablero';
 import { resumirPorCliente, resumenDe } from '@/lib/ui/estado-cliente';
 import { porcentaje, etapasDe, resumenAvance } from '@/lib/ui/progreso';
 import { enlacePendiente } from '@/lib/ui/enlaces';
-import { fechaCorta, fechaLarga } from '@/lib/ui/fecha';
+import { fechaCorta, fechaLarga, fechaHora } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
 
@@ -72,13 +83,7 @@ const etapasPorCliente = await etapasDeClientes(lista.map((c) => c.id));
 const avancePorCliente = new Map(lista.map((c) => [c.id, resumenAvance(etapasPorCliente.get(c.id) ?? [])] as const));
 const avanceDe = (clientId: string) => avancePorCliente.get(clientId)!;
 
-// El más atrasado primero (diseño §2). `sort` es estable, así que dos
-// clientes con el mismo porcentaje conservan el orden de la consulta, que es
-// por `updatedAt` descendente. Un cliente sin etapas contratadas vale 0 y cae
-// arriba; su tarjeta lo dice con todas sus letras.
-const clientesPorAvance = [...lista].sort((a, b) => avanceDe(a.id).porcentaje - avanceDe(b.id).porcentaje);
-
-// Las cuatro cifras de arriba (diseño §2).
+// Las cifras de arriba (diseño §2).
 //
 // «Clientes activos» no sale de una columna: no existe `clients.activo`. Es el
 // cliente que tiene trabajo por delante — al menos una etapa contratada y
@@ -94,10 +99,181 @@ const avancePromedio = conEtapas.length === 0
   : Math.round(conEtapas.reduce((s, c) => s + avanceDe(c.id).porcentaje, 0) / conEtapas.length);
 
 const ahora = new Date();
-const gastoMes = gastoDelMes(jobs, ahora);
 const resumen = resumirPorCliente(jobs);
 const porId = new Map(lista.map((c) => [c.id, c]));
 const activos = jobs.filter((j) => j.estado === 'encolado' || j.estado === 'corriendo');
+const esAdmin = usuario.rol === 'admin';
+const mesActual = periodo('mes', ahora);
+
+// ── Tablero de seguimiento: cuatro lotes de datos, cada uno UNA consulta ──
+//
+// Todas se acotan con `idsVisibles`, que ya pasó por `condicionClientes`: un
+// operador nunca trae actividad, aprobaciones ni meses de clientes ajenos,
+// así que ningún bloque de abajo puede enseñárselos aunque se equivoque al
+// pintar. Sin clientes visibles no se consulta nada.
+const idsVisibles = lista.map((c) => c.id);
+const hayClientes = idsVisibles.length > 0;
+
+type FilaActividad = { client_id: string; ultima: string | Date | null };
+
+const [actividadFilas, aprobacionesFilas, personas, lotesFilas] = await Promise.all([
+  // Última actividad por cliente, en una sola pasada por las tablas donde
+  // queda huella de trabajo: eventos de etapa (incluye generar, editar,
+  // solicitar, aprobar…), comentarios, trabajos del agente, el mes de
+  // contenido y sus piezas (alta, edición y revisión del cliente) y el avance
+  // del equipo sobre el mapa de pilares. `clients.updated_at` NO entra a
+  // propósito: corregir el teléfono de un cliente no mueve su trabajo.
+  hayClientes
+    ? db.execute<FilaActividad>(sql`
+        SELECT client_id, max(t) AS ultima FROM (
+          SELECT ${clienteEtapas.clientId} AS client_id, ${etapaEventos.creadoEn} AS t
+            FROM ${etapaEventos} INNER JOIN ${clienteEtapas} ON ${clienteEtapas.id} = ${etapaEventos.etapaId}
+           WHERE ${inArray(clienteEtapas.clientId, idsVisibles)}
+          UNION ALL
+          SELECT ${clienteEtapas.clientId}, ${comentarios.creadoEn}
+            FROM ${comentarios} INNER JOIN ${clienteEtapas} ON ${clienteEtapas.id} = ${comentarios.etapaId}
+           WHERE ${inArray(clienteEtapas.clientId, idsVisibles)}
+          UNION ALL
+          SELECT ${researchJobs.clientId}, coalesce(${researchJobs.finishedAt}, ${researchJobs.createdAt})
+            FROM ${researchJobs}
+           WHERE ${inArray(researchJobs.clientId, idsVisibles)}
+          UNION ALL
+          SELECT ${contenidoLotes.clientId}, greatest(${contenidoLotes.actualizadoEn}, ${contenidoLotes.contenidoActualizadoEn})
+            FROM ${contenidoLotes}
+           WHERE ${inArray(contenidoLotes.clientId, idsVisibles)}
+          UNION ALL
+          SELECT ${contenidoLotes.clientId}, greatest(${contenidoPiezas.actualizadoEn}, ${contenidoPiezas.revisadoEn})
+            FROM ${contenidoPiezas} INNER JOIN ${contenidoLotes} ON ${contenidoLotes.id} = ${contenidoPiezas.loteId}
+           WHERE ${inArray(contenidoLotes.clientId, idsVisibles)}
+          UNION ALL
+          SELECT ${pilaresResults.clientId}, ${pilaresTemas.actualizadoEn}
+            FROM ${pilaresTemas} INNER JOIN ${pilaresResults} ON ${pilaresResults.id} = ${pilaresTemas.resultId}
+           WHERE ${inArray(pilaresResults.clientId, idsVisibles)}
+        ) AS actividad
+        GROUP BY client_id
+      `)
+    : Promise.resolve([] as FilaActividad[]),
+
+  // Lo aprobado este mes, para «Por operador». Solo el `aprobar` del mes:
+  // es lo único que `carga` cuenta de los eventos.
+  hayClientes
+    ? db.select({
+        etapaId: etapaEventos.etapaId, clientId: clienteEtapas.clientId, etapa: clienteEtapas.etapa,
+        accion: etapaEventos.accion, de: etapaEventos.de, a: etapaEventos.a, creadoEn: etapaEventos.creadoEn,
+      })
+        .from(etapaEventos)
+        .innerJoin(clienteEtapas, eq(clienteEtapas.id, etapaEventos.etapaId))
+        .where(and(
+          inArray(clienteEtapas.clientId, idsVisibles),
+          eq(etapaEventos.accion, 'aprobar'),
+          gte(etapaEventos.creadoEn, mesActual.desde!),
+        ))
+    : Promise.resolve([]),
+
+  // Nombres del equipo. Solo el admin necesita los de los demás: el operador
+  // solo ve clientes suyos y su propia fila, y su nombre ya viene en la sesión.
+  esAdmin
+    ? db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email, rol: users.rol, activo: users.activo })
+        .from(users).where(ne(users.rol, 'cliente'))
+    : Promise.resolve([]),
+
+  // Meses que esperan al cliente con el plazo corriendo. Va DESPUÉS de
+  // `asegurarLotesAlDia` (arriba del todo), así que lo vencido ya se aprobó y
+  // no puede salir aquí como «por vencer».
+  hayClientes
+    ? db.select({
+        id: contenidoLotes.id, clientId: contenidoLotes.clientId, periodo: contenidoLotes.periodo,
+        estado: contenidoLotes.estado, limiteRevision: contenidoLotes.limiteRevision,
+        compartidoEn: contenidoLotes.compartidoEn, contenidoActualizadoEn: contenidoLotes.contenidoActualizadoEn,
+      })
+        .from(contenidoLotes)
+        .where(and(
+          inArray(contenidoLotes.clientId, idsVisibles),
+          eq(contenidoLotes.estado, 'en_revision'),
+          gt(contenidoLotes.limiteRevision, ahora),
+        ))
+        .orderBy(asc(contenidoLotes.limiteRevision))
+    : Promise.resolve([]),
+]);
+
+// ── Avance por cliente: responsable, paso y días sin movimiento ──────────
+const nombres = new Map<string, string>(
+  esAdmin ? personas.map((p) => [p.id, nombreVisible(p)]) : [[usuario.id, nombreVisible(usuario)]],
+);
+const ultimaPorCliente = new Map([...actividadFilas].map((f) => [f.client_id, f.ultima]));
+const seguimientoDe = new Map(lista.map((c) => {
+  // Sin ninguna huella todavía, el reloj corre desde el alta: un cliente dado
+  // de alta hace un mes al que nadie le ha hecho nada sí está atascado.
+  const dias = diasSinMovimiento(ultimaActividad([ultimaPorCliente.get(c.id), c.createdAt]), ahora);
+  return [c.id, {
+    responsable: c.operadorId ? (nombres.get(c.operadorId) ?? 'Operador') : 'Sin asignar',
+    dias,
+    atascado: estaAtascado(dias, avanceDe(c.id).pasoActual !== null),
+  }] as const;
+}));
+const seguimiento = (id: string) => seguimientoDe.get(id)!;
+const atascados = lista.filter((c) => seguimiento(c.id).atascado).length;
+
+// Los atascados primero, el que más lleva quieto arriba; después, el más
+// atrasado primero (diseño §2). `sort` es estable, así que dos clientes
+// empatados conservan el orden de la consulta (`updatedAt` descendente).
+const clientesPorAvance = [...lista].sort((a, b) => {
+  const sa = seguimiento(a.id);
+  const sb = seguimiento(b.id);
+  if (sa.atascado !== sb.atascado) return sa.atascado ? -1 : 1;
+  if (sa.atascado) return (sb.dias ?? 0) - (sa.dias ?? 0);
+  return avanceDe(a.id).porcentaje - avanceDe(b.id).porcentaje;
+});
+
+// ── Por etapa ────────────────────────────────────────────────────────────
+const todasLasEtapas = [...etapasPorCliente.values()].flat();
+const reparto = repartoPorEtapa(todasLasEtapas);
+const hayEtapasContratadas = reparto.some((f) => f.total > 0);
+// El mismo color con que la ficha y `TarjetaCliente` pintan cada estado.
+const COLOR_TOKEN: Record<ColorEstado, string> = {
+  gris: 'var(--suave)', azul: 'var(--azul)', amarillo: 'var(--amarillo)', rosa: 'var(--rosa)', verde: 'var(--verde)',
+};
+
+// ── Por operador ─────────────────────────────────────────────────────────
+// `lista` ya viene recortada por `condicionClientes`: al operador le llegan
+// solo sus clientes y, por tanto, solo su fila. Los operadores activos sin
+// clientes se suman solo para el admin, que es quien reparte el trabajo.
+const etapasM: EtapaM[] = todasLasEtapas.map((e) => ({
+  id: e.id, clientId: e.clientId, etapa: e.etapa, estado: e.estado, contratada: e.contratada, interna: e.interna,
+  operadorId: porId.get(e.clientId)?.operadorId ?? null,
+}));
+const filasOperador = filasPorOperador({
+  clientes: lista,
+  etapas: etapasM,
+  aprobaciones: aprobacionesFilas as Evento[],
+  nombres,
+  extras: esAdmin ? personas.filter((p) => p.rol === 'operador' && p.activo).map((p) => p.id) : [],
+  p: mesActual,
+});
+
+// ── Gastos ───────────────────────────────────────────────────────────────
+// Los jobs ya vienen acotados a los clientes visibles: el operador ve el
+// gasto de los suyos y nada más. `costo_usd` es numeric y postgres-js lo
+// entrega como texto; un valor corrupto cuenta como 0 (mismo cuidado que
+// /desempeno) en vez de volver NaN todas las sumas.
+const jobsM: JobM[] = jobs.map((j) => {
+  const n = Number(j.costoUsd);
+  return { clientId: j.clientId, tipo: j.tipo, costoUsd: Number.isNaN(n) ? 0 : n, creadoPor: j.creadoPor, creadoEn: j.createdAt };
+});
+const gastos = comparativoGastos(jobsM, ahora);
+const maxTipo = Math.max(0, ...gastos.porTipo.flatMap((t) => [t.actual, t.anterior]));
+const nombreMesAnterior = nombrePeriodo(periodoVecino(periodoActual(ahora), -1));
+
+// ── Meses por vencer ─────────────────────────────────────────────────────
+const porVencer = mesesPorVencer(lotesFilas, ahora).map((l) => ({
+  ...l,
+  cliente: porId.get(l.clientId),
+  cuenta: cuentaRegresiva(l.limiteRevision, ahora),
+  // Si el contenido se tocó después de compartirlo, el plazo ya no se le
+  // puede oponer al cliente y el mes NO se aprobará solo (`plazoOponible`).
+  // Se enseña igual —sigue esperando al cliente—, pero sin la amenaza.
+  seApruebaSolo: plazoOponible(l),
+}));
 
 const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 
@@ -113,16 +289,30 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
     <Icono nombre="buscar" /><span>Busca un cliente por nombre, giro o ciudad…</span>
   </button>
 
-  <section class="indicadores" aria-label="Indicadores">
-    <div class="indicador rosa"><Icono nombre="clientes" /><span class="valor cifra">{clientesActivos}</span><span class="nombre">Clientes activos</span></div>
-    <div class="indicador azul"><Icono nombre="bandeja" /><span class="valor cifra">{pendientes.total}</span><span class="nombre">Esperan por ti</span></div>
-    <div class="indicador verde"><Icono nombre="grafica" /><span class="valor cifra">{avancePromedio}%</span><span class="nombre">Avance promedio</span></div>
-    <div class="indicador amarillo"><Icono nombre="dinero" /><span class="valor cifra">{dinero(gastoMes)}</span><span class="nombre">Gasto del mes</span></div>
-  </section>
+  {/* Cada cifra es un enlace a su bloque de esta misma página. El nombre
+     accesible es la frase completa («Clientes activos: 3. Ir a avance por
+     cliente»), no solo el número. */}
+  <nav class="indicadores cinco" aria-label="Indicadores">
+    <a href="#avance" class="indicador rosa" aria-label={`Clientes activos: ${clientesActivos}. Ir a avance por cliente`}>
+      <Icono nombre="clientes" /><span class="valor cifra">{clientesActivos}</span><span class="nombre">Clientes activos</span>
+    </a>
+    <a href="#te-toca" class="indicador azul" aria-label={`Esperan por ti: ${pendientes.total}. Ir a te toca a ti`}>
+      <Icono nombre="bandeja" /><span class="valor cifra">{pendientes.total}</span><span class="nombre">Esperan por ti</span>
+    </a>
+    <a href="#avance" class="indicador verde" aria-label={`Avance promedio: ${avancePromedio}%. Ir a avance por cliente`}>
+      <Icono nombre="grafica" /><span class="valor cifra">{avancePromedio}%</span><span class="nombre">Avance promedio</span>
+    </a>
+    <a href="#gastos" class="indicador amarillo" aria-label={`Gasto del mes: ${dinero(gastos.actual)}. Ir a gastos`}>
+      <Icono nombre="dinero" /><span class="valor cifra">{dinero(gastos.actual)}</span><span class="nombre">Gasto del mes</span>
+    </a>
+    <a href="#por-vencer" class="indicador rosa" aria-label={`Meses por vencer: ${porVencer.length}. Ir a meses por vencer`}>
+      <Icono nombre="reloj" /><span class="valor cifra">{porVencer.length}</span><span class="nombre">Meses por vencer</span>
+    </a>
+  </nav>
 
-  <section class="seccion">
+  <section class="seccion" id="te-toca" aria-labelledby="t-te-toca">
     <div class="seccion-cabeza">
-      <h2>Te toca a ti</h2>
+      <h2 id="t-te-toca">Te toca a ti</h2>
       {pendientes.total > pendientesMostrados && (
         <a href="/pendientes">Ver los {pendientes.total} pendientes</a>
       )}
@@ -162,9 +352,9 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
     )}
   </section>
 
-  <section class="seccion">
+  <section class="seccion" id="avance" aria-labelledby="t-avance">
     <div class="seccion-cabeza">
-      <h2>Avance de los clientes</h2>
+      <h2 id="t-avance">Avance por cliente</h2>
       {lista.length > 0 && <a href="/clientes">Ver todos</a>}
     </div>
     {lista.length === 0 ? (
@@ -175,10 +365,196 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
         <div><a href="/clientes/nuevo" class="btn">Registra tu primer cliente</a></div>
       </div>
     ) : (
-      <div class="rejilla tres">
-        {clientesPorAvance.map((c) => (
-          <TarjetaCliente cliente={c} resumen={resumenDe(resumen, c.id)} avance={avanceDe(c.id)} />
-        ))}
+      <>
+        {atascados > 0 && (
+          <p class="aviso-atascados">
+            <span class="etiqueta rosa">{atascados === 1 ? '1 atascado' : `${atascados} atascados`}</span>
+            <span class="secundario">Con trabajo por delante y {UMBRAL_ATASCADO_DIAS} días o más sin movimiento. Van primero.</span>
+          </p>
+        )}
+        <div class="rejilla tres">
+          {clientesPorAvance.map((c) => (
+            <TarjetaCliente cliente={c} resumen={resumenDe(resumen, c.id)} avance={avanceDe(c.id)} seguimiento={seguimiento(c.id)} />
+          ))}
+        </div>
+      </>
+    )}
+  </section>
+
+  <section class="seccion" id="por-etapa" aria-labelledby="t-por-etapa">
+    <div class="seccion-cabeza">
+      <h2 id="t-por-etapa">Por etapa</h2>
+      {hayEtapasContratadas && <a href="/desempeno">Ver desempeño</a>}
+    </div>
+    {!hayEtapasContratadas ? (
+      <div class="tarjeta vacio">
+        <Icono nombre="grafica" />
+        <strong>Ninguna etapa contratada todavía</strong>
+        En cuanto un cliente contrate una etapa, aquí se ve dónde se acumula el trabajo.
+      </div>
+    ) : (
+      <div class="tarjeta">
+        <ul class="lista reparto">
+          {reparto.map((f) => (
+            <li class="renglon">
+              <div class="cuerpo">
+                <div class="reparto-cabeza">
+                  <strong>{NOMBRE_ETAPA[f.etapa]}</strong>
+                  <span class="secundario cifra">{f.total === 1 ? '1 cliente' : `${f.total} clientes`}</span>
+                </div>
+                {f.total === 0 ? (
+                  <p class="secundario">Nadie la tiene contratada.</p>
+                ) : (
+                  <>
+                    <div class="reparto-barra" aria-hidden="true">
+                      {ESTADOS.filter((e) => f.porEstado[e] > 0).map((e) => (
+                        <i style={`flex:${f.porEstado[e]};background:${COLOR_TOKEN[COLOR_ESTADO[e]]}`}></i>
+                      ))}
+                    </div>
+                    <ul class="reparto-estados">
+                      {ESTADOS.filter((e) => f.porEstado[e] > 0).map((e) => (
+                        <li class={`etiqueta ${COLOR_ESTADO[e]}`}><span class="cifra">{f.porEstado[e]}</span>&nbsp;{ETIQUETA_ESTADO_ETAPA[e].toLowerCase()}</li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+  </section>
+
+  <section class="seccion" id="por-operador" aria-labelledby="t-por-operador">
+    <div class="seccion-cabeza">
+      <h2 id="t-por-operador">{esAdmin ? 'Por operador' : 'Tu trabajo'}</h2>
+      {filasOperador.length > 0 && <a href="/desempeno">Ver desempeño</a>}
+    </div>
+    {filasOperador.length === 0 ? (
+      <div class="tarjeta vacio">
+        <Icono nombre="usuarios" />
+        <strong>{esAdmin ? 'Todavía no hay operadores con clientes' : 'Aún no tienes clientes asignados'}</strong>
+        {esAdmin
+          ? 'Cuando des de alta a tu equipo y le asignes clientes, aquí verás la carga de cada quien.'
+          : 'En cuanto te asignen uno, aquí verás tu avance y lo que te aprobaron.'}
+      </div>
+    ) : (
+      <div class="tarjeta">
+        <ul class="lista">
+          {filasOperador.map((f) => (
+            <li class="renglon operador">
+              <div class="cuerpo"><strong>{f.nombre}</strong></div>
+              <dl class="operador-cifras">
+                <div><dt>Clientes</dt><dd class="cifra">{f.clientes}</dd></div>
+                <div><dt>Avance</dt><dd class="cifra">{f.clientes === 0 ? '—' : `${f.avancePromedio}%`}</dd></div>
+                <div><dt>Por mover</dt><dd class="cifra">{f.pendientes}</dd></div>
+                <div><dt>Aprobadas este mes</dt><dd class="cifra">{f.aprobadasMes}</dd></div>
+              </dl>
+            </li>
+          ))}
+        </ul>
+        <p class="secundario nota">«Por mover»: etapas contratadas en proceso o con cambios.</p>
+      </div>
+    )}
+  </section>
+
+  <section class="seccion" id="gastos" aria-labelledby="t-gastos">
+    <div class="seccion-cabeza">
+      <h2 id="t-gastos">Gastos</h2>
+      {(gastos.actual > 0 || gastos.anterior > 0) && <a href="/desempeno?periodo=mes">Ver detalle</a>}
+    </div>
+    {gastos.actual === 0 && gastos.anterior === 0 ? (
+      <div class="tarjeta vacio">
+        <Icono nombre="dinero" />
+        <strong>Sin gasto este mes ni el anterior</strong>
+        {esAdmin ? 'Aquí aparece' : 'Aquí aparece, de tus clientes,'} lo que cuestan las investigaciones, los mapas de pilares y los manuales.
+      </div>
+    ) : (
+      <div class="tarjeta">
+        <div class="gastos-cabeza">
+          <div>
+            <p class="eyebrow">Este mes</p>
+            <p class="gasto-total cifra">{dinero(gastos.actual)}</p>
+          </div>
+          <div>
+            <p class="eyebrow">{nombreMesAnterior}</p>
+            <p class="gasto-anterior cifra">{dinero(gastos.anterior)}</p>
+          </div>
+          <p class="secundario gasto-dif">
+            {gastos.diferencia === 0
+              ? 'Igual que el mes anterior.'
+              : gastos.diferencia > 0
+                ? `${dinero(gastos.diferencia)} más que el mes anterior.`
+                : `${dinero(-gastos.diferencia)} menos que el mes anterior.`}
+            {!esAdmin && ' Solo tus clientes.'}
+          </p>
+        </div>
+
+        <h3 class="gastos-sub">Por tipo de trabajo</h3>
+        <ul class="lista gastos-tipos">
+          {gastos.porTipo.map((t) => (
+            <li>
+              <div class="gasto-fila">
+                <span>{NOMBRE_TIPO_GASTO[t.tipo]}</span>
+                <span class="cifra"><strong>{dinero(t.actual)}</strong> <span class="secundario">· antes {dinero(t.anterior)}</span></span>
+              </div>
+              <div class="gasto-barras" aria-hidden="true">
+                {/* Un monto en cero no pinta barra: un punto de 2px parecería un gasto mínimo. */}
+                <i class="actual" style={`width:${maxTipo > 0 ? (t.actual / maxTipo) * 100 : 0}%`}></i>
+                <i class="anterior" style={`width:${maxTipo > 0 ? (t.anterior / maxTipo) * 100 : 0}%`}></i>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <p class="secundario nota">Las propuestas de copy del mes no guardan su costo todavía, así que no se suman aquí.</p>
+
+        <h3 class="gastos-sub">Los que más consumen este mes</h3>
+        {gastos.clientes.length === 0 ? (
+          <p class="secundario">Ningún cliente ha generado gasto este mes.</p>
+        ) : (
+          <ol class="lista gastos-clientes">
+            {gastos.clientes.map((g) => (
+              <li class="gasto-fila">
+                <a href={`/clientes/${g.clientId}`}>{porId.get(g.clientId)?.nombre ?? 'Cliente'}</a>
+                <span class="cifra">{dinero(g.actual)}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+    )}
+  </section>
+
+  <section class="seccion" id="por-vencer" aria-labelledby="t-por-vencer">
+    <div class="seccion-cabeza">
+      <h2 id="t-por-vencer">Meses por vencer</h2>
+    </div>
+    {porVencer.length === 0 ? (
+      <div class="tarjeta vacio">
+        <Icono nombre="reloj" />
+        <strong>Ningún mes espera al cliente</strong>
+        Cuando compartas un mes, aquí verás cuánto le queda al cliente para revisarlo antes de que se apruebe solo.
+      </div>
+    ) : (
+      <div class="tarjeta">
+        <ul class="lista">
+          {porVencer.map((l) => (
+            <li class="renglon">
+              <div class="cuerpo">
+                <strong>{l.cliente?.nombre ?? 'Cliente'}</strong>
+                <p class="secundario">
+                  {nombrePeriodo(l.periodo)}
+                  {l.cliente && ` · ${seguimiento(l.cliente.id).responsable}`}
+                  {` · límite ${fechaHora(l.limiteRevision)}`}
+                </p>
+                {!l.seApruebaSolo && <p class="secundario">Se editó después de compartirlo: no se aprobará solo.</p>}
+              </div>
+              <span class:list={['etiqueta', l.cuenta.urgente ? 'rosa' : 'amarillo']}>{l.cuenta.texto}</span>
+              <a href={`/clientes/${l.clientId}/contenido/${l.periodo}`} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
+            </li>
+          ))}
+        </ul>
       </div>
     )}
   </section>
@@ -217,4 +593,62 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
      recorta a un renglón para que un solo pendiente no empuje al resto fuera
      de la pantalla. Completo se lee en /pendientes. */
   .comentario-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Cifras de arriba: cinco enlaces con aspecto de tarjeta ────────────
+     Cinco no caben en la rejilla de cuatro de `.indicadores`; a partir de
+     1100px van en una fila, antes en dos columnas y la quinta a lo ancho. */
+  @media (min-width: 900px) { .indicadores.cinco { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 1100px) { .indicadores.cinco { grid-template-columns: repeat(5, 1fr); } }
+  @media (max-width: 899px) { .indicadores.cinco > :last-child { grid-column: 1 / -1; } }
+  a.indicador {
+    display: block; min-width: 0; text-decoration: none; color: inherit; cursor: pointer;
+    border: 1px solid transparent; transition: transform 0.15s ease, border-color 0.15s ease;
+  }
+  a.indicador:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--tinta) 14%, transparent); }
+  a.indicador:focus-visible { border-radius: var(--r); }
+  /* El gasto en dólares es la cifra más ancha («USD 1,234.56»): se encoge
+     un poco en vez de desbordar la tarjeta a cinco columnas. */
+  .indicadores.cinco .valor { font-size: clamp(22px, 2.4vw, 30px); overflow-wrap: anywhere; }
+
+  /* Al saltar desde una cifra, el título del bloque no queda escondido
+     debajo de la barra superior pegajosa (`header.superior`, 81px). */
+  .seccion[id] { scroll-margin-top: 100px; }
+
+  .aviso-atascados { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
+
+  /* ── Por etapa ───────────────────────────────────────────────────────── */
+  .reparto .renglon .cuerpo { min-width: 0; }
+  .reparto-cabeza { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+  .reparto-barra { display: flex; gap: 2px; height: 10px; border-radius: var(--r-pill); overflow: hidden; background: var(--gris); }
+  .reparto-barra i { display: block; min-width: 6px; }
+  .reparto-estados { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+  /* ── Por operador ────────────────────────────────────────────────────── */
+  .renglon.operador .cuerpo { min-width: 140px; }
+  .operador-cifras { display: grid; grid-template-columns: repeat(4, minmax(72px, auto)); gap: 4px 18px; text-align: right; }
+  .operador-cifras dt { font: var(--t-micro); letter-spacing: 0.04em; color: var(--suave); }
+  .operador-cifras dd { font: var(--t-h3); color: var(--tinta); }
+  @media (max-width: 599px) {
+    .operador-cifras { width: 100%; grid-template-columns: repeat(2, 1fr); text-align: left; }
+  }
+  .nota { margin-top: 12px; }
+
+  /* ── Gastos ──────────────────────────────────────────────────────────── */
+  .gastos-cabeza { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 32px; }
+  .gasto-total { font: var(--t-h1); color: var(--tinta); letter-spacing: var(--tracking-titulo); }
+  .gasto-anterior { font: var(--t-h2); color: var(--texto); }
+  .gasto-dif { flex-basis: 100%; }
+  .gastos-sub { font: var(--t-h3); color: var(--tinta); margin: 24px 0 10px; }
+  .gasto-fila { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font: var(--t-small); }
+  .gasto-fila a { color: var(--tinta); font-weight: 600; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .gasto-fila a:hover { color: var(--rosa); }
+  .gasto-fila .cifra { flex-shrink: 0; text-align: right; }
+  .gastos-tipos { gap: 14px; }
+  .gasto-barras { display: grid; gap: 3px; margin-top: 6px; }
+  .gasto-barras i { display: block; height: 6px; border-radius: var(--r-pill); }
+  .gasto-barras .actual { background: var(--amarillo); }
+  .gasto-barras .anterior { background: color-mix(in srgb, var(--suave) 45%, transparent); }
+  .gastos-clientes { padding: 0; }
+  .gastos-clientes li { padding: 8px 0; border-bottom: 1px solid var(--linea); }
+  .gastos-clientes li:last-child { border-bottom: 0; }
 </style>

@@ -5,6 +5,7 @@ import { ETIQUETA_CLIENTE, type ResumenCliente } from '@/lib/ui/estado-cliente';
 import { NOMBRE_ETAPA, ETIQUETA_ESTADO_ETAPA } from '@/flujo/reglas';
 import { COLOR_ESTADO, type ColorEstado } from '@/flujo/ui';
 import type { ResumenAvance } from '@/lib/ui/progreso';
+import { textoDias } from '@/lib/ui/tablero';
 
 interface Props {
   cliente: { id: string; nombre: string; giro: string; ciudad: string | null };
@@ -18,8 +19,14 @@ interface Props {
    * contratadas» sin barra, que es el caso del diseño §3.
    */
   avance?: ResumenAvance;
+  /**
+   * Seguimiento del Inicio: responsable, días sin movimiento y si está
+   * atascado (`estaAtascado`, src/lib/ui/tablero.ts). **Opcional**, como
+   * `avance`: la lista de /clientes no lo pasa y su tarjeta no cambia.
+   */
+  seguimiento?: { responsable: string; dias: number | null; atascado: boolean };
 }
-const { cliente: c, resumen: r, avance } = Astro.props;
+const { cliente: c, resumen: r, avance, seguimiento } = Astro.props;
 const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
 
 // «Sin etapas contratadas» es no tener ni un paso contratado, no estar en 0%:
@@ -44,7 +51,7 @@ const colorPaso = COLOR_PUNTO[paso ? COLOR_ESTADO[paso.estado] : COLOR_ESTADO.ap
 const textoPaso = paso ? NOMBRE_ETAPA[paso.etapa] : 'Todo aprobado';
 const estadoPaso = paso ? ETIQUETA_ESTADO_ETAPA[paso.estado] : '';
 ---
-<a href={`/clientes/${c.id}`} class="tarjeta cliente-tarjeta"
+<a href={`/clientes/${c.id}`} class:list={['tarjeta cliente-tarjeta', { atascado: seguimiento?.atascado }]}
   data-estado={r.estado} data-busqueda={normalizar(`${c.nombre} ${c.giro} ${c.ciudad ?? ''}`)}>
   <span class={`avatar ${tinte(c.id)}`}>{iniciales(c.nombre)}</span>
   <div class="cuerpo">
@@ -66,9 +73,40 @@ const estadoPaso = paso ? ETIQUETA_ESTADO_ETAPA[paso.estado] : '';
       <p class="secundario tarjeta-avance-vacio">Sin etapas contratadas</p>
     ))}
 
+    {seguimiento && (
+      <dl class="tarjeta-seguimiento">
+        {paso && (
+          <div><dt>Estado</dt><dd><span class={`etiqueta ${COLOR_ESTADO[paso.estado]}`}>{estadoPaso}</span></dd></div>
+        )}
+        <div><dt>Responsable</dt><dd class="recorta">{seguimiento.responsable}</dd></div>
+        <div>
+          <dt>Sin movimiento</dt>
+          <dd>
+            <span class="cifra">{textoDias(seguimiento.dias)}</span>
+            {seguimiento.atascado && <span class="etiqueta rosa">Atascado</span>}
+          </dd>
+        </div>
+      </dl>
+    )}
+
     <div class="pie">
       <span class={`punto ${r.estado}`}>{ETIQUETA_CLIENTE[r.estado]}</span>
       <span class="secundario cifra">{r.costo > 0 ? dinero(r.costo) : '—'}</span>
     </div>
   </div>
 </a>
+
+<style>
+  /* Seguimiento del Inicio. Dos renglones cortos de etiqueta y valor, para que
+     quepan en la rejilla de tres a 1280px sin recortar el nombre de nadie. */
+  .tarjeta-seguimiento { margin-top: 10px; display: grid; gap: 4px; font: var(--t-small); }
+  .tarjeta-seguimiento > div { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-width: 0; }
+  .tarjeta-seguimiento dt { color: var(--suave); flex-shrink: 0; }
+  .tarjeta-seguimiento dd { color: var(--tinta); font-weight: 600; min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 8px; }
+  /* Solo el nombre se recorta (un correo largo); las etiquetas de estado y de
+     «Atascado» bajan de renglón antes que cortarse. */
+  .tarjeta-seguimiento dd.recorta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* El atascado se ve de lejos: el borde toma el mismo rosa que su etiqueta
+     (el que la ficha usa para «con cambios»), sin inventar un color nuevo. */
+  a.cliente-tarjeta.atascado { border-color: var(--rosa); box-shadow: inset 3px 0 0 var(--rosa), var(--sombra); }
+</style>
