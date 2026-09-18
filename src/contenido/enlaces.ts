@@ -17,7 +17,7 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { db, contenidoLotes, shareLinks } from '@/db';
 import type { Estado } from '@/flujo/reglas';
-import { sincronizarEtapa, type Ejecutor } from './servicio';
+import { sincronizarEtapa, transicionarLote, type Ejecutor } from './servicio';
 
 /** Un enlace del mes tal como lo ve el operador en la pantalla del lote. */
 export type EnlaceLote = {
@@ -139,6 +139,7 @@ export async function retirarEnlaceDelLote(
         estado: contenidoLotes.estado,
         compartidoEn: contenidoLotes.compartidoEn,
         limiteRevision: contenidoLotes.limiteRevision,
+        contenidoActualizadoEn: contenidoLotes.contenidoActualizadoEn,
       })
       .from(contenidoLotes)
       .where(eq(contenidoLotes.id, lote.id))
@@ -171,9 +172,12 @@ export async function retirarEnlaceDelLote(
     const detener = activosRestantes === 0 && fresco.estado === 'en_revision';
 
     if (detener) {
-      await tx.update(contenidoLotes)
-        .set({ estado: 'en_proceso', compartidoEn: null, limiteRevision: null, actualizadoEn: ahora })
-        .where(eq(contenidoLotes.id, lote.id));
+      // Por `transicionarLote` (./servicio.ts) como todo cambio de estado del
+      // lote: el mes vuelve al equipo, así que la invariante (1) le apaga el
+      // plazo sin que esto tenga que pedirlo. Retirar el último enlace deja al
+      // cliente sin acceso, y un plazo corriendo sobre un mes que ya no puede
+      // abrir sería justo lo que la regla existe para impedir.
+      await transicionarLote({ ...fresco, id: lote.id }, 'en_proceso', { retirarReparto: true }, ahora, tx);
       await sincronizarEtapa(lote.clientId, tx);
     }
 

@@ -202,13 +202,20 @@ describe('lote aprobado con el plazo VIVO', () => {
     expect(estados()).toEqual(['aprobada', 'cambios', 'aprobada']);
   });
 
-  it('y el mes vuelve al estado que le toca por sus piezas, con su plazo intacto', async () => {
+  it('y el mes vuelve al estado que le toca por sus piezas, sin plazo: la pelota es del equipo', async () => {
     await apruebaElMesEntero();
     await pideCambios('pieza-2', SE_ARREPIENTE_A_TIEMPO);
 
     expect(filaLote().estado).toBe('con_cambios');
-    // El plazo de esta misma ronda sigue siendo bueno: no se apaga ni se mueve.
-    expect(filaLote().limiteRevision).toEqual(LIMITE_1);
+    // Antes de la invariante (1) el plazo de esta ronda se conservaba, porque
+    // todavía corría. Ahora no: `con_cambios` es del lado del EQUIPO, y ahí no
+    // vive ninguna fecha. Da igual que quedara tiempo —el reloj que siguiera
+    // corriendo se lo comería el operador corrigiendo—, y da igual quién
+    // provocó la transición. Lo que el cliente pierde por esto es nada: sigue
+    // pudiendo opinar (`aceptaDecision` solo cierra meses `aprobada`), nada se
+    // auto-aprueba desde `con_cambios`, y la ronda corregida le traerá su plazo
+    // nuevo cuando `compartirLote` la reparta.
+    expect(filaLote().limiteRevision).toBeNull();
   });
 
   it('el equipo se entera: queda el comentario anclado a la pieza', async () => {

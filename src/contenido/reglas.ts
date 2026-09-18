@@ -264,71 +264,112 @@ export function limiteRevision(compartidoEn: Date, diasHabiles = DIAS_REVISION_P
 /**
  * ¿Al lote le venció el plazo sin que el cliente contestara? (diseño §6).
  *
- * Solo se auto-aprueba el **silencio**, y silencio en el vocabulario del lote
- * es `en_revision`: se le compartió al cliente y el cliente todavía no ha
- * contestado. Los demás estados no lo son, cada uno por su razón:
+ * Son dos preguntas encadenadas, y cada una vive donde le toca:
  *
- * - `con_cambios` ya tiene la respuesta del cliente y la pelota está del lado
- *   del operador, así que darlo por aprobado sería aprobar justo lo que el
- *   cliente devolvió.
- * - `en_proceso` es el lote que se está armando o que el operador reabrió para
- *   atender esos cambios: aún no le toca al cliente, y su `compartido_en` viejo
- *   no debería vencerle nada.
- * - `aprobada` ya está, y `no_iniciada` no le ocurre a un lote.
+ * 1. **¿La pelota es del cliente y todavía no ha contestado?** Eso, en el
+ *    vocabulario del lote, es exactamente `en_revision`. Los otros tres estados
+ *    no son silencio: `con_cambios` ya tiene su respuesta y espera al operador,
+ *    `en_proceso` aún no le toca al cliente, y `aprobada` ya está. El plan decía
+ *    «compartido, no aprobado y vencido»; esto es más estrecho a propósito.
+ * 2. **¿El plazo que lleva se le puede oponer?** Lo contesta `plazoOponible`
+ *    —la invariante (2), más abajo—: si el contenido se movió después del
+ *    reparto, esta fecha no vale sobre lo que el cliente tiene delante.
  *
- * El plan decía «compartido, no aprobado y vencido»; esto es más estrecho a
- * propósito.
+ * Que un lote SIN fecha no se auto-apruebe nunca sale de ahí, y es una decisión,
+ * no un descuido: es la forma en que el sistema apaga un plazo que se consumió
+ * mientras el mes esperaba al equipo (la invariante (1), `laPelotaEsDelCliente`,
+ * aplicada por `transicionarLote` en ../contenido/servicio.ts). Un `en_revision`
+ * con la fecha en nulo significa «el cliente lo tiene delante, pero aquí no
+ * corre ningún reloj», y relajarlo lo dejaría sin sentido.
  *
  * El instante exacto del límite todavía es del cliente: la comparación es
- * estricta.
- *
- * **Y un lote sin `limite_revision` no se auto-aprueba nunca**, que era ya la
- * primera línea de esta función y desde ahora también es una decisión: es la
- * forma en que el sistema apaga un plazo que se consumió mientras el mes
- * esperaba al operador, lo saque de ahí el cliente (`registrarRevision`,
- * ../contenido/revision.ts) o el propio operador (`refrescarLote`,
- * ../contenido/servicio.ts). Un `en_revision` con la fecha en nulo significa
- * «el cliente lo tiene delante, pero aquí no corre ningún reloj», y relajar
- * esta comprobación lo dejaría sin sentido.
- *
- * ── Y el plazo solo vale sobre el contenido que se compartió ──────────────
- *
- * La última condición —`contenido_actualizado_en <= compartido_en`— es la que
- * hace que esta función no dependa de por dónde haya pasado el lote.
- *
- * `limite_revision` se estampa una vez, al compartir, y sobrevivía a todo lo que
- * le ocurriera al mes después. Como un lote puede volver a `en_revision` por
- * varios caminos —dar de alta una pieza, borrar la última, borrar la que el
- * cliente había devuelto, que el cliente apruebe él mismo esa pieza—, cada uno
- * tenía que acordarse de limpiar la fecha, y el que se olvidaba dejaba un plazo
- * muerto corriendo: el siguiente barrido aprobaba en el acto material que el
- * cliente nunca vio, con constancia de que «no respondió».
- *
- * Preguntar por el contenido en vez de por el camino cierra los cinco de una vez
- * y también el que nadie había mirado: el operador que EDITA una pieza mientras
- * el cliente revisa no cambia el estado de nada —`PATCH` no toca
- * `estado_cliente`—, así que el lote seguía `en_revision` con su plazo corriendo
- * y al vencer se daba por aprobado un texto que el cliente no llegó a leer.
- *
- * Lo que NO cuenta como tocar el contenido es la revisión del cliente: aprobar
- * una pieza o pedir cambios en ella escribe en `contenido_piezas`, pero es su
- * opinión sobre el material, no el material. Si contara, responder dentro del
- * plazo alargaría el plazo. Quién mueve la fecha y quién no está en
- * `marcarContenidoTocado` (../contenido/servicio.ts), que es su única escritura.
- *
- * La comparación es `<=` y no `<`: compartir el mes en el mismo instante en que
- * se guardó la última pieza es repartir esa pieza, no adelantarse a ella.
+ * estricta. El `!` es seguro porque `plazoOponible` ya descartó el nulo.
  */
 export function loteAutoAprobado(lote: LoteRevisable, ahora: Date): boolean {
-  if (lote.compartidoEn === null || lote.limiteRevision === null) return false;
   if (lote.estado !== 'en_revision') return false;
-  // Truthiness y no `!== null`: así un `undefined` —una fila leída sin esta
-  // columna, o un doble de pruebas— se lee como «no consta que se tocara» en vez
-  // de reventar al pedirle la hora.
+  if (!plazoOponible(lote)) return false;
+  return ahora.getTime() > lote.limiteRevision!.getTime();
+}
+
+/**
+ * ── Invariante (1): la fecha límite existe solo mientras la pelota es del
+ * cliente ────────────────────────────────────────────────────────────────
+ *
+ * De los cuatro estados que usa un lote, dos son del CLIENTE y dos del EQUIPO,
+ * y eso es lo único que decide si `limite_revision` puede seguir viva:
+ *
+ * - `en_revision` y `aprobada` son del cliente: el mes está en su portal y él
+ *   es quien tiene algo que decir. **Conservan la fecha que tuvieran**, incluida
+ *   la nula, que no es un hueco sino información: significa que el reloj se
+ *   detuvo estando la pelota de nuestro lado.
+ * - `en_proceso` y `con_cambios` son del equipo: el mes espera a que alguien de
+ *   aquí lo arme o lo corrija. **No pueden llevar fecha**, porque un plazo que
+ *   corre mientras trabajamos nosotros se le acabaría cobrando al cliente.
+ *
+ * La regla no mira quién provocó la transición ni por qué. Esa era justamente la
+ * forma del error que se repitió ocho veces: cada camino de escritura tenía que
+ * acordarse de apagar el plazo, y siempre faltaba uno. Quien la aplica de verdad
+ * —y sin que nadie tenga que acordarse— es `transicionarLote`
+ * (../contenido/servicio.ts), que es el único sitio por el que se escribe
+ * `contenido_lotes.estado`. Esto de aquí es solo el criterio, puro y probable.
+ */
+export function laPelotaEsDelCliente(estado: EstadoLote): boolean {
+  return estado === 'en_revision' || estado === 'aprobada';
+}
+
+/**
+ * ── Invariante (2): un plazo no se aplica a contenido tocado después de
+ * compartirse ────────────────────────────────────────────────────────────
+ *
+ * ¿El plazo que lleva el lote se le puede oponer al cliente? No, si falla
+ * cualquiera de estas tres:
+ *
+ * - **Se compartió.** Sin reparto no hay plazo; no hay de qué hablar.
+ * - **Hay fecha.** Un lote sin `limite_revision` es uno al que el sistema se la
+ *   apagó —la invariante (1)— o uno que nunca la tuvo. En ninguno corre un reloj.
+ * - **El contenido no se ha movido desde el reparto**
+ *   (`contenido_actualizado_en <= compartido_en`). Es el operador que edita, da
+ *   de alta o borra una pieza mientras el cliente revisa: lo que hay delante ya
+ *   no es lo que se repartió, y un plazo solo puede valer sobre el material que
+ *   el cliente llegó a recibir.
+ *
+ * Es **ortogonal a la (1) y ninguna sustituye a la otra**: la (1) dice cuánto
+ * vive la fecha, esta dice si la fecha que hay se puede hacer valer. La (1) no
+ * cubre el caso de la edición, porque editar una pieza no cambia el estado del
+ * lote —`PATCH` no toca `estado_cliente`— y el mes no vuelve al equipo; y esta
+ * no cubre el de la ronda que va y viene sin que nadie toque el contenido.
+ * Hacen falta las dos.
+ *
+ * La comparación acepta el empate: compartir el mes en el mismo instante en que
+ * se guardó la última pieza es repartir esa pieza, no adelantarse a ella.
+ *
+ * Se lee con truthiness y no con `!== null` para que un `undefined` —una fila
+ * leída sin esa columna, o un doble de pruebas— valga como «no consta que se
+ * tocara» en vez de reventar al pedirle la hora.
+ *
+ * ── Sus dos usos, y por qué el segundo no es una tercera regla ────────────
+ *
+ * 1. `loteAutoAprobado` (aquí abajo): un mes no se auto-aprueba con un plazo que
+ *    no se le puede oponer.
+ * 2. `transicionarLote` (../contenido/servicio.ts): un plazo que ya no se le
+ *    puede oponer **no se lleva consigo** cuando el mes sale de `en_revision`.
+ *
+ * El segundo es lo que cierra el hermano del commit 44cdb7b, y hacía falta
+ * porque `contenido_actualizado_en` guarda **el último** toque y no todos: el
+ * operador edita una pieza dentro del plazo (la fecha queda invalidada), el
+ * plazo vence sin que nada se auto-apruebe, y al borrar después esa pieza el
+ * sello se pisa con la hora del borrado. Mirando solo la columna ya no hay forma
+ * de saber que hubo un toque dentro de la ventana. Por eso la respuesta se toma
+ * **en el momento de cruzar**, que es cuando todavía se sabe, y el plazo muerto
+ * se queda atrás en vez de viajar a `aprobada` y acabar cerrándole la puerta al
+ * cliente desde `aceptaDecision`.
+ */
+export function plazoOponible(lote: Omit<LoteRevisable, 'estado'>): boolean {
+  if (lote.compartidoEn === null || lote.limiteRevision === null) return false;
   if (lote.contenidoActualizadoEn && lote.contenidoActualizadoEn.getTime() > lote.compartidoEn.getTime()) {
     return false;
   }
-  return ahora.getTime() > lote.limiteRevision.getTime();
+  return true;
 }
 
 /** «14 de 22 aprobadas» de la portada del entregable (diseño §7). */

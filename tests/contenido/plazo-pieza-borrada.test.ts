@@ -154,6 +154,7 @@ const comoRefrescable = (): LoteRefrescable => {
     estado: l.estado as LoteRefrescable['estado'],
     compartidoEn: (l.compartidoEn ?? null) as Date | null,
     limiteRevision: (l.limiteRevision ?? null) as Date | null,
+    contenidoActualizadoEn: (l.contenidoActualizadoEn ?? null) as Date | null,
   };
 };
 
@@ -224,10 +225,13 @@ async function hastaElConCambiosVencido() {
   expect(filaLote().estado).toBe('con_cambios');
 
   // El plazo vence con la pelota del operador, y un `con_cambios` no se
-  // auto-aprueba: nadie toca nada.
+  // auto-aprueba: nadie toca nada. Y la fecha ya no está ahí para vencer: la
+  // invariante (1) se la quitó al mes en el instante en que el cliente devolvió
+  // la pieza. Antes se conservaba hasta que algo la apagara más tarde, que es
+  // exactamente lo que había que dejar de hacer.
   reloj(VENCIDO);
   expect(await autoAprobarVencidos({ clientId: ids.cliente, ahora: VENCIDO })).toEqual({ aprobados: 0 });
-  expect(filaLote().limiteRevision).toEqual(LIMITE_1);
+  expect(filaLote().limiteRevision).toBeNull();
 }
 
 describe('el operador resuelve la petición borrando la pieza, con el plazo ya vencido', () => {
@@ -353,13 +357,27 @@ describe('un mes auto-aprobado por vencimiento legítimo no se reabre al borrar 
 });
 
 /**
- * El plazo de ESTA ronda sigue valiendo. La condición del apagado es estrecha a
- * propósito —solo un límite ya vencido—, igual que la de `registrarRevision`: si
- * el reloj todavía corre, es el de la ronda que el cliente tiene delante y no
- * hay nada que perdonarle a nadie.
+ * **El mismo final aunque el operador corrija deprisa, y es un cambio de
+ * comportamiento que conviene tener presente.**
+ *
+ * Antes de la invariante (1) esto se miraba con lupa: el apagado del plazo solo
+ * ocurría si la fecha ya había vencido, así que un operador que resolviera la
+ * petición dentro del plazo dejaba el mes `aprobada` con la fecha viva, y esa
+ * fecha lo cerraba sola al pasar.
+ *
+ * Ahora no. El mes pasó por `con_cambios` —aunque fuera una hora— y ahí la
+ * fecha se apagó, porque la pelota era del equipo. Al volver a `aprobada` no hay
+ * nada que conservar. El mes queda **aprobado pero no cerrado**: el cliente
+ * conserva la puerta hasta que el equipo vuelva a compartirlo, que es lo que le
+ * pone fecha nueva (el quinto caso de `compartirLote`).
+ *
+ * Se acepta a sabiendas, y en la dirección segura de siempre: nada se aprueba
+ * solo, nadie se queda sin poder opinar, y lo único que cuesta es un «Compartir»
+ * de más para cerrar el mes. Lo contrario —conservar la fecha porque todavía
+ * corría— es la condición con excepciones que trajo los ocho fallos.
  */
-describe('si el plazo todavía corre, borrar la pieza devuelta no lo apaga', () => {
-  it('el mes queda aprobado y conserva la fecha de su ronda', async () => {
+describe('borrar la pieza devuelta deja el mes aprobado sin fecha, aunque el plazo corriera', () => {
+  it('el mes queda aprobado y SIN la fecha de su ronda: pasó por el lado del equipo', async () => {
     reloj(RONDA_1);
     await compartirLote(comoCompartible(), 2, RONDA_1);
 
@@ -376,6 +394,13 @@ describe('si el plazo todavía corre, borrar la pieza devuelta no lo apaga', () 
     const pronto = new Date(REVISA.getTime() + 3_600_000);
     reloj(pronto);
     expect(await operadorBorra(3, pronto)).toBe('aprobada');
-    expect(filaLote().limiteRevision).toEqual(LIMITE_1);
+    expect(filaLote().limiteRevision).toBeNull();
+
+    // Y el cliente conserva la puerta mientras no haya fecha, que es lo que
+    // hace que este cambio no le quite nada a nadie.
+    const r = await registrarRevision({
+      piezaId: 'pieza-1', usuario: CLIENTE, decision: 'cambios', nota: 'Mejor cambien esta.', ahora: pronto,
+    });
+    expect(r.ok).toBe(true);
   });
 });

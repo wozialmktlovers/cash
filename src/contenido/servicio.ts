@@ -11,7 +11,13 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { db, clienteEtapas, contenidoLotes, contenidoPiezas } from '@/db';
 import type { Estado } from '@/flujo/reglas';
-import { DIAS_REVISION_POR_OMISION, estadoLoteSegunPiezas, limiteRevision } from './reglas';
+import {
+  DIAS_REVISION_POR_OMISION,
+  estadoLoteSegunPiezas,
+  laPelotaEsDelCliente,
+  limiteRevision,
+  plazoOponible,
+} from './reglas';
 
 /** Tipo del `tx` que entrega `db.transaction`; mismo truco que en `src/flujo/servicio.ts` para aceptar los dos ejecutores. */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -120,6 +126,125 @@ export async function sincronizarEtapa(clientId: string, ejecutor: Ejecutor = db
   return lote.estado;
 }
 
+/** Lo que estampa el REPARTO del mes, y solo él: la fecha en que se compartió y el plazo que arranca. */
+export type Reparto = { compartidoEn: Date; limiteRevision: Date };
+
+/**
+ * Lo que hay que saber del lote para moverlo de estado sin romper ninguna de las
+ * dos invariantes. Ninguno de los cuatro campos es opcional —aunque tres
+ * admitan `null`— para que el compilador exija haberlos leído: de ellos depende
+ * si el plazo sobrevive al cruce, y un `SELECT` incompleto desactivaría la regla
+ * en silencio, que es exactamente la clase de descuido que esto viene a cerrar.
+ */
+export type LoteTransicionable = {
+  id: string;
+  estado: Estado;
+  compartidoEn: Date | null;
+  limiteRevision: Date | null;
+  contenidoActualizadoEn: Date | null;
+};
+
+/**
+ * **El único sitio por el que se escribe `contenido_lotes.estado`**, y por eso
+ * el único que puede garantizar la invariante (1): *la fecha límite existe solo
+ * mientras la pelota es del cliente* (`laPelotaEsDelCliente`, ./reglas.ts).
+ *
+ * ── Por qué una función y no una regla que recordar ──────────────────────
+ *
+ * `limite_revision` se estampa una vez, al compartir, y sobrevivía a los cambios
+ * de estado. El mes va y viene entre el operador y el cliente, y en varios de
+ * esos vaivenes la fecha vieja se quedaba viva: unas veces auto-aprobando
+ * contenido que el cliente no llegó a ver, otras cerrándole la puerta con «se te
+ * venció el plazo» cuando el tiempo se había consumido esperándonos a nosotros.
+ * Cada camino de escritura tenía que acordarse de apagarla y **siempre faltaba
+ * uno**: ocho fallos de la misma familia, ocho parches distintos.
+ *
+ * La forma de dejar de jugar a eso no es un parche más, es quitar la
+ * posibilidad. Todo cambio de estado del lote pasa por aquí —`refrescarLote` y
+ * `compartirLote` (este archivo), `registrarRevision` (./revision.ts),
+ * `aprobarLoteVencido` (./auto-aprobacion.ts) y `retirarEnlaceDelLote`
+ * (./enlaces.ts)— y **la invariante se aplica al final, pisando lo que traiga
+ * quien llama**: un destino del equipo (`en_proceso`, `con_cambios`) sale de
+ * aquí con la fecha en nulo aunque el llamador hubiera pedido otra cosa. No hay
+ * parámetro para desactivarla, ni excepción que valga, ni importa quién provocó
+ * la transición.
+ *
+ * Los destinos del cliente (`en_revision`, `aprobada`) **conservan** la fecha
+ * que el lote tuviera, que puede ser nula y en ese caso significa algo: el reloj
+ * se detuvo estando la pelota de nuestro lado, y `compartirLote` sabe volver a
+ * armarlo desde los dos estados.
+ *
+ * ── Lo que sí decide quien llama ─────────────────────────────────────────
+ *
+ * - `reparto`: lo pasa **solo** quien reparte el mes (`compartirLote`), y es lo
+ *   único que puede poner una fecha límite. Pedirlo hacia un estado del equipo
+ *   es una contradicción —repartir es entregarle el mes al cliente—, así que
+ *   revienta en vez de escribir a medias.
+ * - `retirarReparto`: borra `compartido_en` para decir en los datos «esta
+ *   versión del mes no se ha compartido». Lo usan los dos caminos que le quitan
+ *   el mes al cliente sin que medie un reparto nuevo: la reapertura de
+ *   `refrescarLote` y el retiro del último enlace (./enlaces.ts).
+ *
+ * ── Lo que deliberadamente NO hace ───────────────────────────────────────
+ *
+ * No llama a `sincronizarEtapa`. Quien llama ya la llama por su cuenta —y en
+ * momentos que aquí no se ven: `aprobarLoteVencido` necesita leer la etapa
+ * ANTES de sincronizarla para su constancia, y `refrescarLote` la sincroniza
+ * aunque el estado no se haya movido—. Meterla aquí duplicaría escrituras y
+ * cambiaría ese orden. Esta función escribe la fila del lote, nada más.
+ *
+ * Se consideró un disparador de Postgres, que sería imposible de esquivar
+ * incluso para el código que aún no existe, y se descartó por lo mismo que se
+ * descartó para `contenido_actualizado_en` (ver `marcarContenidoTocado`): las
+ * pruebas de esta etapa corren sobre un doble de la base, así que la invariante
+ * quedaría sin verificar en CI. Queda anotado por si algún día hay pruebas
+ * contra Postgres de verdad.
+ */
+export async function transicionarLote(
+  lote: LoteTransicionable,
+  destino: Estado,
+  opciones: { reparto?: Reparto; retirarReparto?: boolean } = {},
+  ahora: Date = new Date(),
+  ejecutor: Ejecutor = db,
+): Promise<Estado> {
+  if (opciones.reparto && opciones.retirarReparto) {
+    throw new RangeError('Un reparto no puede a la vez retirar el reparto.');
+  }
+  if (opciones.reparto && !laPelotaEsDelCliente(destino)) {
+    throw new RangeError(`Repartir el mes lo pone del lado del cliente; «${destino}» no lo está.`);
+  }
+
+  const campos: Partial<typeof contenidoLotes.$inferInsert> = { estado: destino, actualizadoEn: ahora };
+  if (opciones.reparto) {
+    campos.compartidoEn = opciones.reparto.compartidoEn;
+    campos.limiteRevision = opciones.reparto.limiteRevision;
+  }
+  if (opciones.retirarReparto) campos.compartidoEn = null;
+
+  // ── LA INVARIANTE (1), al final y sin condiciones ──────────────────────
+  // Si la pelota no es del cliente, aquí no queda plazo. Va después de todo lo
+  // demás a propósito —pisa lo que hubiera puesto quien llama— para que no
+  // exista forma de escribir un estado del equipo con una fecha viva.
+  if (!laPelotaEsDelCliente(destino)) campos.limiteRevision = null;
+
+  // ── Y LA (2) AL CRUZAR: un plazo muerto no viaja ───────────────────────
+  // Solo en `en_revision` → `aprobada`, que es el único cruce en el que una
+  // fecha invalidada por la invariante (2) sobreviviría —los dos estados son del
+  // lado del cliente, así que la (1) no la toca— para acabar cerrándole la
+  // puerta al cliente desde `aceptaDecision` (./revision.ts). Es el hermano del
+  // commit 44cdb7b, y se decide aquí porque aquí es el último momento en que se
+  // sabe: `contenido_actualizado_en` guarda el ÚLTIMO toque, así que el borrado
+  // que viene después pisa el sello de la edición que invalidó el plazo.
+  //
+  // Un reparto nunca entra: acaba de estampar una fecha nueva sobre el contenido
+  // actual, y es precisamente el remedio de este estado.
+  const saleDeRevision = lote.estado === 'en_revision' && destino === 'aprobada';
+  if (!opciones.reparto && saleDeRevision && !plazoOponible(lote)) campos.limiteRevision = null;
+
+  await ejecutor.update(contenidoLotes).set(campos).where(eq(contenidoLotes.id, lote.id));
+  return destino;
+}
+
 /**
  * Deja constancia de que el CONTENIDO del mes se movió: alta, edición o borrado
  * de una pieza. Es la única escritura de `contenido_lotes.contenido_actualizado_en`.
@@ -188,6 +313,8 @@ export type LoteRefrescable = {
   estado: Estado;
   compartidoEn: Date | null;
   limiteRevision: Date | null;
+  /** Ver `LoteTransicionable`: decide si el plazo sobrevive al cruce. */
+  contenidoActualizadoEn: Date | null;
 };
 
 /**
@@ -284,49 +411,29 @@ export type LoteRefrescable = {
  * Las dos reglas se solapan a propósito, y el solape es barato: una cuida el
  * estado, la otra cuida el plazo.
  *
- * ── Y el plazo que se consumió mientras la pelota era nuestra ─────────────
+ * ── Y el plazo: ya no se decide aquí ─────────────────────────────────────
  *
- * Queda un camino que la reapertura de arriba no cubre, porque no reabre nada:
- * el lote está `con_cambios`, el operador **resuelve la petición borrando la
- * pieza devuelta** en vez de corregirla, y lo que queda está todo aprobado. El
- * recálculo deduce `aprobada` —correcto, lo aprobó el cliente pieza por pieza—
- * y el mes se quedaba con el `limite_revision` de aquella ronda, ya vencido.
+ * Aquí vivía el octavo parche: el lote estaba `con_cambios`, el operador
+ * resolvía la petición **borrando la pieza devuelta** en vez de corregirla, lo
+ * que quedaba estaba todo aprobado, y el mes se iba a `aprobada` arrastrando el
+ * `limite_revision` de aquella ronda, ya vencido. Después `aceptaDecision`
+ * (./revision.ts) le cerraba la puerta al cliente con un «se te venció el
+ * plazo» doblemente falso: ni se auto-aprobó —lo aprobó él, pieza por pieza— ni
+ * ese plazo venció en su turno, porque el mes estuvo esperándonos.
  *
- * El daño es el de la puerta, no el de la auto-aprobación: `loteAutoAprobado`
- * solo mira `en_revision`, así que ahí nadie aprueba nada de oficio, pero
- * `aceptaDecision` (./revision.ts) sí cierra un `aprobada` con la fecha pasada,
- * y le contestaba al cliente con `razonPlazoVencido` que el mes «quedó cerrado
- * al terminar el plazo». Ni se auto-aprobó —lo aprobó él— ni ese plazo venció en
- * su turno: el mes estuvo esperando al operador.
+ * Ese caso ya no existe, y no porque se siga apagando la fecha aquí sino porque
+ * **la fecha no llega viva hasta este punto**: cuando el cliente devolvió la
+ * pieza, el mes entró en `con_cambios` por `transicionarLote`, y ahí la
+ * invariante (1) la apagó. Para cuando el operador borra la pieza, no hay plazo
+ * que arrastrar. La condición estrecha que había —solo saliendo de
+ * `con_cambios`, y solo si ya estaba vencida— era precisamente la forma de error
+ * que se repitió ocho veces: una excepción que alguien tenía que recordar.
  *
- * Es el mismo caso que `registrarRevision` (./revision.ts) ya resolvía desde el
- * otro lado, con una sola diferencia: allí el gesto que saca el mes de
- * `con_cambios` es del cliente —se retracta y aprueba él mismo la pieza— y aquí
- * es del operador. **El principio manda sobre el actor:** un reloj que se
- * consumió mientras la pelota estaba del lado del equipo no cuenta contra el
- * cliente, lo mueva quien lo mueva. Así que aquí se apaga igual, y el mes queda
- * `aprobada` **sin fecha**: aprobado pero no cerrado, con el cliente todavía
- * pudiendo cambiar de opinión (`aceptaDecision` admite siempre un lote sin
- * límite) hasta que el reparto le ponga una nueva —el «quinto caso» de
- * `compartirLote`, que estampa la fecha y deja el mes `aprobada`—.
- *
- * La condición es tan estrecha como la de `registrarRevision`, y por las mismas
- * dos razones:
- *
- * - **Solo la salida de `con_cambios`**, que es el único estado del que se sale
- *   por aquí con la pelota del lado del operador. Un mes `aprobada` al que se le
- *   borra una pieza y sigue `aprobada` no entra: si su plazo venció, venció en
- *   el turno del cliente, y ese es exactamente el mes **auto-aprobado por
- *   vencimiento legítimo** que toda esta familia existe para respetar. Sigue
- *   cerrado con su fecha.
- * - **Solo un límite ya vencido.** Si todavía corre, es el plazo de la ronda que
- *   el cliente tiene delante y sigue siendo bueno; no hay nada que perdonarle a
- *   nadie. La comparación es estricta, como la de `loteAutoAprobado`: el instante
- *   exacto del límite todavía es del cliente.
- *
- * El destino `en_revision` de ese mismo borrado no necesita nada de esto: cae en
- * la reapertura de arriba, que ya devuelve el mes al operador con el plazo
- * limpio. Lo cubre `tests/contenido/plazo-pieza-borrada.test.ts`.
+ * Lo único que queda de aquello es `arrastraPlazoDelEquipo`, y no es un parche
+ * sino un barrido: una fila guardada ANTES de la invariante puede seguir siendo
+ * `con_cambios` con su plazo puesto, así que si el recálculo la deja en un
+ * estado del equipo se escribe aunque el estado no se mueva, y sale de
+ * `transicionarLote` limpia.
  *
  * `PATCH` de una pieza no pasa por aquí: los campos que edita el operador
  * —planeación, copy, cta, hashtags, arte— no entran en `estadoLoteSegunPiezas`,
@@ -351,30 +458,17 @@ export async function refrescarLote(
     // devuelve al operador con el plazo borrado.
     const reabre = deducido === 'en_revision' && estado !== 'en_revision';
 
-    // El plazo que se consumió mientras el mes esperaba al operador no revive
-    // porque sea él quien acabe cerrándolo (ver la explicación larga de arriba):
-    // solo la SALIDA de `con_cambios` hacia `aprobada` —el operador resolvió la
-    // petición borrando la pieza devuelta— y solo si la fecha que arrastra ya
-    // está vencida.
-    const plazoConsumidoEnTurnoAjeno = deducido === 'aprobada'
-      && estado === 'con_cambios'
-      && lote.limiteRevision !== null
-      && ahora.getTime() > lote.limiteRevision.getTime();
+    // Una fila anterior a la invariante (1) puede llevar todavía un plazo vivo
+    // en un estado del equipo. Si el recálculo la deja ahí, se escribe igual
+    // aunque el estado no se mueva, y `transicionarLote` la apaga al pasar: así
+    // la regla no solo se respeta de aquí en adelante, sino que cura lo que
+    // encuentra.
+    const arrastraPlazoDelEquipo = !laPelotaEsDelCliente(deducido) && lote.limiteRevision !== null;
 
     if (reabre) {
-      await ejecutor.update(contenidoLotes)
-        .set({ estado: 'en_proceso', compartidoEn: null, limiteRevision: null, actualizadoEn: ahora })
-        .where(eq(contenidoLotes.id, lote.id));
-      estado = 'en_proceso';
-    } else if (deducido !== estado) {
-      await ejecutor.update(contenidoLotes)
-        .set({
-          estado: deducido,
-          ...(plazoConsumidoEnTurnoAjeno ? { limiteRevision: null } : {}),
-          actualizadoEn: ahora,
-        })
-        .where(eq(contenidoLotes.id, lote.id));
-      estado = deducido;
+      estado = await transicionarLote(lote, 'en_proceso', { retirarReparto: true }, ahora, ejecutor);
+    } else if (deducido !== estado || arrastraPlazoDelEquipo) {
+      estado = await transicionarLote(lote, deducido, {}, ahora, ejecutor);
     }
   }
 
@@ -630,9 +724,7 @@ export async function compartirLote(
   // normal, el cerrado— sigue cayendo en el `if (!arranca)` de arriba, y
   // compartirlo sigue siendo repartir una copia de lectura.
   if (aprobadoSinPlazo) {
-    await ejecutor.update(contenidoLotes)
-      .set({ compartidoEn: ahora, limiteRevision: limite, actualizadoEn: ahora })
-      .where(eq(contenidoLotes.id, lote.id));
+    await transicionarLote(lote, 'aprobada', { reparto: { compartidoEn: ahora, limiteRevision: limite } }, ahora, ejecutor);
     // El estado no se mueve, pero la etapa se sincroniza igual: es barata y el
     // lote activo del cliente pudo cambiar por otra vía.
     await sincronizarEtapa(lote.clientId, ejecutor);
@@ -644,9 +736,7 @@ export async function compartirLote(
     .set({ estadoCliente: 'pendiente', notaCliente: null, revisadoEn: null, actualizadoEn: ahora })
     .where(and(eq(contenidoPiezas.loteId, lote.id), eq(contenidoPiezas.estadoCliente, 'cambios')));
 
-  await ejecutor.update(contenidoLotes)
-    .set({ estado: 'en_revision', compartidoEn: ahora, limiteRevision: limite, actualizadoEn: ahora })
-    .where(eq(contenidoLotes.id, lote.id));
+  await transicionarLote(lote, 'en_revision', { reparto: { compartidoEn: ahora, limiteRevision: limite } }, ahora, ejecutor);
 
   // El estado del lote se movió, así que la etapa tiene que decir lo mismo.
   await sincronizarEtapa(lote.clientId, ejecutor);

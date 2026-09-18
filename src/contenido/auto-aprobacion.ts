@@ -61,7 +61,7 @@
 import { and, eq, isNotNull, lt, lte } from 'drizzle-orm';
 import { db, clienteEtapas, clients, contenidoLotes, contenidoPiezas, etapaEventos } from '@/db';
 import { loteAutoAprobado } from './reglas';
-import { sincronizarEtapa } from './servicio';
+import { sincronizarEtapa, transicionarLote } from './servicio';
 import { avisarLoteAutoAprobado } from '@/flujo/avisos';
 import { fechaHora } from '@/lib/ui/fecha';
 import { nombrePeriodo } from '@/lib/ui/periodo';
@@ -178,9 +178,12 @@ async function aprobarLoteVencido(candidato: Candidato, ahora: Date): Promise<bo
     if (!fresco) return false; // el lote se borró mientras tanto.
     if (!loteAutoAprobado(fresco, ahora)) return false;
 
-    await tx.update(contenidoLotes)
-      .set({ estado: 'aprobada', actualizadoEn: ahora })
-      .where(eq(contenidoLotes.id, candidato.id));
+    // Por `transicionarLote` como todos los demás (./servicio.ts). Aquí la
+    // invariante (1) no quita nada —`aprobada` es del lado del cliente y
+    // CONSERVA la fecha—, y tiene que ser así: este mes se auto-aprobó porque su
+    // plazo venció de verdad, en el turno del cliente, y esa fecha es la que
+    // cierra la puerta (`aceptaDecision`) y la que se cita en la constancia.
+    await transicionarLote({ ...fresco, id: candidato.id }, 'aprobada', {}, ahora, tx);
 
     await tx.update(contenidoPiezas)
       .set({ estadoCliente: 'aprobada', revisadoEn: ahora, actualizadoEn: ahora })

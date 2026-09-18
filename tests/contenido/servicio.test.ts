@@ -196,8 +196,8 @@ describe('sincronizarEtapa', () => {
  * última pieza— y por eso está probado en los dos bordes.
  */
 describe('refrescarLote', () => {
-  const sinCompartir = { id: 'l1', clientId: CLIENTE, estado: 'en_proceso' as const, compartidoEn: null, limiteRevision: null };
-  const compartido = { id: 'l1', clientId: CLIENTE, estado: 'en_revision' as const, compartidoEn: new Date('2026-09-10T18:00:00Z'), limiteRevision: null };
+  const sinCompartir = { id: 'l1', clientId: CLIENTE, estado: 'en_proceso' as const, compartidoEn: null, limiteRevision: null, contenidoActualizadoEn: null };
+  const compartido = { id: 'l1', clientId: CLIENTE, estado: 'en_revision' as const, compartidoEn: new Date('2026-09-10T18:00:00Z'), limiteRevision: null, contenidoActualizadoEn: null };
   const pieza = (estadoCliente: string) => ({ formato: 'post', estadoCliente });
   /** El plazo de aquella ronda, para los dos casos del apagado. */
   const LIMITE = new Date('2026-09-14T23:59:59.999Z');
@@ -244,18 +244,38 @@ describe('refrescarLote', () => {
     expect(espia.cambiosLote[0]?.estado).toBe('aprobada');
   });
 
-  // Los dos bordes del apagado del plazo. El mes salía de `con_cambios` —donde
-  // la pelota era del operador— y se llevaba puesta la fecha de aquella ronda:
-  // si ya había vencido, `aceptaDecision` le cerraba la puerta al cliente por
-  // una espera que no fue suya. El porqué entero está en `refrescarLote`; la
-  // secuencia completa, en `./plazo-pieza-borrada.test.ts`.
+  // La invariante (1) en `refrescarLote`. Antes había aquí dos pruebas de los
+  // «bordes» del apagado del plazo —se apagaba solo si la fecha ya había
+  // vencido, y solo saliendo de `con_cambios`—; ese parche ya no existe, porque
+  // la fecha no llega viva hasta esa salida: se apaga al ENTRAR en el estado del
+  // equipo. Lo que se prueba ahora es eso, más el barrido de las filas viejas.
 
-  it('si el plazo que arrastra ya venció, se apaga al deducir aprobada', async () => {
+  it('deducir un estado del equipo apaga el plazo, aunque todavía corriera', async () => {
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];
+    espia.piezas = [pieza('aprobada'), pieza('cambios')];
+    const dentro = new Date(LIMITE.getTime() - 60_000);
+    expect(await refrescarLote({ ...compartido, estado: 'en_revision', limiteRevision: LIMITE }, dentro)).toBe('con_cambios');
+    expect(espia.cambiosLote[0]).toMatchObject({ estado: 'con_cambios', limiteRevision: null });
+  });
+
+  it('y lo apaga también sin mover el estado: cura la fila vieja que lo arrastraba', async () => {
+    // Una fila anterior a la invariante: `con_cambios` con su plazo todavía
+    // puesto. El recálculo deduce lo mismo que ya era, así que antes no se
+    // escribía nada y la fecha muerta seguía ahí. Ahora se escribe para apagarla.
     espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'con_cambios' }];
+    espia.piezas = [pieza('aprobada'), pieza('cambios')];
+    expect(await refrescarLote({ ...compartido, estado: 'con_cambios', limiteRevision: LIMITE })).toBe('con_cambios');
+    expect(espia.cambiosLote[0]).toMatchObject({ estado: 'con_cambios', limiteRevision: null });
+  });
+
+  it('pero un destino del lado del cliente conserva la fecha que hubiera', async () => {
+    // `aprobada` es del cliente: si la fecha llegó viva hasta aquí es porque el
+    // mes no pasó por el equipo, y esa fecha es la que cierra el mes.
+    espia.lotes = [{ id: 'l1', periodo: '2026-09', estado: 'en_revision' }];
     espia.piezas = [pieza('aprobada'), pieza('aprobada')];
-    const despues = new Date(LIMITE.getTime() + 60_000);
-    expect(await refrescarLote({ ...compartido, estado: 'con_cambios', limiteRevision: LIMITE }, despues)).toBe('aprobada');
-    expect(espia.cambiosLote[0]).toMatchObject({ estado: 'aprobada', limiteRevision: null });
+    expect(await refrescarLote({ ...compartido, estado: 'en_revision', limiteRevision: LIMITE })).toBe('aprobada');
+    expect(espia.cambiosLote[0]).toMatchObject({ estado: 'aprobada' });
+    expect(espia.cambiosLote[0]?.limiteRevision).toBeUndefined();
   });
 
   it('pero si todavía corre, es el plazo de esta ronda y se conserva', async () => {
@@ -379,7 +399,9 @@ describe('compartirLote', () => {
     expect(espia.cambiosLote[0]).toMatchObject({
       compartidoEn: VIERNES, limiteRevision: limiteRevision(VIERNES, 2),
     });
-    expect(espia.cambiosLote[0]?.estado).toBeUndefined();
+    // El estado se escribe igual —todo pasa por `transicionarLote`—, pero es el
+    // mismo que ya tenía: el mes no se mueve de aprobado.
+    expect(espia.cambiosLote[0]?.estado).toBe('aprobada');
   });
 
   it('un lote con cambios SÍ reinicia el plazo: es una ronda nueva', async () => {

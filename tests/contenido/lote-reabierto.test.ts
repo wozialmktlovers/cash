@@ -47,7 +47,7 @@ vi.mock('@/db', async (importarReal) => {
 });
 
 import { autoAprobarVencidos } from '@/contenido/auto-aprobacion';
-import { estadoLoteSegunPiezas, limiteRevision } from '@/contenido/reglas';
+import { estadoLoteSegunPiezas, laPelotaEsDelCliente, limiteRevision } from '@/contenido/reglas';
 import { compartirLote, refrescarLote, type LoteCompartible, type LoteRefrescable } from '@/contenido/servicio';
 
 const CLIENTE = '00000000-0000-4000-8000-0000000000c1';
@@ -98,6 +98,7 @@ const comoRefrescable = (): LoteRefrescable => {
     estado: l.estado as LoteRefrescable['estado'],
     compartidoEn: (l.compartidoEn ?? null) as Date | null,
     limiteRevision: (l.limiteRevision ?? null) as Date | null,
+    contenidoActualizadoEn: (l.contenidoActualizadoEn ?? null) as Date | null,
   };
 };
 
@@ -110,9 +111,15 @@ const comoRefrescable = (): LoteRefrescable => {
 const clientePideCambios = (numero: number, nota: string, cuando: Date) => {
   const pieza = espia.piezas.find((p) => p.numero === numero)!;
   Object.assign(pieza, { estadoCliente: 'cambios', notaCliente: nota, revisadoEn: cuando });
-  filaLote().estado = estadoLoteSegunPiezas(
+  const estado = estadoLoteSegunPiezas(
     espia.piezas.map((p) => ({ formato: p.formato as 'post', estadoCliente: p.estadoCliente as 'cambios' })),
   );
+  filaLote().estado = estado;
+  // El atajo tiene que aplicar la invariante (1) igual que la función de
+  // verdad, o el guión arrancaría desde un estado que el sistema no sabe
+  // producir: `registrarRevision` escribe por `transicionarLote`, y ahí un
+  // destino del lado del equipo sale siempre sin fecha límite.
+  if (!laPelotaEsDelCliente(estado)) filaLote().limiteRevision = null;
 };
 
 const estados = () => espia.piezas.map((p) => p.estadoCliente);
@@ -266,10 +273,11 @@ describe('un lote con cambios cuyo plazo venció', () => {
 
     espia.piezas.push(piezaDe(4));
     expect(await refrescarLote(comoRefrescable())).toBe('con_cambios');
-    // Sigue `con_cambios`, que no es auto-aprobable: no hay plazo corriendo y
-    // no hace falta limpiar nada. Lo que falta es que el operador corrija y
-    // vuelva a compartir, que es la ronda nueva de `compartirLote`.
-    expect(filaLote().limiteRevision).toEqual(LIMITE_1);
+    // Sigue `con_cambios` y sin fecha: la invariante (1) se la quitó al mes
+    // cuando el cliente devolvió la pieza y la pelota volvió al equipo. Lo que
+    // falta es que el operador corrija y vuelva a compartir, que es la ronda
+    // nueva de `compartirLote` y la única que vuelve a estampar un plazo.
+    expect(filaLote().limiteRevision).toBeNull();
     expect(await autoAprobarVencidos({ clientId: CLIENTE, ahora: DIAS_DESPUES })).toEqual({ aprobados: 0 });
   });
 

@@ -70,31 +70,31 @@ describe('aceptaDecision', () => {
   const compartidoEn = new Date('2026-09-16T18:00:00.000Z');
 
   it('un lote en revisión acepta, con plazo o sin él', () => {
-    expect(aceptaDecision({ estado: 'en_revision', compartidoEn, limiteRevision: null }, AHORA)).toBe(true);
-    expect(aceptaDecision({ estado: 'en_revision', compartidoEn, limiteRevision: limiteRevision(compartidoEn, 2) }, AHORA)).toBe(true);
+    expect(aceptaDecision({ estado: 'en_revision', compartidoEn, limiteRevision: null, contenidoActualizadoEn: null }, AHORA)).toBe(true);
+    expect(aceptaDecision({ estado: 'en_revision', compartidoEn, limiteRevision: limiteRevision(compartidoEn, 2), contenidoActualizadoEn: null }, AHORA)).toBe(true);
   });
 
   it('un lote con cambios acepta aunque su límite ya pasó: la pelota es del operador', () => {
     const viejo = new Date('2026-08-01T18:00:00.000Z');
-    expect(aceptaDecision({ estado: 'con_cambios', compartidoEn: viejo, limiteRevision: limiteRevision(viejo, 2) }, AHORA)).toBe(true);
+    expect(aceptaDecision({ estado: 'con_cambios', compartidoEn: viejo, limiteRevision: limiteRevision(viejo, 2), contenidoActualizadoEn: null }, AHORA)).toBe(true);
   });
 
   // El riesgo que dejó abierto C3: después de la auto-aprobación, no hay
   // cambios a destiempo.
   it('un lote aprobado con el plazo vencido ya no acepta', () => {
     const viejo = new Date('2026-08-01T18:00:00.000Z');
-    expect(aceptaDecision({ estado: 'aprobada', compartidoEn: viejo, limiteRevision: limiteRevision(viejo, 2) }, AHORA)).toBe(false);
+    expect(aceptaDecision({ estado: 'aprobada', compartidoEn: viejo, limiteRevision: limiteRevision(viejo, 2), contenidoActualizadoEn: null }, AHORA)).toBe(false);
   });
 
   // …pero el cliente que aprobó todo por su cuenta sigue a tiempo de
   // arrepentirse, que es lo que ya dice `estadoTrasComentarioCliente`.
   it('un lote aprobado DENTRO del plazo sigue aceptando', () => {
     const limite = new Date('2026-09-20T05:59:59.999Z');
-    expect(aceptaDecision({ estado: 'aprobada', compartidoEn, limiteRevision: limite }, AHORA)).toBe(true);
+    expect(aceptaDecision({ estado: 'aprobada', compartidoEn, limiteRevision: limite, contenidoActualizadoEn: null }, AHORA)).toBe(true);
   });
 
   it('un lote aprobado sin fecha límite acepta: nunca hubo plazo que vencer', () => {
-    expect(aceptaDecision({ estado: 'aprobada', compartidoEn, limiteRevision: null }, AHORA)).toBe(true);
+    expect(aceptaDecision({ estado: 'aprobada', compartidoEn, limiteRevision: null, contenidoActualizadoEn: null }, AHORA)).toBe(true);
   });
 });
 

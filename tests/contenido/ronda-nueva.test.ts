@@ -81,6 +81,7 @@ const comoRefrescable = () => {
     estado: l.estado as LoteCompartible['estado'],
     compartidoEn: (l.compartidoEn ?? null) as Date | null,
     limiteRevision: (l.limiteRevision ?? null) as Date | null,
+    contenidoActualizadoEn: (l.contenidoActualizadoEn ?? null) as Date | null,
   };
 };
 

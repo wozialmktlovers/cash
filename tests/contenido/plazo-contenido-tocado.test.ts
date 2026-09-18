@@ -74,10 +74,11 @@ vi.mock('@/db', async (importarReal) => {
 });
 
 import { autoAprobarVencidos } from '@/contenido/auto-aprobacion';
-import { limiteRevision } from '@/contenido/reglas';
+import { laPelotaEsDelCliente, limiteRevision } from '@/contenido/reglas';
 import { registrarRevision } from '@/contenido/revision';
 import {
-  compartirLote, marcarContenidoTocado, type LoteCompartible,
+  compartirLote, marcarContenidoTocado, refrescarLote,
+  type LoteCompartible, type LoteRefrescable,
 } from '@/contenido/servicio';
 import type { UsuarioSesion } from '@/lib/permisos';
 
@@ -145,6 +146,26 @@ const operadorCorrige = async (piezaId: string, copy: string, cuando: Date) => {
 };
 
 const estados = () => espia.piezas.map((p) => p.estadoCliente);
+
+const comoRefrescable = (): LoteRefrescable => {
+  const l = filaLote();
+  return {
+    id: l.id as string,
+    clientId: l.clientId as string,
+    estado: l.estado as LoteRefrescable['estado'],
+    compartidoEn: (l.compartidoEn ?? null) as Date | null,
+    limiteRevision: (l.limiteRevision ?? null) as Date | null,
+    contenidoActualizadoEn: (l.contenidoActualizadoEn ?? null) as Date | null,
+  };
+};
+
+/** El borrado tal como lo hace `DELETE /api/contenido/piezas/[id]`. */
+const operadorBorra = async (piezaId: string, cuando: Date) => {
+  const i = espia.piezas.findIndex((p) => p.id === piezaId);
+  espia.piezas.splice(i, 1);
+  await marcarContenidoTocado(ids.lote, cuando);
+  return refrescarLote(comoRefrescable(), cuando);
+};
 
 /**
  * Mueve el reloj del sistema, no solo el `ahora` que se pasa por argumento.
@@ -365,5 +386,108 @@ describe('el operador edita una pieza mientras el cliente revisa', () => {
     const r = await compartirLote(comoCompartible(), 2, CORRIGE);
     expect(r.arrancoElPlazo).toBe(false);
     expect(filaLote().limiteRevision).toEqual(LIMITE_1);
+  });
+});
+
+/**
+ * ── El hermano que dejó abierto el commit 44cdb7b ────────────────────────
+ *
+ * El guión: el operador EDITA una pieza con el mes `en_revision`, el plazo
+ * vence, y después el operador BORRA esa misma pieza. Si lo que queda está todo
+ * aprobado, el mes pasa a `aprobada`.
+ *
+ * **Y la invariante (1) no lo cierra, al contrario de lo que parecía.** Se
+ * comprobó, que era el encargo, y la respuesta es que no: el mes va de
+ * `en_revision` a `aprobada` sin pisar en ningún momento el lado del equipo, así
+ * que no hay transición que apague la fecha —ni debe haberla: `aprobada`
+ * conserva lo que tenga, y esa es justamente la regla que mantiene cerrados los
+ * meses auto-aprobados de verdad—. La fecha sobrevive porque tiene derecho a
+ * sobrevivir.
+ *
+ * El agujero estaba en la otra invariante, la (2), y en su segundo consumidor:
+ * la fecha llevaba invalidada desde la edición —`loteAutoAprobado` lo respetaba
+ * y por eso el mes nunca se auto-aprobó—, pero `aceptaDecision` nunca preguntaba
+ * por el contenido y le cerraba la puerta al cliente citándole esa misma fecha.
+ * Un plazo que no sirve para aprobar tampoco sirve para cerrar. Lo tapa
+ * `plazoCubreElContenido` (src/contenido/reglas.ts).
+ */
+describe('el operador edita una pieza, vence el plazo, y luego la borra', () => {
+  /** Hasta el borrado: el cliente aprobó 1 y 2, el operador editó la 3 y el plazo venció. */
+  async function hastaElBorrado() {
+    reloj(RONDA_1);
+    await compartirLote(comoCompartible(), 2, RONDA_1);
+
+    reloj(PIDE_CAMBIOS);
+    for (const n of [1, 2]) {
+      const r = await registrarRevision({
+        piezaId: `pieza-${n}`, usuario: CLIENTE, decision: 'aprobar', nota: '', ahora: PIDE_CAMBIOS,
+      });
+      expect(r.ok).toBe(true);
+    }
+
+    // El operador reescribe la pieza 3 mientras el cliente todavía la tiene sin
+    // mirar. El mes no se mueve de `en_revision`: `PATCH` no toca el estado.
+    reloj(CORRIGE);
+    await operadorCorrige('pieza-3', 'Copy reescrito a media revisión.', CORRIGE);
+    expect(filaLote().estado).toBe('en_revision');
+
+    // El plazo vence y la invariante (2) hace su trabajo: no se auto-aprueba
+    // nada, porque lo que hay delante ya no es lo que se repartió.
+    reloj(VENCIDO);
+    expect(await autoAprobarVencidos({ clientId: ids.cliente, ahora: VENCIDO })).toEqual({ aprobados: 0 });
+  }
+
+  it('la invariante (1) NO es la que lo cierra: los dos estados son del lado del cliente', () => {
+    // Se comprobó en vez de suponerlo, y la respuesta es que no. El cruce es
+    // `en_revision` → `aprobada`, y la invariante (1) solo apaga el plazo al
+    // entrar en un estado del EQUIPO. Aquí no hay ninguno, así que no tiene por
+    // dónde actuar —ni debe: que `aprobada` conserve su fecha es justo lo que
+    // mantiene cerrados los meses auto-aprobados de verdad—.
+    expect(laPelotaEsDelCliente('en_revision')).toBe(true);
+    expect(laPelotaEsDelCliente('aprobada')).toBe(true);
+  });
+
+  it('lo cierra la (2) al cruzar: el mes queda aprobado y deja atrás el plazo muerto', async () => {
+    await hastaElBorrado();
+
+    reloj(ARREPIENTE);
+    // Quedan la 1 y la 2, las dos aprobadas por el cliente.
+    expect(await operadorBorra('pieza-3', ARREPIENTE)).toBe('aprobada');
+    // La fecha llevaba invalidada desde la edición de la pieza 3, y un plazo que
+    // no sirvió para auto-aprobar tampoco puede viajar a `aprobada` a cerrarle
+    // la puerta al cliente. Antes llegaba entera: era el hermano de 44cdb7b.
+    expect(filaLote().limiteRevision).toBeNull();
+    expect(filaLote().compartidoEn).toEqual(RONDA_1);
+  });
+
+  it('pero esa fecha ya no le cierra la puerta al cliente: estaba invalidada desde la edición', async () => {
+    await hastaElBorrado();
+
+    reloj(ARREPIENTE);
+    await operadorBorra('pieza-3', ARREPIENTE);
+
+    // Antes: 409 con «el plazo de revisión de este mes terminó…», sobre un plazo
+    // que el propio sistema había dado por no aplicable un momento antes.
+    const r = await registrarRevision({
+      piezaId: 'pieza-1',
+      usuario: CLIENTE,
+      decision: 'cambios',
+      nota: 'Con la otra pieza fuera, esta ya no encaja.',
+      ahora: ARREPIENTE,
+    });
+    expect(r.ok).toBe(true);
+    expect(filaLote().estado).toBe('con_cambios');
+    expect(filaLote().limiteRevision).toBeNull();
+  });
+
+  it('el barrido tampoco lo aprueba solo por el camino', async () => {
+    await hastaElBorrado();
+
+    reloj(ARREPIENTE);
+    await operadorBorra('pieza-3', ARREPIENTE);
+
+    reloj(BARRIDO);
+    expect(await autoAprobarVencidos({ clientId: ids.cliente, ahora: BARRIDO })).toEqual({ aprobados: 0 });
+    expect(espia.eventos).toHaveLength(0);
   });
 });

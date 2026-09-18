@@ -20,8 +20,13 @@ import { fechaHora } from '@/lib/ui/fecha';
 import { piezaVisible } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
 import { asegurarLotesAlDia } from './auto-aprobacion';
-import { avanceRevision, estadoLoteSegunPiezas, type AvanceRevision } from './reglas';
-import { sincronizarEtapa } from './servicio';
+import {
+  avanceRevision,
+  estadoLoteSegunPiezas,
+  laPelotaEsDelCliente,
+  type AvanceRevision,
+} from './reglas';
+import { sincronizarEtapa, transicionarLote } from './servicio';
 
 /** Lo que el cliente puede decir de una pieza (diseño §6). */
 export const DECISIONES = ['aprobar', 'cambios'] as const;
@@ -122,7 +127,16 @@ export function razonPlazoVencido(limite: Date | null): string {
 }
 
 /** La `contenido_lotes` que esta operación necesita releer con la fila bloqueada. */
-type LoteFresco = { estado: Estado; compartidoEn: Date | null; limiteRevision: Date | null };
+type LoteFresco = {
+  estado: Estado;
+  compartidoEn: Date | null;
+  limiteRevision: Date | null;
+  /** La pide `transicionarLote` (./servicio.ts) para decidir si el plazo
+   *  sobrevive al cruce. Obligatoria —aunque admita `null`— para que el
+   *  compilador exija haber leído la columna en vez de dejar que un `SELECT`
+   *  incompleto desactive la regla en silencio. */
+  contenidoActualizadoEn: Date | null;
+};
 
 /**
  * ¿Este lote sigue admitiendo una decisión del cliente?
@@ -143,20 +157,28 @@ type LoteFresco = { estado: Estado; compartidoEn: Date | null; limiteRevision: D
  *   mes que el cliente aprobó entero y cuyo plazo venció después. En los dos, el
  *   plazo se acabó de verdad; `razonPlazoVencido` lo dice sin atribuirle a nadie
  *   una aprobación que no hizo.
- * - **Límite nulo:** acepta. Un lote sin fecha es uno al que el sistema le APAGÓ
- *   el plazo porque se consumió mientras el mes esperaba al operador: por aquí
- *   si quien sacó el mes de `con_cambios` fue el cliente retractándose (ver la
- *   explicación larga de abajo), o por `refrescarLote` (./servicio.ts) si fue el
- *   operador, resolviendo la petición con el borrado de la pieza devuelta. Ese
- *   reloj se detuvo a favor del cliente y nunca venció para él, así que
- *   oponérselo sería cobrarle una espera ajena.
+ * - **Límite nulo:** acepta, y esta comprobación es la que aguanta toda la
+ *   familia. Un lote sin fecha es uno al que el sistema se la QUITÓ, y solo se
+ *   la quita por una de dos razones, las dos a favor del cliente: porque el mes
+ *   pasó por el lado del equipo y la invariante (1) la apagó al entrar
+ *   (`transicionarLote`, ./servicio.ts), o porque el plazo estaba invalidado por
+ *   la invariante (2) —alguien tocó el contenido después de repartirlo— y no se
+ *   llevó consigo al cruzar a `aprobada`. En los dos, ese reloj no venció para
+ *   él, así que oponérselo sería cobrarle una espera ajena.
+ *
+ * **Por eso esta función no mira el contenido, aunque el plazo dependa de él.**
+ * Podría preguntar por `contenido_actualizado_en` como hace `loteAutoAprobado`,
+ * y se probó: no funciona, porque esa columna guarda **el último** toque y no
+ * todos. Un mes auto-aprobado por vencimiento legítimo al que luego se le borra
+ * una pieza se vería idéntico a uno cuyo plazo se invalidó a media revisión, y
+ * la puerta se abriría para los dos. La respuesta se toma donde todavía se sabe
+ * —al cambiar de estado— y aquí solo se lee el resultado: si hay fecha, valía.
  *
  * **Sí: un mes aprobado sin fecha queda reabrible mientras no la tenga, y es lo
  * correcto.** No es un descuido ni un estado al que se llegue solo: se llega
- * porque el equipo dejó correr el reloj en su turno, y mientras eso no se
- * arregle el cliente conserva su derecho a opinar. El arreglo es del equipo y ya
- * existe: **volver a compartir el mes** le pone fecha nueva y, cuando esa fecha
- * pasa, la puerta se cierra sola por el caso de arriba (`compartirLote`,
+ * porque el reloj corrió sin ser turno del cliente. El arreglo es del equipo y
+ * ya existe: **volver a compartir el mes** le pone fecha nueva y, cuando esa
+ * fecha pasa, la puerta se cierra sola por el caso de arriba (`compartirLote`,
  * ./servicio.ts, sabe arrancar un plazo también desde este estado).
  *
  * Quien llama tiene que haber corrido antes `asegurarLotesAlDia`: es lo que
@@ -196,48 +218,37 @@ export function aceptaDecision(lote: LoteFresco, ahora: Date): boolean {
  * están y vuelve a `con_cambios` en cuanto una se devuelve, sin esperar al
  * resto. Después, `sincronizarEtapa` copia ese estado a `cliente_etapas`.
  *
- * ── El lote puede salir de `con_cambios` por aquí, y el plazo se apaga ────
+ * ── El plazo ya no se decide aquí ────────────────────────────────────────
  *
- * Hay un caso en que este recálculo saca el lote de `con_cambios` sin que medie
- * un reparto: el cliente **se retracta** y aprueba él mismo la pieza que había
- * devuelto, de modo que no queda ninguna en `cambios`. El destino depende de lo
- * que quede sin mirar: con piezas pendientes, `en_revision`; sin ninguna,
- * `aprobada`. Si el plazo de aquella ronda ya venció —y suele haber vencido,
- * porque un mes `con_cambios` no se auto-aprueba y el reloj corrió igual—, el
- * lote se quedaba con una fecha límite muerta, y eso hacía daño por los dos
- * destinos: el `en_revision` dejaba que el siguiente barrido aprobara en el acto
- * las piezas que el cliente aún no había mirado, con constancia de que «no
- * respondió» justo cuando acababa de responder; y el `aprobada` le cerraba la
- * puerta a golpe de `aceptaDecision`, con un mensaje que le contaba su propia
- * aprobación como un vencimiento.
+ * Esta función tuvo dos de los ocho parches, y los dos han desaparecido. El
+ * caso era: el cliente **se retracta** y aprueba él mismo la pieza que había
+ * devuelto, de modo que no queda ninguna en `cambios`. El lote sale de
+ * `con_cambios` sin que medie un reparto —a `en_revision` si quedan piezas sin
+ * mirar, a `aprobada` si no queda ninguna— y se llevaba puesta la fecha de
+ * aquella ronda, casi siempre vencida, porque un mes `con_cambios` no se
+ * auto-aprueba y el reloj corrió igual. Hacía daño por los dos destinos: el
+ * `en_revision` dejaba que el siguiente barrido aprobara en el acto las piezas
+ * que el cliente aún no había mirado, con constancia de que «no respondió» justo
+ * cuando acababa de responder; y el `aprobada` le cerraba la puerta a golpe de
+ * `aceptaDecision`, contándole su propia aprobación como un vencimiento.
  *
- * Buena parte de esos casos ya no llegan hasta aquí: si el operador atendió la
- * petición, al hacerlo marcó `contenido_actualizado_en`
- * (`marcarContenidoTocado`, ./servicio.ts), el plazo de la ronda anterior dejó
- * de valer sobre lo que el cliente tiene delante y `loteAutoAprobado` no lo
- * toca. Lo cubre `tests/contenido/plazo-contenido-tocado.test.ts`.
+ * Ahora no hay nada que apagar al salir, porque **no hay nada encendido**: el
+ * mes entró en `con_cambios` por `transicionarLote` (./servicio.ts) cuando el
+ * cliente devolvió la pieza, y la invariante (1) le quitó la fecha en ese
+ * momento. Lo que era una condición con dos destinos y dos comprobaciones de
+ * reloj es ahora una consecuencia de por dónde pasó el mes.
  *
- * Pero si el operador **no tocó nada**, el contenido sí es el que se compartió,
- * esa invariante contesta que el plazo vale y el vencido vuelve a correr. Y no
- * debería, porque lo que falla no es «¿es este el contenido que se compartió?»
- * sino **«¿corrió el reloj mientras era mi turno?»**: el mes estuvo esperando al
- * operador y el plazo se consumió con la pelota del otro lado.
+ * Lo que el lote conserva —`limite_revision` nulo— sigue significando lo mismo y
+ * sigue siendo seguro: `loteAutoAprobado` descarta un lote sin fecha en su
+ * primera línea y el prefiltro de `autoAprobarVencidos` ni lo trae, así que nada
+ * se aprueba solo; y `aceptaDecision` lo sigue admitiendo, así que el cliente
+ * continúa opinando. Para que el mes vuelva a tener fecha hay que repartirlo
+ * otra vez (`compartirLote`, ./servicio.ts, sabe hacerlo desde los dos estados).
  *
- * Así que ahí el plazo se apaga: el lote se queda con `limite_revision`
- * **nulo**, vaya a `en_revision` o a `aprobada`. Un lote sin fecha no se
- * auto-aprueba —`loteAutoAprobado` lo descarta en su primera línea, y el
- * prefiltro de `autoAprobarVencidos` ni lo trae— y `aceptaDecision` lo sigue
- * admitiendo, así que el cliente continúa opinando: sobre las piezas que le
- * quedan si las hay, o retractándose de una que aprobó si ya no queda ninguna.
- * Para que el mes vuelva a tener fecha hay que repartirlo otra vez, que es quien
- * arranca un plazo (`compartirLote`, ./servicio.ts, sabe hacerlo desde los dos
- * estados).
- *
- * Se descartó la alternativa —devolver el mes a `en_proceso` con el plazo
- * limpio, como hace `refrescarLote`—: es coherente, pero le quita el mes de las
- * manos justo a quien acaba de demostrar que está trabajando en él. Apagar el
- * plazo es lo menos intrusivo que sigue siendo seguro: nada se aprueba solo.
- * Lo cubre `tests/contenido/plazo-turno-ajeno.test.ts`.
+ * Se descartó, entonces y ahora, devolver el mes a `en_proceso` como hace
+ * `refrescarLote`: es coherente, pero le quita el mes de las manos justo a quien
+ * acaba de demostrar que está trabajando en él. Lo cubren
+ * `tests/contenido/plazo-turno-ajeno.test.ts` y `./plazo-mes-aprobado.test.ts`.
  */
 export async function registrarRevision(o: {
   piezaId: string;
@@ -292,6 +303,7 @@ export async function registrarRevision(o: {
         estado: contenidoLotes.estado,
         compartidoEn: contenidoLotes.compartidoEn,
         limiteRevision: contenidoLotes.limiteRevision,
+        contenidoActualizadoEn: contenidoLotes.contenidoActualizadoEn,
       })
       .from(contenidoLotes)
       .where(eq(contenidoLotes.id, lote.id))
@@ -324,37 +336,21 @@ export async function registrarRevision(o: {
 
     const estadoLote = estadoLoteSegunPiezas(piezas);
 
-    // El plazo que se consumió mientras el mes era del operador no revive con
-    // la retractación del cliente (ver la explicación larga de arriba). La
-    // condición es estrecha a propósito: solo la SALIDA de `con_cambios` —el
-    // único estado que tiene la pelota del lado del operador y del que se sale
-    // por aquí, sin pasar por un reparto— y solo si la fecha que arrastra ya
-    // está vencida. Si todavía corre, es el plazo de esta misma ronda y sigue
-    // siendo bueno. La comparación es estricta, como la de `loteAutoAprobado`:
-    // el instante exacto del límite todavía es del cliente.
+    // El estado se escribe por `transicionarLote` (./servicio.ts), que es quien
+    // aplica la invariante (1): si el cliente devuelve una pieza, el mes pasa a
+    // `con_cambios` y el plazo se apaga AHÍ MISMO, sin que esta función tenga
+    // que acordarse de nada. Lo que antes era un caso especial —la retractación
+    // que saca el lote de `con_cambios` arrastrando una fecha muerta— ya no
+    // puede ocurrir: para cuando el mes sale de `con_cambios`, esa fecha lleva
+    // nula desde que entró.
     //
-    // **Los dos destinos cuentan, y el segundo es la puerta hermana.** Si al
-    // retractarse el cliente quedan piezas pendientes, el mes vuelve a
-    // `en_revision`; si no queda ninguna, `estadoLoteSegunPiezas` deduce
-    // `aprobada`. Mirar solo el primero dejaba el segundo `aprobada` con el
-    // límite muerto, y a partir de ahí `aceptaDecision` le cerraba la puerta
-    // diciéndole que el mes «quedó aprobado» al vencer el plazo: ni se
-    // auto-aprobó —lo aprobó él, pieza por pieza, un minuto antes— ni ese plazo
-    // venció en su turno. El reloj se detuvo a su favor en los dos casos, así
-    // que se apaga en los dos. Lo cubre `tests/contenido/plazo-mes-aprobado.test.ts`.
-    const plazoConsumidoEnTurnoAjeno = (estadoLote === 'en_revision' || estadoLote === 'aprobada')
-      && fresco.estado === 'con_cambios'
-      && fresco.limiteRevision !== null
-      && ahora.getTime() > fresco.limiteRevision.getTime();
+    // La segunda condición cura de paso las filas anteriores a la invariante:
+    // un `con_cambios` guardado con su plazo todavía puesto se escribe aunque el
+    // estado no se mueva, y sale de `transicionarLote` sin fecha.
+    const arrastraPlazoDelEquipo = !laPelotaEsDelCliente(estadoLote) && fresco.limiteRevision !== null;
 
-    if (estadoLote !== fresco.estado) {
-      await tx.update(contenidoLotes)
-        .set({
-          estado: estadoLote,
-          ...(plazoConsumidoEnTurnoAjeno ? { limiteRevision: null } : {}),
-          actualizadoEn: ahora,
-        })
-        .where(eq(contenidoLotes.id, lote.id));
+    if (estadoLote !== fresco.estado || arrastraPlazoDelEquipo) {
+      await transicionarLote({ ...fresco, id: lote.id }, estadoLote, {}, ahora, tx);
     }
 
     // Siempre, aunque el estado del lote no se haya movido: `sincronizarEtapa`
