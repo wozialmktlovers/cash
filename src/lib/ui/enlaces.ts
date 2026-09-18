@@ -8,7 +8,7 @@
 // Inicio necesita la segunda, y una tercera copia habría dejado tres versiones
 // de la misma tabla de rutas, listas para separarse en cuanto cambie una.
 
-import type { TipoDocumento } from '@/flujo/reglas';
+import type { Etapa, TipoDocumento } from '@/flujo/reglas';
 
 /** Ruta del documento vigente de una etapa (spec §3, Avisos: «enlace»). */
 export function enlaceDocumento(tipo: TipoDocumento, documentoId: string): string {
@@ -31,4 +31,37 @@ export function enlacePendiente(
 ): string {
   if (p.documentoTipo && p.documentoId) return enlaceDocumento(p.documentoTipo, p.documentoId);
   return `/clientes/${p.clientId}`;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * A dónde lleva el aviso de una etapa: a donde se resuelve, que es su
+ * documento vigente —ahí está la barra con «Autorizar»/«Solicitar
+ * autorización» y los comentarios—, no la ficha del cliente.
+ *
+ * - `comentarioId`: el documento con ESE hilo abierto y su bloque resaltado
+ *   (`#comentario-<id>`, lo atiende `SCRIPT_FLUJO`).
+ * - `primerComentario`: el documento en el primer comentario abierto del
+ *   recorrido (`#primer-comentario`): el orden del recorrido es el del
+ *   documento en pantalla, y solo el script lo conoce.
+ *
+ * Respaldo: la ficha, si la etapa no tiene documento todavía o es el
+ * desarrollo mensual (su pantalla es la del mes, y la arma quien llama).
+ *
+ * Siempre una ruta relativa interna armada con ids con forma de UUID: nada
+ * de lo que llega se pega tal cual (un id raro cae al respaldo o se ignora),
+ * así el enlace no puede apuntar fuera del Studio ni inyectar nada.
+ */
+export function enlaceEtapa(
+  e: { clientId: string; etapa: Etapa; documentoTipo: TipoDocumento | null; documentoId: string | null },
+  destino: { comentarioId?: string | null; primerComentario?: boolean } = {},
+): string {
+  if (e.etapa === 'desarrollo_mensual' || !e.documentoTipo || !e.documentoId || !UUID.test(e.documentoId)) {
+    return `/clientes/${encodeURIComponent(e.clientId)}`;
+  }
+  const documento = enlaceDocumento(e.documentoTipo, e.documentoId);
+  if (destino.comentarioId && UUID.test(destino.comentarioId)) return `${documento}#comentario-${destino.comentarioId.toLowerCase()}`;
+  if (destino.primerComentario) return `${documento}#primer-comentario`;
+  return documento;
 }

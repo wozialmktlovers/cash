@@ -365,6 +365,51 @@ html.modo-comentar [data-ancla]:hover{outline:2px dashed var(--azul);outline-off
 
 .ancla-resaltada{outline:3px solid var(--rosa);outline-offset:12px;border-radius:var(--r-sm);transition:outline-color .3s ease;}
 
+/* Barra de acción de la etapa (./barra-etapa): arriba del aviso de
+   comentarios y con su misma forma, para leerse como un solo bloque: qué le
+   toca a la etapa y, debajo, dónde están los comentarios. Rosa del sistema
+   cuando a quien mira le toca actuar; neutra (franja azul) si solo informa. */
+.barra-etapa{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px;margin-top:24px;padding:14px 14px 14px 22px;
+  border-radius:var(--r);background:var(--tarjeta);border:1px solid var(--linea);box-shadow:inset 4px 0 0 var(--azul);}
+.barra-etapa.tono-le-toca{background:var(--rosa-s);border-color:color-mix(in srgb,var(--rosa) 35%,transparent);box-shadow:inset 4px 0 0 var(--rosa);}
+.barra-etapa-texto{flex:1 1 280px;min-width:0;display:grid;gap:2px;}
+.barra-etapa-eyebrow{margin:0;font:var(--t-micro);letter-spacing:.14em;text-transform:uppercase;color:var(--suave);}
+.barra-etapa-titulo{margin:0;color:var(--tinta);font:var(--t-body);font-weight:700;overflow-wrap:anywhere;}
+.barra-etapa-detalle{margin:0;color:var(--texto);font:var(--t-small);overflow-wrap:anywhere;}
+.barra-etapa-acciones{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.barra-etapa .panel-boton{background:var(--tarjeta);white-space:nowrap;}
+.barra-etapa .panel-primario{background:var(--rosa);color:var(--sobre-acento);}
+.barra-etapa .panel-boton:disabled,.dialogo-barra .panel-boton:disabled{opacity:.5;cursor:not-allowed;}
+.barra-etapa .panel-boton:disabled:hover{border-color:var(--linea);color:var(--texto);}
+.barra-etapa .panel-primario:disabled:hover{border-color:var(--rosa);color:var(--sobre-acento);}
+.barra-etapa-razon{flex-basis:100%;margin:0;font:var(--t-small);color:var(--suave);}
+.barra-etapa-estado{flex-basis:100%;margin:0;font:var(--t-small);font-weight:600;color:var(--rojo);}
+/* Con barra, el aviso va pegado a ella (los dos dentro de .etapa-y-comentarios). */
+.etapa-y-comentarios .aviso-comentarios{margin-top:8px;}
+/* Si la barra ya dice «Tienes N comentarios por atender · Ir al primero», el
+   aviso no lo repite: se queda como la fila de recorrido de la barra
+   (anterior, siguiente y la lista), sin caja propia. */
+.barra-con-comentarios .aviso-comentarios{margin-top:6px;padding:0;background:none;border:0;box-shadow:none;justify-content:flex-end;}
+.barra-con-comentarios .aviso-comentarios-texto,.barra-con-comentarios #btn-comentarios-primero{display:none;}
+.barra-con-comentarios .aviso-comentarios-controles{width:auto;}
+/* Ya autorizada: una línea discreta, sin caja. */
+.barra-etapa.barra-etapa-discreta{display:flex;align-items:center;justify-content:flex-start;gap:8px;margin-top:24px;padding:0;background:none;border:0;box-shadow:none;
+  font:var(--t-small);color:var(--suave);}
+.barra-etapa-discreta svg{width:16px;height:16px;color:var(--verde);flex-shrink:0;}
+.dialogo-barra p{margin:0;}
+/* Sin esto, el hover genérico de .panel-boton pinta el texto rosa sobre el botón rosa. */
+.dialogo-barra .panel-primario{color:var(--sobre-acento);}
+.dialogo-barra-etiqueta{font:var(--t-small);font-weight:600;color:var(--tinta);}
+.dialogo-barra textarea{width:100%;min-height:96px;padding:10px;border-radius:var(--r-sm);border:1px solid var(--linea);background:var(--fondo);color:var(--texto);font:inherit;resize:vertical;}
+@media (max-width:640px){
+  .barra-etapa{padding:14px 14px 14px 20px;}
+  .barra-etapa-texto{flex-basis:100%;}
+  .barra-etapa-acciones{width:100%;}
+  .barra-etapa-acciones .panel-primario{flex:1;}
+  .barra-etapa .panel-boton{padding:0 12px;}
+}
+@media print{.barra-etapa,.dialogo-barra{display:none!important;}}
+
 /* Aviso resumen arriba del documento (lo llena SCRIPT_FLUJO). */
 .aviso-comentarios{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px;margin-top:24px;padding:12px 12px 12px 22px;
   border-radius:var(--r);background:var(--rosa-s);border:1px solid color-mix(in srgb,var(--rosa) 35%,transparent);box-shadow:inset 4px 0 0 var(--rosa);}

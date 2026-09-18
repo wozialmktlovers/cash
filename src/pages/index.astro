@@ -13,7 +13,7 @@ import { plazoOponible } from '@/contenido/reglas';
 import { periodo, type EtapaM, type Evento, type JobM } from '@/lib/desempeno';
 import { nombrePeriodo, periodoActual, periodoVecino } from '@/lib/ui/periodo';
 import { etapasDeClientes, eventosDeEntrada } from '@/flujo/servicio';
-import { situacionEtapa, situacionPendiente, fraseComentario, type Situacion } from '@/flujo/situacion';
+import { situacionEtapa, situacionPendiente, fraseComentario, columnaEntrega, type Situacion } from '@/flujo/situacion';
 import { listarPendientes } from '@/lib/pendientes';
 import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
 import { nombreVisible } from '@/lib/usuarios';
@@ -270,13 +270,13 @@ const autorizadaEsteMes = (e: (typeof todasLasEtapas)[number]) => {
   return ev?.accion === 'aprobar' && ev.creadoEn >= mesActual.desde!;
 };
 
-const conCambiosEntregas = contratadas.filter((e) => e.estado === 'con_cambios').map(entrada).sort(masViejoPrimero);
+const conCambiosEntregas = contratadas.filter((e) => columnaEntrega(e) === 'cambios').map(entrada).sort(masViejoPrimero);
 const reabiertas = conCambiosEntregas.filter((x) => x.situacion.reabierta).length;
 const columnasEntregas = [
   {
     id: 'entregas-autorizacion', titulo: 'Esperan autorización', color: 'amarillo',
     vacio: 'Nada espera autorización.',
-    items: contratadas.filter((e) => e.estado === 'en_revision').map(entrada).sort(masViejoPrimero),
+    items: contratadas.filter((e) => columnaEntrega(e) === 'autorizacion').map(entrada).sort(masViejoPrimero),
     nota: null as string | null,
   },
   {
@@ -289,7 +289,9 @@ const columnasEntregas = [
   {
     id: 'entregas-proceso', titulo: 'En proceso', color: 'azul',
     vacio: 'Nada en proceso ahora mismo.',
-    items: contratadas.filter((e) => e.estado === 'en_proceso').map(entrada).sort(masViejoPrimero),
+    // Incluye el mes compartido con el cliente (`columnaEntrega`): espera al
+    // cliente, no una autorización del equipo.
+    items: contratadas.filter((e) => columnaEntrega(e) === 'proceso').map(entrada).sort(masViejoPrimero),
     nota: null,
   },
   {

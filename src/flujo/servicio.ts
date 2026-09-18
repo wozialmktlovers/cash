@@ -18,8 +18,9 @@ import { investigacionUtil } from '@/lib/precheck';
 import { clienteOperable, clienteVisible, esUuid } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
 import { nombreVisible } from '@/lib/usuarios';
-import { enlaceDocumento } from '@/lib/ui/enlaces';
+import { enlaceDocumento, enlaceEtapa } from '@/lib/ui/enlaces';
 import type { EventoEntrada } from './situacion';
+import { barraEtapaDocumento, type BarraEtapa } from './barra-documento';
 import { avisarJob, avisarTransicion, avisarComentarioCliente, avisarRespuestaCliente, avisarRespuestaDelCliente, type EventoAviso } from './avisos';
 
 /**
@@ -219,6 +220,46 @@ export async function etapaDelDocumento(clientId: string, tipo: TipoDocumento, d
   const vigente = etapas.find((e) => e.documentoTipo === tipo && e.documentoId === documentoId);
   if (vigente) return vigente;
   return etapas.find((e) => e.etapa === etapaDeTipo(tipo)) ?? null;
+}
+
+/**
+ * La barra de acción de la etapa para la vista interna de un documento
+ * (`barraEtapaDocumento`, src/flujo/barra-documento.ts), con los mismos datos
+ * que usa la tarjeta de la ficha: las etapas del cliente, los comentarios
+ * abiertos de la etapa, el evento que la dejó en su estado y el responsable.
+ * Sin consultas cuando de entrada no lleva barra.
+ */
+export async function barraDelDocumento(o: {
+  usuario: UsuarioSesion;
+  cliente: { id: string; operadorId: string | null };
+  etapa: FilaEtapa;
+  esDocumentoVigente: boolean;
+}): Promise<BarraEtapa | null> {
+  const { usuario, cliente, etapa } = o;
+  if (usuario.rol === 'cliente' || !o.esDocumentoVigente) return null;
+  if (etapa.etapa === 'desarrollo_mensual' || etapa.estado === 'no_iniciada') return null;
+
+  const [etapasCliente, abiertos, eventos, [responsable]] = await Promise.all([
+    etapasDelCliente(cliente.id),
+    comentariosAbiertosPorEtapa([etapa]),
+    eventosDeEntrada([etapa.id]),
+    cliente.operadorId
+      ? db.select({ nombre: users.nombre, apellido: users.apellido, email: users.email }).from(users).where(eq(users.id, cliente.operadorId)).limit(1)
+      : Promise.resolve([]),
+  ]);
+
+  return barraEtapaDocumento({
+    etapa,
+    rol: usuario.rol,
+    usuarioId: usuario.id,
+    esOperadorAsignado: cliente.operadorId === usuario.id,
+    esDocumentoVigente: o.esDocumentoVigente,
+    comentariosAbiertos: abiertos.get(etapa.id) ?? 0,
+    etapasCliente,
+    evento: eventos.get(etapa.id) ?? null,
+    operador: responsable ? nombreVisible(responsable) : null,
+    ahora: new Date(),
+  });
 }
 
 /**
@@ -549,6 +590,10 @@ export async function ejecutarTransicion(o: {
 
   const comentarioGeneral = (comentario ?? '').trim();
   const esOperadorAsignado = cliente.operadorId === usuario.id;
+  // Comentarios abiertos tras la transición (los que contó la regla, más el
+  // general que se crea al pedir cambios o reabrir): decide si el aviso
+  // lleva al primero de ellos.
+  let abiertosTras = 0;
 
   // La condición del UPDATE también fija `documento_id` al leído: sin esto,
   // un `generado` que llega entre la lectura y el UPDATE (el operador pide
@@ -605,7 +650,9 @@ export async function ejecutarTransicion(o: {
         fresca.versionAprobadaId = version.id;
       }
 
+      abiertosTras = comentariosAbiertos;
       if ((accion === 'pedir_cambios' || accion === 'reabrir') && comentarioGeneral !== '' && fila.documentoId) {
+        abiertosTras++;
         const tipo = tipoDocumentoDe(fila.etapa)!;
         const numero = (await ultimaVersion(tx, tipo, fila.documentoId)) ?? 1;
         await tx.insert(comentarios).values({
@@ -634,7 +681,11 @@ export async function ejecutarTransicion(o: {
         cliente: cliente.nombre,
         etapa: NOMBRE_ETAPA[fila.etapa],
         autor: nombreVisible(usuario),
-        enlace: `/clientes/${cliente.id}`,
+        // Al documento, donde se resuelve (la barra de la etapa y los
+        // comentarios); cambios pedidos o reabierta, al primer comentario.
+        enlace: enlaceEtapa(actualizada, {
+          primerComentario: (accion === 'pedir_cambios' || accion === 'reabrir') && abiertosTras > 0,
+        }),
       }).catch((e) => console.error('[avisos] transicion:', e));
     }
 
@@ -801,7 +852,8 @@ export async function crearComentarioCliente(o: {
       operadorId: clienteFila.operadorId,
       cliente: clienteFila.nombre,
       etapa: NOMBRE_ETAPA[fila.etapa],
-      enlace: `/clientes/${fila.clientId}`,
+      // Al documento con ese hilo abierto (la ficha si no hay documento).
+      enlace: enlaceEtapa(fila, { comentarioId: creado.id }),
     }).catch((e) => console.error('[avisos] comentario_cliente:', e));
 
     return { ok: true, comentario: creado };
@@ -878,7 +930,8 @@ export async function responderComentario(o: {
       operadorId: clienteFila?.operadorId ?? null,
       cliente: clienteFila?.nombre ?? 'Cliente',
       etapa: NOMBRE_ETAPA[etapaFila.etapa],
-      enlace: `/clientes/${etapaFila.clientId}`,
+      // Al documento con el hilo en el que respondió (su comentario padre).
+      enlace: enlaceEtapa(etapaFila, { comentarioId: padre.id }),
     }).catch((e) => console.error('[avisos] cliente_respondio:', e));
   }
 

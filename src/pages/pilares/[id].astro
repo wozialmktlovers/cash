@@ -7,7 +7,7 @@ import { baseUrlPublica } from '@/lib/base-url';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { nombreVisible } from '@/lib/usuarios';
 import { documentoVisible } from '@/lib/visibilidad';
-import { etapaDelDocumento, permisoCompartir } from '@/flujo/servicio';
+import { etapaDelDocumento, permisoCompartir, barraDelDocumento } from '@/flujo/servicio';
 import { puedeEditar as calcularPuedeEditar } from '@/flujo/edicion';
 import { puedeComentar } from '@/flujo/reglas';
 import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
@@ -72,6 +72,9 @@ if (operable) {
       puedeEditar: calcularPuedeEditar(usuario.rol, esOperadorAsignado, etapa.estado),
       puedeComentar: esDocumentoVigente && puedeComentar(usuario.rol, esOperadorAsignado, etapa.etapa),
       rol: usuario.rol, esOperadorAsignado,
+      // La barra para avanzar la etapa desde aquí (Autorizar, Solicitar
+      // autorización, Pedir cambios): las mismas reglas que la ficha.
+      barra: await barraDelDocumento({ usuario, cliente: c, etapa, esDocumentoVigente }),
     };
   }
 }

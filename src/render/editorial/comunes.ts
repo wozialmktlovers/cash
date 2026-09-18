@@ -5,6 +5,7 @@ import type { OpcionesBarra } from '@/render/barra-operador';
 import { cabeceraDocumento, bandaVistaPrevia, SCRIPT_CABECERA_BASE, SCRIPT_CABECERA_COMPARTIR } from './cabecera';
 import { SCRIPT_EDITORIAL } from './interaccion';
 import { atributoFlujo, panelComentarios, avisoComentarios, navegadorComentarios, SCRIPT_FLUJO, type FlujoDatos } from './flujo-cliente';
+import { barraEtapa, SCRIPT_BARRA_ETAPA } from './barra-etapa';
 
 export { escapar };
 
@@ -58,6 +59,9 @@ export function envolverDocumento(o: {
    */
   inicio?: string;
 }): string {
+  // La barra de acción de la etapa: solo la vista interna del equipo. El
+  // portal también trae `flujo` (rol `cliente`) y nunca la lleva.
+  const barra = o.flujo && o.flujo.rol !== 'cliente' ? o.flujo.barra ?? null : null;
   return `<!DOCTYPE html>
 <html lang="es-MX"><head>
 <meta charset="UTF-8">
@@ -85,7 +89,9 @@ ${cabeceraDocumento({
     <ol>${o.indice.map(([num, id, nombre]) => `<li><a href="#${id}"><span>${num}</span>${nombre}</a></li>`).join('')}</ol>
   </nav>
   <main>
-${o.flujo?.puedeComentar ? avisoComentarios() : ''}
+${barra
+  ? `<div class="etapa-y-comentarios${barra.comentariosPorAtender > 0 ? ' barra-con-comentarios' : ''}">${barraEtapa(barra)}${o.flujo?.puedeComentar ? avisoComentarios() : ''}</div>`
+  : o.flujo?.puedeComentar ? avisoComentarios() : ''}
 ${o.cuerpo}
   </main>
 </div></div>
@@ -98,6 +104,7 @@ ${o.flujo?.puedeComentar ? navegadorComentarios() : ''}
 <script>${SCRIPT_CABECERA_BASE}</script>
 ${o.operador ? `<script>${SCRIPT_CABECERA_COMPARTIR}</script>` : ''}
 ${o.flujo ? `<script>${SCRIPT_FLUJO}</script>` : ''}
+${barra ? `<script>${SCRIPT_BARRA_ETAPA}</script>` : ''}
 ${o.scriptsExtra ? `<script>${o.scriptsExtra}</script>` : ''}
 </body></html>`;
 }

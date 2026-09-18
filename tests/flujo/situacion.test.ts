@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  situacionEtapa, situacionPendiente, avisoCliente, fraseComentario, ordenBotones, cuando, diaCorto, cita,
+  situacionEtapa, situacionPendiente, avisoCliente, fraseComentario, ordenBotones, cuando, diaCorto, cita, columnaEntrega,
   type EntradaSituacion, type EventoEntrada, type Mirada,
 } from '@/flujo/situacion';
 
@@ -246,5 +246,28 @@ describe('puntuación de la cita', () => {
     const s = situacionEtapa(entrada({ estado: 'con_cambios', evento: ev }), OPERADOR, AHORA);
     expect(s.recuadro).toBe('Carlos Ruiz pidió cambios hace 3 horas: «Separa los pilares.» Cuando esté listo, vuelve a pedir autorización.');
     expect(s.resumen).toBe('Tienes cambios por hacer · Carlos Ruiz pidió cambios hace 3 horas');
+  });
+});
+
+describe('columnaEntrega (Inicio · Estado de las entregas)', () => {
+  it('el mes compartido con el cliente va en «En proceso», no en «Esperan autorización», y conserva su frase', () => {
+    expect(columnaEntrega({ etapa: 'desarrollo_mensual', estado: 'en_revision' })).toBe('proceso');
+    expect(situacionEtapa(entrada({ etapa: 'desarrollo_mensual', estado: 'en_revision' }), ADMIN, AHORA).resumen)
+      .toBe('Compartido: espera la respuesta del cliente');
+  });
+
+  it('las demás etapas en revisión sí esperan autorización', () => {
+    for (const etapa of ['investigacion', 'pilares', 'manual_campana'] as const) {
+      expect(columnaEntrega({ etapa, estado: 'en_revision' })).toBe('autorizacion');
+    }
+  });
+
+  it('con cambios, en proceso y el resto', () => {
+    expect(columnaEntrega({ etapa: 'pilares', estado: 'con_cambios' })).toBe('cambios');
+    expect(columnaEntrega({ etapa: 'desarrollo_mensual', estado: 'con_cambios' })).toBe('cambios');
+    expect(columnaEntrega({ etapa: 'manual_campana', estado: 'en_proceso' })).toBe('proceso');
+    expect(columnaEntrega({ etapa: 'desarrollo_mensual', estado: 'en_proceso' })).toBe('proceso');
+    expect(columnaEntrega({ etapa: 'investigacion', estado: 'aprobada' })).toBeNull();
+    expect(columnaEntrega({ etapa: 'investigacion', estado: 'no_iniciada' })).toBeNull();
   });
 });

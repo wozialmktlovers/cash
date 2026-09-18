@@ -6,6 +6,7 @@ import { SCRIPT_PILARES } from '@/render/pilares/script';
 import { SCRIPT_CONTENIDO, SCRIPT_REVISION } from '@/render/contenido/script';
 import { SCRIPT_CABECERA } from '@/render/editorial/cabecera';
 import { SCRIPT_FLUJO } from '@/render/editorial/flujo-cliente';
+import { SCRIPT_BARRA_ETAPA } from '@/render/editorial/barra-etapa';
 import { NAVEGACION_GROWTH } from '@/render/growth/navegacion';
 
 // Estos scripts se mandan tal cual dentro de un <script> en línea del
@@ -20,6 +21,7 @@ const SCRIPTS: Record<string, string> = {
   SCRIPT_REVISION,
   SCRIPT_CABECERA,
   SCRIPT_FLUJO,
+  SCRIPT_BARRA_ETAPA,
   NAVEGACION_GROWTH,
 };
 

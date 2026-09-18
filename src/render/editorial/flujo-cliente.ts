@@ -1,5 +1,6 @@
 import { escapar } from '@/render/escapar';
 import type { TipoDocumento, Rol } from '@/flujo/reglas';
+import type { BarraEtapa } from '@/flujo/barra-documento';
 
 /**
  * Lo que necesita `SCRIPT_FLUJO` en el navegador para saber a qué documento
@@ -18,11 +19,18 @@ export type FlujoDatos = {
   puedeComentar: boolean;
   rol: Rol;
   esOperadorAsignado: boolean;
+  /**
+   * La barra de acción de la etapa (`barraEtapaDocumento`), solo en la vista
+   * interna de admin/operador. No viaja en `data-flujo`: ya va pintada en el
+   * HTML (ver `barraEtapa`, ./barra-etapa).
+   */
+  barra?: BarraEtapa | null;
 };
 
 /** El atributo `data-flujo` completo (con el espacio delante), listo para pegar dentro de una etiqueta. */
 export function atributoFlujo(o: FlujoDatos): string {
-  return ` data-flujo="${escapar(JSON.stringify(o))}"`;
+  const { barra: _barra, ...datos } = o;
+  return ` data-flujo="${escapar(JSON.stringify(datos))}"`;
 }
 
 /**
@@ -277,6 +285,21 @@ export const SCRIPT_FLUJO = `(function () {
   // el desplazamiento y el foco hacia él pasen una sola vez.
   var hiloActual = null;
   var hiloPorEnfocar = false;
+  // Cuando se llega por el enlace de un aviso a un comentario concreto
+  // (#comentario-<id>), se destaca ESE hilo, no todos los de su bloque.
+  var hiloIdActual = null;
+  // El enlace de un aviso se atiende una sola vez, tras la primera carga.
+  var enlacePendiente = true;
+
+  // La barra de acción de la etapa (./barra-etapa), si la hay: cuando
+  // «Solicitar autorización»/«Autorizar» están frenados solo por
+  // comentarios abiertos, su conteo y el botón se actualizan aquí en vivo
+  // al atender los comentarios, sin recargar.
+  var barraEtapa = document.getElementById('barra-etapa');
+  var barraTitulo = document.getElementById('barra-etapa-titulo');
+  var barraRazon = document.getElementById('barra-etapa-razon');
+  var btnBarraPrimero = document.getElementById('btn-barra-primer-comentario');
+  var barraConComentarios = Boolean(barraEtapa && Number(barraEtapa.getAttribute('data-comentarios')) > 0);
 
   // Todas las funciones se declaran aquí arriba, fuera de cualquier bloque
   // 'if': una function declaration dentro de un bloque no es válida en ES5
@@ -668,6 +691,84 @@ export const SCRIPT_FLUJO = `(function () {
       }
     }
     pintarResumen(totalEnPagina, secciones, generales);
+    actualizarBarra();
+  }
+
+  // Comentarios abiertos de primer nivel de la etapa, de cualquier versión:
+  // los mismos que cuenta el servidor para dejar pasar «solicitar».
+  function abiertosDeLaEtapa() {
+    var n = 0;
+    for (var i = 0; i < comentariosCache.length; i++) {
+      if (!comentariosCache[i].respuestaDe && comentariosCache[i].estado === 'abierto') n++;
+    }
+    return n;
+  }
+
+  function actualizarBarra() {
+    if (!barraEtapa || !barraConComentarios) return;
+    var n = abiertosDeLaEtapa();
+    var frenados = barraEtapa.querySelectorAll('[data-por-comentarios]');
+    for (var i = 0; i < frenados.length; i++) frenados[i].disabled = n > 0;
+    if (barraRazon) barraRazon.hidden = n === 0;
+    if (btnBarraPrimero) btnBarraPrimero.hidden = n === 0;
+    if (barraTitulo && flujo.rol !== 'admin') {
+      barraTitulo.textContent = n > 0 ? 'Tienes ' + textoConteo(n) + ' por atender' : 'Ya no quedan comentarios por atender';
+    }
+    barraEtapa.setAttribute('data-comentarios', String(n));
+  }
+
+  // «Ir al primero» de la barra y el enlace #primer-comentario de un aviso:
+  // el mismo recorrido que «Ir al primero» del aviso de comentarios, y si
+  // los abiertos no tienen bloque en la página (generales, u otra versión),
+  // la lista.
+  function irAlPrimerComentario(sinAnimacion) {
+    if (bloquesComentados.length) { irABloque(0, sinAnimacion === true); return; }
+    if (abiertosDeLaEtapa() > 0 && dialogoComentarios) abrirComentarios();
+  }
+
+  // El salto del enlace de un aviso espera a que la página termine de cargar:
+  // si no, el desplazamiento suave se corta cuando llegan las fuentes y las
+  // imágenes y cambia el alto de lo de arriba (visto en el mapa de pilares).
+  function trasCargar(fn) {
+    if (!document.readyState || document.readyState === 'complete') { setTimeout(fn, 0); return; }
+    window.addEventListener('load', function () { setTimeout(fn, 50); });
+  }
+
+  // Enlaces de los avisos (src/lib/ui/enlaces.ts): '#primer-comentario'
+  // lleva al primero del recorrido; '#comentario-<id>' destaca el bloque de
+  // ese comentario (o del hilo al que responde) y abre su hilo en el panel.
+  // Un id que no está (borrado, de otra etapa, inventado) no hace nada.
+  function atenderEnlace() {
+    var h = '';
+    try { h = String((window.location && window.location.hash) || ''); } catch (e) { h = ''; }
+    if (h === '#primer-comentario') { irAlPrimerComentario(true); return; }
+    var m = /^#comentario-([0-9a-fA-F-]{36})$/.exec(h);
+    if (!m) return;
+    var id = m[1].toLowerCase();
+    var c = null;
+    var i;
+    for (i = 0; i < comentariosCache.length; i++) {
+      if (String(comentariosCache[i].id).toLowerCase() === id) { c = comentariosCache[i]; break; }
+    }
+    if (c && c.respuestaDe) {
+      var padre = null;
+      for (i = 0; i < comentariosCache.length; i++) {
+        if (comentariosCache[i].id === c.respuestaDe) { padre = comentariosCache[i]; break; }
+      }
+      c = padre;
+    }
+    if (!c) return;
+    if (!c.deOtraVersion && c.ancla !== 'general') {
+      var elementos = elementosDeAncla(c.ancla);
+      if (elementos.length) {
+        for (i = 0; i < bloquesComentados.length; i++) {
+          if (bloquesComentados[i] === elementos[0]) { posicionBloque = i; break; }
+        }
+        saltarA(elementos[0], true);
+        actualizarNavegador();
+      }
+    }
+    abrirHilo(c.ancla, c.estado === 'abierto' ? 'abierto' : 'todos', c.id);
   }
 
   function pintarIndice(porSeccion) {
@@ -759,9 +860,15 @@ export const SCRIPT_FLUJO = `(function () {
   // centrado si cabe, y si es más alto que lo visible (una sección entera),
   // con su borde de arriba justo bajo la cabecera. Luego lo destaca un
   // momento con '.ancla-resaltada'.
-  function saltarA(el) {
+  // 'sinAnimacion': el salto al llegar por el enlace de un aviso. Recién
+  // cargada la página, el navegador corta un desplazamiento suave (visto en
+  // el mapa de pilares: se quedaba arriba), así que ese va directo — también
+  // por encima del 'scroll-behavior:smooth' del <html>, que convierte 'auto'
+  // en suave — y el resaltado dura más, porque quien llega no sabe dónde
+  // mirar.
+  function saltarA(el, sinAnimacion) {
     revelar(el);
-    var comportamiento = prefiereSinMovimiento() ? 'auto' : 'smooth';
+    var comportamiento = sinAnimacion || prefiereSinMovimiento() ? 'auto' : 'smooth';
     if (el.getBoundingClientRect && window.scrollTo) {
       var r = el.getBoundingClientRect();
       var alto = window.innerHeight || 800;
@@ -770,7 +877,11 @@ export const SCRIPT_FLUJO = `(function () {
       var actual = window.pageYOffset || (document.documentElement && document.documentElement.scrollTop) || 0;
       var y = actual + r.top - tapado - 20;
       if (r.height + 40 < libre) y = actual + r.top - tapado - (libre - r.height) / 2;
+      var raiz = document.documentElement;
+      var previo = sinAnimacion && raiz && raiz.style ? raiz.style.scrollBehavior : null;
+      if (previo !== null) raiz.style.scrollBehavior = 'auto';
       window.scrollTo({ top: Math.max(0, y), behavior: comportamiento });
+      if (previo !== null) raiz.style.scrollBehavior = previo;
     } else if (el.scrollIntoView) {
       el.scrollIntoView({ behavior: comportamiento, block: 'center' });
     }
@@ -782,14 +893,14 @@ export const SCRIPT_FLUJO = `(function () {
       el.classList.remove('ancla-resaltada');
       elementoResaltado = null;
       temporizadorResaltado = null;
-    }, 1800);
+    }, sinAnimacion ? 4000 : 1800);
   }
 
-  function irABloque(p) {
+  function irABloque(p, sinAnimacion) {
     var n = bloquesComentados.length;
     if (!n) return;
     posicionBloque = ((p % n) + n) % n;
-    saltarA(bloquesComentados[posicionBloque]);
+    saltarA(bloquesComentados[posicionBloque], sinAnimacion);
     actualizarNavegador();
   }
 
@@ -798,12 +909,15 @@ export const SCRIPT_FLUJO = `(function () {
 
   // El marcador de un bloque abre el panel en su hilo: filtro «Abiertos»
   // (el hilo es de un comentario abierto) y sus filas destacadas.
-  function abrirHilo(ancla) {
+  // 'filtro' e 'id' solo los pasa atenderEnlace: un comentario ya atendido
+  // se busca en «Todos», y se destaca ese hilo y no todos los del bloque.
+  function abrirHilo(ancla, filtro, id) {
     if (!dialogoComentarios) return;
     hiloActual = ancla;
-    filtroComentarios = 'abierto';
+    hiloIdActual = id || null;
+    filtroComentarios = filtro || 'abierto';
     for (var x = 0; x < filtrosComentarios.length; x++) {
-      filtrosComentarios[x].setAttribute('aria-pressed', String(filtrosComentarios[x].getAttribute('data-filtro-comentarios') === 'abierto'));
+      filtrosComentarios[x].setAttribute('aria-pressed', String(filtrosComentarios[x].getAttribute('data-filtro-comentarios') === filtroComentarios));
     }
     if (dialogoComentariosAbierto) { hiloPorEnfocar = true; pintarListaComentarios(); return; }
     abrirComentarios();
@@ -877,7 +991,8 @@ export const SCRIPT_FLUJO = `(function () {
 
   function pintarFilaComentario(c, respuestas) {
     var fila = document.createElement('div');
-    fila.className = 'comentario-fila' + (hiloActual !== null && c.ancla === hiloActual ? ' hilo-actual' : '');
+    var delHilo = hiloIdActual ? c.id === hiloIdActual : (hiloActual !== null && c.ancla === hiloActual);
+    fila.className = 'comentario-fila' + (delHilo ? ' hilo-actual' : '');
     fila.setAttribute('data-hilo-ancla', c.ancla);
 
     var cabeza = document.createElement('div');
@@ -1048,6 +1163,7 @@ export const SCRIPT_FLUJO = `(function () {
         comentariosCache = (b && b.ok && b.comentarios) || [];
         pintarMarcadores();
         pintarListaComentarios();
+        if (enlacePendiente) { enlacePendiente = false; trasCargar(atenderEnlace); }
       })
       .catch(function () {
         if (estadoComentarios) estadoComentarios.textContent = 'Sin conexión.';
@@ -1064,6 +1180,7 @@ export const SCRIPT_FLUJO = `(function () {
   function cerrarComentarios() {
     dialogoComentariosAbierto = false;
     hiloActual = null;
+    hiloIdActual = null;
     hiloPorEnfocar = false;
     if (!dialogoComentarios) return;
     if (dialogoComentarios.close) dialogoComentarios.close(); else dialogoComentarios.removeAttribute('open');
@@ -1246,7 +1363,7 @@ export const SCRIPT_FLUJO = `(function () {
     btnComentarios.addEventListener('click', abrirComentarios);
     if (cerrarComentariosBtn) cerrarComentariosBtn.addEventListener('click', cerrarComentarios);
   }
-  if (dialogoComentarios) dialogoComentarios.addEventListener('close', function () { dialogoComentariosAbierto = false; hiloActual = null; hiloPorEnfocar = false; });
+  if (dialogoComentarios) dialogoComentarios.addEventListener('close', function () { dialogoComentariosAbierto = false; hiloActual = null; hiloIdActual = null; hiloPorEnfocar = false; });
 
   if (btnComPrimero) btnComPrimero.addEventListener('click', function () { irABloque(0); });
   if (btnComAnterior) btnComAnterior.addEventListener('click', irAlAnterior);
@@ -1254,6 +1371,7 @@ export const SCRIPT_FLUJO = `(function () {
   if (navegadorComAnterior) navegadorComAnterior.addEventListener('click', irAlAnterior);
   if (navegadorComSiguiente) navegadorComSiguiente.addEventListener('click', irAlSiguiente);
   if (btnComLista && dialogoComentarios) btnComLista.addEventListener('click', abrirComentarios);
+  if (btnBarraPrimero) btnBarraPrimero.addEventListener('click', irAlPrimerComentario);
 
   // El navegador fijo de abajo solo aparece cuando el aviso de arriba ya no
   // se ve (sin IntersectionObserver se queda oculto: el aviso basta).

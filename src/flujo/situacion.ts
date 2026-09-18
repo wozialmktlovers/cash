@@ -368,6 +368,26 @@ export function ordenBotones<T extends { id: string }>(botones: T[], estado: Est
   return botones.filter((b) => b.id !== 'generar').sort((a, b) => rango(a) - rango(b));
 }
 
+/** Las tres columnas del «Estado de las entregas» del Inicio que salen del estado (la cuarta, «Autorizadas este mes», va por fecha). */
+export type ColumnaEntrega = 'autorizacion' | 'cambios' | 'proceso';
+
+/**
+ * En qué columna del «Estado de las entregas» (Inicio) va una etapa; `null`
+ * si en ninguna de las tres que dependen solo del estado.
+ *
+ * El mes compartido con el cliente (`desarrollo_mensual` en `en_revision`)
+ * va en «En proceso», no en «Esperan autorización»: lo que espera es la
+ * respuesta del cliente, no a un admin, y en esa columna parecía una
+ * autorización pendiente del equipo. Conserva su frase («Compartido: espera
+ * la respuesta del cliente», `situacionEtapa`).
+ */
+export function columnaEntrega(e: { etapa: Etapa; estado: Estado }): ColumnaEntrega | null {
+  if (e.estado === 'en_revision') return e.etapa === ETAPA_MENSUAL ? 'proceso' : 'autorizacion';
+  if (e.estado === 'con_cambios') return 'cambios';
+  if (e.estado === 'en_proceso') return 'proceso';
+  return null;
+}
+
 /** El estado de la etapa que corresponde a cada motivo de `listarPendientes`. */
 const ESTADO_DE_MOTIVO = {
   en_revision: 'en_revision',
