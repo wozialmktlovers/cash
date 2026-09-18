@@ -229,13 +229,21 @@ describe('el cliente aprueba la pieza que él mismo había devuelto', () => {
     expect(aprobar.ok).toBe(true);
   }
 
-  it('el mes vuelve a revisión, pero con un plazo que ya no vale', async () => {
+  it('el mes vuelve a revisión, y el plazo de la ronda 1 ya no está', async () => {
     await hastaElArrepentimiento();
 
-    // El estado deducido es correcto —quedan dos piezas sin mirar—, y el lote
-    // conserva el límite de la ronda 1, que a estas alturas está vencido.
+    // El estado deducido es correcto: quedan dos piezas sin mirar.
     expect(filaLote().estado).toBe('en_revision');
-    expect(filaLote().limiteRevision).toEqual(LIMITE_1);
+
+    // Aquí se solapan las dos reglas del plazo, y se solapan a propósito. La de
+    // este archivo —«el plazo solo vale sobre el contenido que se compartió»—
+    // bastaría para que el límite de la ronda 1 no hiciera daño, porque el
+    // operador corrigió la pieza 3 y `contenido_actualizado_en` quedó después
+    // de `compartido_en`. Pero el plazo también se consumió mientras la pelota
+    // era del operador, así que `registrarRevision` lo APAGA al devolver el lote
+    // a `en_revision` (ver ./plazo-turno-ajeno.test.ts). Una cuida qué contenido
+    // cubre el plazo; la otra, de quién era el turno mientras corría.
+    expect(filaLote().limiteRevision).toBeNull();
     expect(filaLote().contenidoActualizadoEn).toEqual(CORRIGE);
   });
 

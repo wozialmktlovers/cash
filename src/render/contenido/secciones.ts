@@ -42,18 +42,53 @@ function cifraTarjeta(valor: string, etiqueta: string): string {
  * Mientras el lote no se ha compartido no hay plazo que contar —cuenta desde
  * que se comparte, no desde que se crea—, así que el mensaje lo dice en vez de
  * inventar una fecha.
+ *
+ * ── Y el mes compartido que se quedó SIN fecha límite ─────────────────────
+ *
+ * Es un estado real y hay que decirlo con todas las letras: un lote
+ * `en_revision` con `limite_revision` nulo, el que deja `registrarRevision`
+ * (src/contenido/revision.ts) cuando el plazo se consumió mientras el mes
+ * esperaba al equipo y el cliente se retractó de la pieza que había devuelto.
+ *
+ * Sin una rama propia caía en la de «está en camino», que es falsa —el mes lo
+ * tiene delante, con sus botones— y desconcertante. Y las dos salidas fáciles
+ * eran peores: una cuenta regresiva en cero le diría que llegó tarde a un plazo
+ * que el sistema ya apagó a su favor, y un hueco donde estaba la fecha le
+ * dejaría creyendo que el reloj sigue corriendo sin poder verlo. Así que se
+ * dice lo que pasa y lo que significa: no hay fecha, no se va a aprobar nada
+ * solo, y si vuelve a haber plazo lo verá aquí.
  */
 function mensajeAlCliente(meta: MetaContenido, revision: Revision): string {
   const dias = `${meta.diasRevision} ${meta.diasRevision === 1 ? 'día hábil' : 'días hábiles'}`;
   const mes = nombreMes(meta.periodo);
   const comoDecidir = avisoComoDecidir(revision);
 
-  if (!meta.compartidoEn || !meta.limiteRevision) {
+  if (!meta.compartidoEn) {
     return `<section class="mensaje-cliente aparece">
       <h2>Tu contenido de ${escapar(mes)} está en camino.</h2>
       <p>Aquí vas a poder revisar pieza por pieza: el arte, el copy, el llamado a la acción y los hashtags de cada publicación del mes.</p>
       <p>El plazo de ${escapar(dias)} para revisarlo empieza a correr cuando te compartamos el mes, no antes. En cuanto eso pase, verás aquí mismo la fecha límite y el tiempo que te queda.</p>
       ${comoDecidir}
+    </section>`;
+  }
+
+  if (!meta.limiteRevision) {
+    return `<section class="mensaje-cliente aparece">
+      <h2>¡Hola! Tu contenido de ${escapar(mes)} sigue aquí, sin prisa.</h2>
+      <p>Terminamos el calendario de publicaciones de ${escapar(mes)} para ${escapar(meta.cliente)}. Revísalo con calma: cada pieza trae su arte, su copy listo para copiar, su llamado a la acción y sus hashtags.</p>
+      <p><strong>Este mes ya no tiene fecha límite.</strong> El plazo de ${escapar(dias)} se agotó mientras la pelota estaba de nuestro lado, así que lo detuvimos en vez de hacerlo valer sobre lo que todavía no has visto: <strong>no vamos a dar por aprobado nada que no hayas aprobado tú</strong>. Tómate el tiempo que necesites con las piezas que te quedan.</p>
+      <p>Si más adelante volvemos a compartirte el mes, empieza un plazo nuevo de ${escapar(dias)} y lo verás aquí mismo, con su fecha y su cuenta regresiva.</p>
+      ${comoDecidir}
+      <div class="plazo">
+        <div class="plazo-dato">
+          <span>Compartido</span>
+          <strong>${escapar(fechaHora(meta.compartidoEn))}</strong>
+        </div>
+        <div class="plazo-dato">
+          <span>Tiempo para revisar</span>
+          <strong>Sin fecha límite</strong>
+        </div>
+      </div>
     </section>`;
   }
 

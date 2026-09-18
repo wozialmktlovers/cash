@@ -136,6 +136,19 @@ const archivos: ArchivoCliente[] = await db
 // cliente vea lo nuevo.
 const reabierto = !!lote && lote.compartidoEn === null && filas.some((p) => p.estadoCliente !== 'pendiente');
 
+// **Un mes al que se le apagó el plazo.** `registrarRevision`
+// (src/contenido/revision.ts) deja el lote `en_revision` con `limite_revision`
+// nulo cuando el plazo de la ronda se consumió mientras el mes esperaba al
+// operador y el cliente se retractó de la pieza que había devuelto. La firma es
+// un lote compartido y sin fecha límite, que no la tiene ningún otro estado: el
+// mes que vuelve al operador pierde también `compartido_en`.
+//
+// Se dice por lo mismo que el `reabierto`: si no, el operador ve desaparecer la
+// fecha límite del encabezado sin explicación y no tiene por qué adivinar que
+// el mes dejó de auto-aprobarse ni que el botón de compartir vuelve a arrancar
+// un plazo, cuando en cualquier otro mes ya compartido solo crea otro enlace.
+const sinPlazo = !!lote && lote.compartidoEn !== null && lote.limiteRevision === null;
+
 // **Los enlaces del mes.** Cada «Compartir el mes» crea otro token, y hasta
 // ahora ninguno se podía cerrar desde ninguna pantalla: un enlace que salió por
 // WhatsApp al contacto equivocado se quedaba abierto para siempre. Se listan
@@ -189,6 +202,16 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
     </p>
   )}
 
+  {sinPlazo && (
+    <p class="aviso amarillo" style="margin-bottom:18px">
+      <strong>Este mes se quedó sin fecha límite.</strong> El plazo de la ronda anterior se consumió mientras
+      el mes estaba de tu lado, y después el cliente retiró los cambios que había pedido y aprobó esa pieza
+      él mismo. Hacer valer ahí un plazo vencido habría dado por aprobadas, en el acto, las piezas que todavía
+      no ha mirado, así que se detuvo: el cliente sigue revisando en su portal, pero el mes ya no se va a
+      aprobar solo. Para que vuelva a tener fecha, comparte el mes otra vez: eso arranca un plazo nuevo de {plazo}.
+    </p>
+  )}
+
   {reabierto && (
     <p class="aviso amarillo" style="margin-bottom:18px">
       <strong>Este mes volvió a estar en proceso.</strong> Sus piezas cambiaron después de que el cliente
@@ -203,7 +226,13 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
       <section class="compartir-mes" data-lote={lote.id}>
         <div class="compartir-texto">
           <strong>Compartir con el cliente</strong>
-          {lote.compartidoEn ? (
+          {sinPlazo && lote.compartidoEn ? (
+            <p class="secundario">
+              Compartido el {fechaHora(lote.compartidoEn)} · este mes ya no tiene fecha límite.
+              Volver a compartirlo arranca un plazo nuevo de {plazo} sobre lo que el cliente aún no ha
+              aprobado; mientras tanto, el mes sigue en su portal y no se aprueba solo.
+            </p>
+          ) : lote.compartidoEn ? (
             <p class="secundario">
               Compartido el {fechaHora(lote.compartidoEn)}
               {/* `fechaHora` ya termina en punto («11:59 p.m.»), así que la frase no le añade otro. */}
@@ -232,7 +261,7 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
           )}
         </div>
         <button type="button" class="btn" id="compartir-lote" disabled={!operable}>
-          {lote.compartidoEn ? 'Crear otro enlace' : reabierto || retirado ? 'Volver a compartir el mes' : 'Compartir el mes'}
+          {sinPlazo || reabierto || retirado ? 'Volver a compartir el mes' : lote.compartidoEn ? 'Crear otro enlace' : 'Compartir el mes'}
         </button>
       </section>
 

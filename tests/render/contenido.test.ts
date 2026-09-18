@@ -72,6 +72,22 @@ describe('entregable del mes · portada', () => {
     expect(marcado(html)).not.toContain('data-limite=');
     expect(marcado(html)).not.toContain('Fecha límite');
   });
+
+  // Un mes compartido al que se le apagó el plazo (`registrarRevision`, cuando
+  // el plazo se consumió en turno del operador y el cliente se retracta). Ni es
+  // «está en camino» —lo tiene delante— ni puede pintar una cuenta regresiva:
+  // un contador en cero le diría que llegó tarde a un plazo que ya no existe.
+  it('compartido y sin plazo: lo dice, y no pinta una cuenta regresiva en cero', () => {
+    const html = render(piezasFalsas(), metaFalsa({ limiteRevision: null }));
+    expect(html).toContain('ya no tiene fecha límite');
+    expect(html).toContain('no vamos a dar por aprobado nada que no hayas aprobado tú');
+    expect(html).toContain('Sin fecha límite');
+    // Sigue diciendo cuándo se le compartió: el mes es suyo desde entonces.
+    expect(html).toContain('Compartido</span>');
+    expect(html).not.toContain('está en camino');
+    expect(marcado(html)).not.toContain('data-limite=');
+    expect(marcado(html)).not.toContain('data-cuenta');
+  });
 });
 
 describe('entregable del mes · 01 vista del feed', () => {

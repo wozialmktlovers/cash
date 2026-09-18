@@ -387,6 +387,26 @@ export type ResultadoCompartir = {
  * a mover la fecha límite hay que editar una pieza, que es un cambio de verdad y
  * no pulsar un botón dos veces.
  *
+ * ── Y el cuarto caso: el `en_revision` al que se le apagó el plazo ────────
+ *
+ * `registrarRevision` (./revision.ts) deja un lote `en_revision` con
+ * `limite_revision` **nulo** cuando el plazo de la ronda anterior se consumió
+ * mientras el mes esperaba al operador y el cliente se retracta de la pieza que
+ * había devuelto. El mes sigue siendo del cliente —por eso no vuelve a
+ * `en_proceso`— pero ya no tiene reloj, y sin este caso se quedaría así para
+ * siempre: `loteAutoAprobado` no auto-aprueba un lote sin fecha, y el botón
+ * «Compartir» no arrancaría nada porque el lote ya está `en_revision`. Es el
+ * mismo callejón que la excepción del contenido nuevo, por otra puerta.
+ *
+ * Tampoco reabre la del anti-juego, y por una razón que se comprueba sola: un
+ * `en_revision` con el plazo corriendo SIEMPRE tiene fecha —se la estampa esta
+ * misma función al ponerlo ahí, y es lo único que lo pone ahí—, así que la
+ * condición no puede dispararse sobre un mes cuyo plazo aún vale. Y en cuanto
+ * este reparto le pone fecha nueva, el siguiente «Compartir» vuelve a ser un
+ * enlace más que no mueve nada. Recompartir dos veces seguidas no alarga un
+ * plazo vivo: hace falta que el sistema lo haya apagado antes, y eso solo pasa
+ * una vez por retractación.
+ *
  * ── La ronda nueva también reinicia las PIEZAS ────────────────────────────
  *
  * Reiniciar el plazo y dejar las piezas como estaban rompía la máquina de
@@ -453,9 +473,15 @@ export async function compartirLote(
     && lote.contenidoActualizadoEn !== null
     && lote.contenidoActualizadoEn.getTime() > lote.compartidoEn.getTime();
 
+  // El cuarto: `en_revision` sin fecha límite, el que dejó `registrarRevision`
+  // al apagar un plazo consumido en turno ajeno. Es un estado que solo se
+  // alcanza por ahí: quien pone un lote `en_revision` es esta función, y siempre
+  // con fecha.
+  const sinPlazo = lote.estado === 'en_revision' && lote.limiteRevision === null;
+
   const arranca = lote.estado === 'en_proceso'
     || lote.estado === 'con_cambios'
-    || (lote.estado === 'en_revision' && contenidoNuevo);
+    || (lote.estado === 'en_revision' && (contenidoNuevo || sinPlazo));
   if (!arranca) {
     return {
       estado: lote.estado,

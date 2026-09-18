@@ -160,29 +160,42 @@ export function aceptaDecision(lote: LoteFresco, ahora: Date): boolean {
  * están y vuelve a `con_cambios` en cuanto una se devuelve, sin esperar al
  * resto. Después, `sincronizarEtapa` copia ese estado a `cliente_etapas`.
  *
- * ── El lote puede volver a `en_revision` por aquí, y no pasa nada ─────────
+ * ── El lote puede volver a `en_revision` por aquí, y el plazo se apaga ────
  *
  * Hay un caso en que este recálculo devuelve el lote a `en_revision` desde
  * `con_cambios`: el cliente aprueba él mismo la pieza que había devuelto y no
  * queda ninguna en `cambios`, pero sí pendientes. Si el plazo de aquella ronda
  * ya venció —y suele haber vencido, porque un mes `con_cambios` no se
- * auto-aprueba y el reloj corrió igual—, el lote queda `en_revision` con una
+ * auto-aprueba y el reloj corrió igual—, el lote quedaba `en_revision` con una
  * fecha límite muerta, y el siguiente barrido aprobaba en el acto las piezas que
  * el cliente aún no había mirado, con constancia de que «no respondió» justo
  * cuando acababa de responder.
  *
- * No se arregla aquí, y por eso esta función no lleva ninguna salvedad: el mes
- * llegó a `con_cambios` porque el operador tenía trabajo pendiente, y al hacerlo
- * marca `contenido_actualizado_en` (`marcarContenidoTocado`, ./servicio.ts), así
- * que el plazo de la ronda anterior ya no vale sobre lo que el cliente tiene
- * delante y `loteAutoAprobado` no lo toca. Lo cubre
- * `tests/contenido/plazo-contenido-tocado.test.ts`.
+ * Buena parte de esos casos ya no llegan hasta aquí: si el operador atendió la
+ * petición, al hacerlo marcó `contenido_actualizado_en`
+ * (`marcarContenidoTocado`, ./servicio.ts), el plazo de la ronda anterior dejó
+ * de valer sobre lo que el cliente tiene delante y `loteAutoAprobado` no lo
+ * toca. Lo cubre `tests/contenido/plazo-contenido-tocado.test.ts`.
  *
- * Queda vivo el caso en que el operador NO tocó nada entre una cosa y la otra:
- * ahí el contenido sí es el que se compartió y el plazo vencido vuelve a correr,
- * aunque venciera mientras la pelota era del operador. Está anotado como tal en
- * lugar de taparse con un quinto parche: decidir si esa retractación devuelve el
- * mes al operador o solo apaga el plazo es una decisión de producto.
+ * Pero si el operador **no tocó nada**, el contenido sí es el que se compartió,
+ * esa invariante contesta que el plazo vale y el vencido vuelve a correr. Y no
+ * debería, porque lo que falla no es «¿es este el contenido que se compartió?»
+ * sino **«¿corrió el reloj mientras era mi turno?»**: el mes estuvo esperando al
+ * operador y el plazo se consumió con la pelota del otro lado.
+ *
+ * Así que ahí el plazo se apaga: el lote queda `en_revision` con
+ * `limite_revision` **nulo**. Un lote sin fecha no se auto-aprueba
+ * —`loteAutoAprobado` lo descarta en su primera línea, y el prefiltro de
+ * `autoAprobarVencidos` ni lo trae— y `aceptaDecision` lo sigue admitiendo, así
+ * que el cliente continúa revisando las piezas que le quedan. Para que el mes
+ * vuelva a tener fecha hay que repartirlo otra vez, que es quien arranca un
+ * plazo (`compartirLote`, ./servicio.ts, sabe hacerlo desde este estado).
+ *
+ * Se descartó la alternativa —devolver el mes a `en_proceso` con el plazo
+ * limpio, como hace `refrescarLote`—: es coherente, pero le quita el mes de las
+ * manos justo a quien acaba de demostrar que está trabajando en él. Apagar el
+ * plazo es lo menos intrusivo que sigue siendo seguro: nada se aprueba solo.
+ * Lo cubre `tests/contenido/plazo-turno-ajeno.test.ts`.
  */
 export async function registrarRevision(o: {
   piezaId: string;
@@ -268,9 +281,27 @@ export async function registrarRevision(o: {
       .where(eq(contenidoPiezas.loteId, lote.id));
 
     const estadoLote = estadoLoteSegunPiezas(piezas);
+
+    // El plazo que se consumió mientras el mes era del operador no revive con
+    // la retractación del cliente (ver la explicación larga de arriba). La
+    // condición es estrecha a propósito: solo el regreso a `en_revision` desde
+    // `con_cambios` —el único que devuelve la pelota al cliente sin pasar por
+    // un reparto— y solo si la fecha que arrastra ya está vencida. Si todavía
+    // corre, es el plazo de esta misma ronda y sigue siendo bueno. La
+    // comparación es estricta, como la de `loteAutoAprobado`: el instante
+    // exacto del límite todavía es del cliente.
+    const plazoConsumidoEnTurnoAjeno = estadoLote === 'en_revision'
+      && fresco.estado === 'con_cambios'
+      && fresco.limiteRevision !== null
+      && ahora.getTime() > fresco.limiteRevision.getTime();
+
     if (estadoLote !== fresco.estado) {
       await tx.update(contenidoLotes)
-        .set({ estado: estadoLote, actualizadoEn: ahora })
+        .set({
+          estado: estadoLote,
+          ...(plazoConsumidoEnTurnoAjeno ? { limiteRevision: null } : {}),
+          actualizadoEn: ahora,
+        })
         .where(eq(contenidoLotes.id, lote.id));
     }
 
