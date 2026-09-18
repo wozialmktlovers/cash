@@ -274,6 +274,36 @@ export const SCRIPT_PILARES = `(function () {
   // Pinta un estado sobre la tarjeta, el botón y (si la tarjeta trae una) la
   // casilla, sin tocar el servidor: lo usan tanto el cambio optimista como
   // la reversión si el PATCH falla, para no repetir las mismas cinco líneas.
+  // Recuenta los contadores de uso de arriba (por pilar y el global) a partir
+  // del data-estado de las tarjetas: los pinta el servidor al cargar, y sin
+  // esto no se movían al elegir un tema hasta recargar la página.
+  function recontarAvance() {
+    var tarjetas = banco.querySelectorAll('.tema-tarjeta');
+    var porPilar = {}, hechosGlobal = 0, totalGlobal = 0;
+    for (var t = 0; t < tarjetas.length; t++) {
+      var est = tarjetas[t].getAttribute('data-estado');
+      if (!est) continue;
+      var n = tarjetas[t].getAttribute('data-pilar');
+      var c = porPilar[n] || (porPilar[n] = { total: 0, usados: 0, hechos: 0 });
+      c.total++; totalGlobal++;
+      if (est !== 'pendiente') c.usados++;
+      if (est === 'desarrollado' || est === 'publicado') { c.hechos++; hechosGlobal++; }
+    }
+    var items = document.querySelectorAll('[data-avance-pilar]');
+    for (var i = 0; i < items.length; i++) {
+      var d = porPilar[items[i].getAttribute('data-avance-pilar')];
+      if (!d) continue;
+      var u = items[i].querySelector('[data-usados]'); if (u) u.textContent = String(d.usados);
+      var h = items[i].querySelector('[data-hechos]'); if (h) h.textContent = String(d.hechos);
+      var r = items[i].querySelector('[data-relleno]'); if (r) r.style.width = (d.total ? Math.round(d.usados / d.total * 100) : 0) + '%';
+    }
+    var g = document.querySelector('[data-avance-global]');
+    if (g && totalGlobal) {
+      var gh = g.querySelector('[data-hechos]'); if (gh) gh.textContent = String(hechosGlobal);
+      var gr = g.querySelector('[data-relleno]'); if (gr) gr.style.width = Math.round(hechosGlobal / totalGlobal * 100) + '%';
+    }
+  }
+
   function pintarEstado(tarjeta, boton, checkbox, estado) {
     tarjeta.setAttribute('data-estado', estado);
     boton.setAttribute('data-estado-actual', estado);
@@ -281,6 +311,7 @@ export const SCRIPT_PILARES = `(function () {
     if (checkbox) checkbox.checked = estado !== 'pendiente';
     tarjeta.classList.toggle('tema-tachado', estado === 'desarrollado' || estado === 'publicado');
     tarjeta.classList.toggle('tema-elegido', estado === 'en_desarrollo');
+    recontarAvance();
   }
 
   // Único punto que guarda un cambio de estado por PATCH (regla: reusar el

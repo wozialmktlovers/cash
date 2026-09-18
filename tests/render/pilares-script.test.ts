@@ -521,4 +521,30 @@ describe('SCRIPT_PILARES · comportamiento real (fake-dom)', () => {
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
   });
+
+  it('elegir un tema mueve al instante el contador de uso de su pilar', async () => {
+    const doc = new FakeDocument();
+    const win = new FakeWindow();
+    const dom = construirBanco(doc);
+    const { botonEstado } = dom.crearTarjeta({ id: 'P1-S1-01', pilar: '1', estado: 'pendiente', texto: 'Uno' });
+    dom.crearTarjeta({ id: 'P1-S1-02', pilar: '1', estado: 'pendiente', texto: 'Dos' });
+
+    const item = doc.createElement('div');
+    item.setAttribute('data-avance-pilar', '1');
+    const usados = doc.createElement('span'); usados.setAttribute('data-usados', ''); usados.textContent = '0'; item.appendChild(usados);
+    const relleno = doc.createElement('div'); relleno.setAttribute('data-relleno', ''); (relleno as any).style = {}; item.appendChild(relleno);
+    doc.body.appendChild(item);
+
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ ok: true, estado: 'en_desarrollo', actualizadoPor: 'eq@wozial.mx', actualizadoEn: '2026-09-18T10:00:00Z' }),
+    }) as unknown as typeof fetch;
+
+    ejecutarScript(SCRIPT_PILARES, doc, win as unknown as Window);
+    botonEstado.dispatch('click');
+
+    expect(usados.textContent).toBe('1');
+    expect((relleno as any).style.width).toBe('50%');
+    await flush();
+  });
 });

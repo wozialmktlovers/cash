@@ -126,6 +126,8 @@ const PILARES = `
 .avance-mini-item{display:grid;gap:8px;padding:16px;border-radius:var(--r);background:var(--tarjeta);border:1px solid var(--linea);box-shadow:var(--sombra);}
 .avance-mini-num{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--color-pilar);color:var(--sobre-acento);font-weight:700;font-size:.8rem;}
 .avance-mini-item .progreso-relleno{background:var(--color-pilar);}
+.avance-mini-item p{margin:0;}
+.avance-mini-sub{font-size:.78rem;opacity:.75;}
 
 .aviso-revision{display:grid;gap:8px;padding:16px 18px;border-radius:var(--r-sm);background:var(--amarillo-s);color:var(--tinta);}
 .aviso-revision .lista li::before{background:var(--amarillo);}

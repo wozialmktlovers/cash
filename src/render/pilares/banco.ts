@@ -21,12 +21,11 @@ function fechaCorta(iso: string): string {
   return iso.slice(0, 10);
 }
 
-function contarAvance(temas: Tema[], avance?: Record<string, AvanceTema>): { total: number; hechos: number } {
-  const hechos = temas.filter((t) => {
-    const e = avance?.[t.id]?.estado;
-    return e === 'desarrollado' || e === 'publicado';
-  }).length;
-  return { total: temas.length, hechos };
+function contarAvance(temas: Tema[], avance?: Record<string, AvanceTema>): { total: number; usados: number; hechos: number } {
+  const estados = temas.map((t) => avance?.[t.id]?.estado ?? 'pendiente');
+  const hechos = estados.filter((e) => e === 'desarrollado' || e === 'publicado').length;
+  const usados = estados.filter((e) => e !== 'pendiente').length;
+  return { total: temas.length, usados, hechos };
 }
 
 function tarjetaTema(t: Tema, pilarNum: number, subIndice: number, subNombre: string, interna: boolean, avance?: Record<string, AvanceTema>, ruta?: string, anclas = false): string {
@@ -161,17 +160,22 @@ function avisoRevision(mapa: MapaPilares): string {
   </div>`;
 }
 
+// Contador de uso por pilar: «en uso» es todo tema que dejó de estar
+// pendiente (elegido, desarrollado o publicado); debajo, cuántos ya están
+// desarrollados. El script del banco lo recuenta en vivo al cambiar un tema
+// (`data-avance-pilar`), así que no hace falta recargar para verlo moverse.
 function avanceMini(mapa: MapaPilares, avance?: Record<string, AvanceTema>): string {
   return `<div class="avance-mini-grid">
     ${[1, 2, 3, 4, 5].map((n) => {
       const pm = mapa.pilares.find((p) => p.numero === n);
       const temas = pm && pm.estado === 'ok' ? pm.subcategorias.flatMap((s) => s.temas) : [];
-      const { total, hechos } = contarAvance(temas, avance);
-      const pct = total > 0 ? Math.round((hechos / total) * 100) : 0;
-      return `<div class="avance-mini-item" style="--color-pilar:${COLOR_PILAR[n - 1]}">
+      const { total, usados, hechos } = contarAvance(temas, avance);
+      const pct = total > 0 ? Math.round((usados / total) * 100) : 0;
+      return `<div class="avance-mini-item" data-avance-pilar="${n}" style="--color-pilar:${COLOR_PILAR[n - 1]}">
         <span class="avance-mini-num">${n}</span>
-        <p>${hechos} de ${total}</p>
-        <div class="progreso-pista"><div class="progreso-relleno" style="width:${pct}%"></div></div>
+        <p><span data-usados>${usados}</span> de ${total} en uso</p>
+        <div class="progreso-pista"><div class="progreso-relleno" data-relleno style="width:${pct}%"></div></div>
+        <p class="avance-mini-sub"><span data-hechos>${hechos}</span> desarrollados</p>
       </div>`;
     }).join('')}
   </div>`;

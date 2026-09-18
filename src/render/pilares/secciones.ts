@@ -64,9 +64,9 @@ export function seccionPortada(o: {
   const editable = o.editable ?? false;
   const pct = o.avanceGlobal && o.avanceGlobal.total > 0 ? Math.round((o.avanceGlobal.hechos / o.avanceGlobal.total) * 100) : 0;
   const avance = o.avanceGlobal
-    ? `<div class="avance-global aparece">
-        <p>${o.avanceGlobal.hechos} de ${o.avanceGlobal.total} desarrollados</p>
-        <div class="progreso-pista"><div class="progreso-relleno" style="width:${pct}%"></div></div>
+    ? `<div class="avance-global aparece" data-avance-global>
+        <p><span data-hechos>${o.avanceGlobal.hechos}</span> de ${o.avanceGlobal.total} desarrollados</p>
+        <div class="progreso-pista"><div class="progreso-relleno" data-relleno style="width:${pct}%"></div></div>
       </div>`
     : '';
   return `<section class="portada" id="inicio"${rutaAncla(o.anclas ?? false, 'seccion:inicio')}>
