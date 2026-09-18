@@ -1,6 +1,6 @@
 // Interacción de la línea de etapas y la contratación en la ficha del
 // cliente (spec §3, B5): transiciones simples, los dos diálogos (confirmar
-// «Aprobar» y el comentario general de «Pedir cambios»/«Reabrir») y el
+// «Autorizar» y el comentario general de «Pedir cambios»/«Reabrir») y el
 // guardado de «Etapas contratadas». El servidor sigue siendo la autoridad:
 // aquí solo se refleja lo que ya decidió `botonesEtapa` al pintar la página,
 // y un 409 se muestra tal cual en un toast.
@@ -32,7 +32,7 @@ function exito(mensaje: string) {
 const MENSAJE_ACCION: Record<string, string> = {
   iniciar: 'Etapa iniciada',
   solicitar: 'Autorización solicitada',
-  aprobar: 'Etapa aprobada',
+  aprobar: 'Etapa autorizada',
   pedir_cambios: 'Cambios pedidos',
   reabrir: 'Etapa reabierta',
 };
@@ -78,7 +78,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-generar-growth]').forEach((b
   });
 });
 
-// ── Diálogo «Aprobar»: confirmación, con foco de vuelta al botón que lo abrió. ─
+// ── Diálogo «Autorizar»: confirmación, con foco de vuelta al botón que lo abrió. ─
 const dialogoAprobar = document.getElementById('dialogo-aprobar') as HTMLDialogElement | null;
 if (dialogoAprobar) {
   const texto = document.getElementById('aprobar-texto') as HTMLElement;
@@ -90,7 +90,7 @@ if (dialogoAprobar) {
     boton.addEventListener('click', () => {
       disparador = boton;
       etapaId = boton.dataset.etapaId!;
-      texto.textContent = `¿Aprobar «${boton.dataset.etapaNombre}»? El cliente podrá verla como lista.`;
+      texto.textContent = `¿Autorizar «${boton.dataset.etapaNombre}»? El cliente podrá verla como lista.`;
       confirmar.disabled = false;
       dialogoAprobar.showModal();
     });
@@ -103,7 +103,7 @@ if (dialogoAprobar) {
     const { ok, razon } = await transicion(etapaId, 'aprobar');
     dialogoAprobar.close();
     if (ok) exito(MENSAJE_ACCION.aprobar);
-    else toast(razon ?? 'No se pudo aprobar.', 'error');
+    else toast(razon ?? 'No se pudo autorizar.', 'error');
   });
 }
 

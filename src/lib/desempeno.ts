@@ -234,8 +234,16 @@ export function tiemposPorEtapa(eventos: Evento[]): {
         if (decision) esperaRevision.push(diasEntre(e.creadoEn, decision.creadoEn));
       }
       if (esRondaDeCambios(e)) {
-        const solicitud = siguienteConAccion(evs, i, ['solicitar']);
-        if (solicitud) respuestaCambios.push(diasEntre(e.creadoEn, solicitud.creadoEn));
+        // La respuesta a una ronda es volver a entregar: `solicitar` o, si
+        // quien respondió es admin, `aprobar` directo desde `con_cambios`
+        // (autorización en un paso, `aplicarAccion`). En el camino de dos
+        // pasos el primero de los dos siempre es `solicitar` —no hay
+        // `aprobar` sin pasar antes por `en_revision`—, así que incluir
+        // `aprobar` no cambia ninguna cifra de historiales viejos. Sin él, una
+        // ronda autorizada directo no dejaba muestra, o peor, se emparejaba
+        // con el `solicitar` de una ronda posterior e inflaba el tiempo.
+        const respuesta = siguienteConAccion(evs, i, ['solicitar', 'aprobar']);
+        if (respuesta) respuestaCambios.push(diasEntre(e.creadoEn, respuesta.creadoEn));
       }
     });
   }

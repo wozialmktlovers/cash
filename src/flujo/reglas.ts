@@ -350,7 +350,23 @@ export function aplicarAccion(o: {
 
     case 'aprobar': {
       if (rol !== 'admin') return { ok: false, razon: 'Solo un administrador puede aprobar' };
-      if (actual !== 'en_revision') return { ok: false, razon: razonEstadoInvalido(accion, actual) };
+      // Camino de siempre: el admin decide sobre lo que se le pidió revisar.
+      // Aquí no se repiten las condiciones de `solicitar`: ya se exigieron al
+      // entrar a `en_revision` (el documento no se puede reemplazar mientras
+      // tanto, ver `puedeGenerar`), y los comentarios abiertos que haya ahora
+      // son las observaciones de esta misma revisión —el admin puede
+      // dejarlas y aprobar igual—, así que exigirlos cambiaría una regla
+      // que ya se usa.
+      if (actual === 'en_revision') return { ok: true, nuevo: 'aprobada' };
+      // Autorización en un paso (todo el equipo es admin): un admin no tiene a
+      // quién pedirle permiso, así que desde `en_proceso`/`con_cambios`
+      // autoriza directamente. Es `solicitar` + `aprobar` en uno, y por eso
+      // exige exactamente lo mismo que `solicitar`: documento y ningún
+      // comentario abierto. Solo el admin llega aquí (lo corta el `if` de
+      // arriba); el operador sigue pidiendo autorización como siempre.
+      if (actual !== 'en_proceso' && actual !== 'con_cambios') return { ok: false, razon: razonEstadoInvalido(accion, actual) };
+      if (!etapa.documentoId) return { ok: false, razon: 'Esta etapa aún no tiene documento' };
+      if (comentariosAbiertos > 0) return { ok: false, razon: 'Primero hay que resolver los comentarios pendientes' };
       return { ok: true, nuevo: 'aprobada' };
     }
 

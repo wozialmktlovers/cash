@@ -103,19 +103,20 @@ describe('botonesEtapa', () => {
     expect(idsDe(botones)).toEqual(['generar']);
   });
 
-  it('solicitar: habilitado cuando no hay comentarios abiertos y hay documento', () => {
+  // Desde la autorización en un paso, «Solicitar» es solo del operador: el admin ve «Autorizar».
+  it('solicitar (operador): habilitado cuando no hay comentarios abiertos y hay documento', () => {
     const etapa = et('investigacion', { estado: 'en_proceso', documentoId: 'doc-1' });
     const botones = botonesEtapa({
-      etapa, rol: 'admin', esOperadorAsignado: false, comentariosAbiertos: 0, hayInvestigacionConDatos: true, etapasCliente: [etapa],
+      etapa, rol: 'operador', esOperadorAsignado: true, comentariosAbiertos: 0, hayInvestigacionConDatos: true, etapasCliente: [etapa],
     });
     const solicitar = botones.find((b) => b.id === 'solicitar');
     expect(solicitar).toEqual({ id: 'solicitar', disabled: false, razon: '' });
   });
 
-  it('solicitar: bloqueado solo por comentarios abiertos → se muestra deshabilitado con la razón, no se oculta', () => {
+  it('solicitar (operador): bloqueado solo por comentarios abiertos → se muestra deshabilitado con la razón, no se oculta', () => {
     const etapa = et('investigacion', { estado: 'en_proceso', documentoId: 'doc-1' });
     const botones = botonesEtapa({
-      etapa, rol: 'admin', esOperadorAsignado: false, comentariosAbiertos: 2, hayInvestigacionConDatos: true, etapasCliente: [etapa],
+      etapa, rol: 'operador', esOperadorAsignado: true, comentariosAbiertos: 2, hayInvestigacionConDatos: true, etapasCliente: [etapa],
     });
     const solicitar = botones.find((b) => b.id === 'solicitar');
     expect(solicitar).toMatchObject({ id: 'solicitar', disabled: true });
@@ -156,6 +157,64 @@ describe('botonesEtapa', () => {
       etapa, rol: 'admin', esOperadorAsignado: false, comentariosAbiertos: 3, hayInvestigacionConDatos: true, etapasCliente: [etapa],
     }).find((b) => b.id === 'pedir_cambios');
     expect(conAbiertos).toEqual({ id: 'pedir_cambios', requiereComentario: false });
+  });
+
+  describe('autorización en un paso', () => {
+    const base = { esOperadorAsignado: true, hayInvestigacionConDatos: true };
+
+    it('admin en en_proceso o con_cambios con documento: ve «Autorizar» habilitado y NO «Solicitar autorización»', () => {
+      for (const estado of ['en_proceso', 'con_cambios'] as const) {
+        const etapa = et('pilares', { estado, documentoId: 'doc-1' });
+        const botones = botonesEtapa({ ...base, etapa, rol: 'admin', esOperadorAsignado: false, comentariosAbiertos: 0, etapasCliente: [etapa] });
+        expect(botones.find((b) => b.id === 'aprobar'), estado).toEqual({ id: 'aprobar', disabled: false, razon: '' });
+        expect(idsDe(botones), estado).not.toContain('solicitar');
+      }
+    });
+
+    it('operador asignado en en_proceso/con_cambios: sigue viendo «Solicitar autorización» y no «Autorizar»', () => {
+      for (const estado of ['en_proceso', 'con_cambios'] as const) {
+        const etapa = et('pilares', { estado, documentoId: 'doc-1' });
+        const botones = botonesEtapa({ ...base, etapa, rol: 'operador', comentariosAbiertos: 0, etapasCliente: [etapa] });
+        expect(botones.find((b) => b.id === 'solicitar'), estado).toEqual({ id: 'solicitar', disabled: false, razon: '' });
+        expect(idsDe(botones), estado).not.toContain('aprobar');
+      }
+    });
+
+    it('operador con comentarios abiertos: igual que antes, «Solicitar» deshabilitado con la razón', () => {
+      const etapa = et('pilares', { estado: 'en_proceso', documentoId: 'doc-1' });
+      const botones = botonesEtapa({ ...base, etapa, rol: 'operador', comentariosAbiertos: 2, etapasCliente: [etapa] });
+      expect(botones.find((b) => b.id === 'solicitar')).toMatchObject({ id: 'solicitar', disabled: true });
+      expect(idsDe(botones)).not.toContain('aprobar');
+    });
+
+    it('admin sin documento: no ve «Autorizar» (ni «Solicitar»)', () => {
+      const etapa = et('pilares', { estado: 'en_proceso', documentoId: null });
+      const botones = botonesEtapa({ ...base, etapa, rol: 'admin', esOperadorAsignado: false, comentariosAbiertos: 0, etapasCliente: [etapa] });
+      expect(idsDe(botones)).not.toContain('aprobar');
+      expect(idsDe(botones)).not.toContain('solicitar');
+    });
+
+    it('admin con comentarios abiertos: «Autorizar» aparece deshabilitado con la razón (no autoriza, pero no parece que falte)', () => {
+      const etapa = et('pilares', { estado: 'con_cambios', documentoId: 'doc-1' });
+      const botones = botonesEtapa({ ...base, etapa, rol: 'admin', esOperadorAsignado: false, comentariosAbiertos: 1, etapasCliente: [etapa] });
+      expect(botones.find((b) => b.id === 'aprobar')).toEqual({
+        id: 'aprobar', disabled: true, razon: 'Primero hay que resolver los comentarios pendientes',
+      });
+      expect(idsDe(botones)).not.toContain('solicitar');
+    });
+
+    it('admin en en_revision: «Autorizar» habilitado aunque haya comentarios abiertos (como hasta ahora)', () => {
+      const etapa = et('pilares', { estado: 'en_revision', documentoId: 'doc-1' });
+      const botones = botonesEtapa({ ...base, etapa, rol: 'admin', esOperadorAsignado: false, comentariosAbiertos: 2, etapasCliente: [etapa] });
+      expect(botones.find((b) => b.id === 'aprobar')).toEqual({ id: 'aprobar', disabled: false, razon: '' });
+    });
+
+    it('desarrollo_mensual sigue sin botones en cualquier estado, también para el admin', () => {
+      for (const estado of ['en_proceso', 'con_cambios', 'en_revision'] as const) {
+        const etapa = et('desarrollo_mensual', { estado, documentoId: 'doc-1' });
+        expect(botonesEtapa({ ...base, etapa, rol: 'admin', esOperadorAsignado: false, comentariosAbiertos: 0, etapasCliente: [etapa] }), estado).toEqual([]);
+      }
+    });
   });
 
   it('ver: aparece si y solo si hay documentoId, sin importar el estado', () => {

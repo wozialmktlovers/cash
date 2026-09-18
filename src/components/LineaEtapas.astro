@@ -19,7 +19,7 @@ export type BotonResuelto =
   | { id: 'mensual'; href: string; texto: string }
   | { id: 'iniciar' }
   | { id: 'solicitar'; disabled: boolean; razon: string }
-  | { id: 'aprobar' }
+  | { id: 'aprobar'; disabled: boolean; razon: string }
   | { id: 'pedir_cambios'; requiereComentario: boolean }
   | { id: 'reabrir' };
 
@@ -57,7 +57,9 @@ const ETIQUETA_BOTON: Record<BotonResuelto['id'], string> = {
   mensual: 'Ver el mes',
   iniciar: 'Iniciar',
   solicitar: 'Solicitar autorización',
-  aprobar: 'Aprobar',
+  // «Autorizar» en todo el sistema (tarjeta, diálogo, historial): es la
+  // palabra que usa el dueño. La acción interna sigue llamándose `aprobar`.
+  aprobar: 'Autorizar',
   pedir_cambios: 'Pedir cambios',
   reabrir: 'Reabrir',
 };
@@ -103,9 +105,13 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'desarrollo_me
               </>
             );
             if (b.id === 'aprobar') return (
-              <button type="button" class="btn chico" data-abrir="aprobar" data-etapa-id={t.etapaId} data-etapa-nombre={NOMBRE_ETAPA[t.etapa]}>
-                {ETIQUETA_BOTON.aprobar}
-              </button>
+              <>
+                <button type="button" class="btn chico" data-abrir="aprobar" data-etapa-id={t.etapaId} data-etapa-nombre={NOMBRE_ETAPA[t.etapa]}
+                  disabled={b.disabled} title={b.disabled ? b.razon : undefined}>
+                  {ETIQUETA_BOTON.aprobar}
+                </button>
+                {b.disabled && <p class="secundario etapa-razon-deshabilitado">{b.razon}</p>}
+              </>
             );
             if (b.id === 'pedir_cambios') return (
               <button type="button" class="btn fantasma chico" data-abrir="comentario" data-accion="pedir_cambios" data-etapa-id={t.etapaId}
@@ -153,10 +159,10 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'desarrollo_me
 )}
 
 <dialog id="dialogo-aprobar" aria-labelledby="aprobar-titulo">
-  <h2 id="aprobar-titulo">Aprobar etapa</h2>
+  <h2 id="aprobar-titulo">Autorizar etapa</h2>
   <p class="sub" id="aprobar-texto" style="margin-top:10px"></p>
   <div class="acciones">
-    <button type="button" class="btn" id="aprobar-confirmar">Sí, aprobar</button>
+    <button type="button" class="btn" id="aprobar-confirmar">Sí, autorizar</button>
     <button type="button" class="btn fantasma" id="aprobar-cancelar">Cancelar</button>
   </div>
 </dialog>

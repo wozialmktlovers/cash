@@ -372,6 +372,41 @@ describe('costo', () => {
   });
 });
 
+describe('autorización en un paso (un admin aprueba desde en_proceso/con_cambios)', () => {
+  // El historial que deja: un solo `aprobar` con `de: en_proceso` o
+  // `de: con_cambios`, sin `solicitar` delante (src/flujo/reglas.ts, `aplicarAccion`).
+  const directa = [
+    ev({ etapaId: 'e1', etapa: 'pilares', accion: 'iniciar', de: 'no_iniciada', a: 'en_proceso', creadoEn: new Date('2026-01-01T00:00:00Z') }),
+    ev({ etapaId: 'e1', etapa: 'pilares', accion: 'aprobar', de: 'en_proceso', a: 'aprobada', creadoEn: new Date('2026-01-04T00:00:00Z') }),
+  ];
+
+  it('cuenta una aprobación, con su duración, y ninguna ronda ni espera de revisión', () => {
+    const t = tiemposPorEtapa(directa);
+    expect(t.duracion.pilares).toEqual([3]);
+    expect(t.esperaRevision).toEqual([]);
+    expect(t.respuestaCambios).toEqual([]);
+    expect(rondasPorEtapa(directa).pilares).toEqual([0]);
+    const p = { desde: new Date('2026-01-01T00:00:00Z'), hasta: new Date('2026-01-31T00:00:00Z') };
+    expect(carga([], directa, p).aprobadasEnPeriodo).toBe(1);
+  });
+
+  it('respuestaCambios: una ronda que el admin cierra autorizando directo cuenta hasta ese aprobar', () => {
+    const eventos = [
+      ev({ etapaId: 'e1', accion: 'reabrir', de: 'aprobada', a: 'con_cambios', creadoEn: new Date('2026-01-01T00:00:00Z') }),
+      ev({ etapaId: 'e1', accion: 'aprobar', de: 'con_cambios', a: 'aprobada', creadoEn: new Date('2026-01-03T00:00:00Z') }),
+      // Una ronda posterior, por el camino de dos pasos: su `solicitar` no
+      // debe emparejarse con la ronda anterior (antes daba 9, no 2).
+      ev({ etapaId: 'e1', accion: 'reabrir', de: 'aprobada', a: 'con_cambios', creadoEn: new Date('2026-01-08T00:00:00Z') }),
+      ev({ etapaId: 'e1', accion: 'solicitar', de: 'con_cambios', a: 'en_revision', creadoEn: new Date('2026-01-10T00:00:00Z') }),
+      ev({ etapaId: 'e1', accion: 'aprobar', de: 'en_revision', a: 'aprobada', creadoEn: new Date('2026-01-11T00:00:00Z') }),
+    ];
+    const t = tiemposPorEtapa(eventos);
+    expect(t.respuestaCambios.sort((a, b) => a - b)).toEqual([2, 2]);
+    expect(t.esperaRevision).toEqual([1]);
+    expect(rondasPorEtapa(eventos).investigacion).toEqual([2]);
+  });
+});
+
 describe('rondasPorEtapa', () => {
   it('agrupa las rondas por etapa, solo de etapaIds con al menos un aprobar', () => {
     const eventos = [

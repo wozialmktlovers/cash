@@ -35,7 +35,7 @@ export type BotonEtapa =
   | { id: 'iniciar' }
   | { id: 'ver' }
   | { id: 'solicitar'; disabled: boolean; razon: string }
-  | { id: 'aprobar' }
+  | { id: 'aprobar'; disabled: boolean; razon: string }
   | { id: 'pedir_cambios'; requiereComentario: boolean }
   | { id: 'reabrir' };
 
@@ -53,6 +53,14 @@ export type BotonEtapa =
  * Para «Solicitar autorización», el brief pide una excepción: si lo único
  * que bloquea la acción son los comentarios abiertos, el botón se muestra
  * igual, pero deshabilitado y con la razón — no se oculta como el resto.
+ *
+ * Autorización en un paso: un admin, en `en_proceso`/`con_cambios`, ve
+ * «Autorizar» (`aprobar`) directamente y NO «Solicitar autorización» —
+ * pedirse permiso a sí mismo sobraba, y era justo lo que hacía parecer que
+ * el botón de autorizar no existía. `aplicarAccion` le exige lo mismo que a
+ * `solicitar`, así que aquí se aplica la misma excepción: si solo lo frenan
+ * los comentarios abiertos, se muestra deshabilitado con la razón. El
+ * operador no cambia: sigue viendo «Solicitar autorización».
  */
 export function botonesEtapa(o: {
   etapa: EtapaCliente;
@@ -75,15 +83,24 @@ export function botonesEtapa(o: {
   if (prueba('iniciar', comentariosAbiertos, '').ok) botones.push({ id: 'iniciar' });
   if (etapa.documentoId) botones.push({ id: 'ver' });
 
-  const solicitarReal = prueba('solicitar', comentariosAbiertos, '');
-  if (solicitarReal.ok) {
-    botones.push({ id: 'solicitar', disabled: false, razon: '' });
-  } else {
-    const solicitarSinComentarios = prueba('solicitar', 0, '');
-    if (solicitarSinComentarios.ok) botones.push({ id: 'solicitar', disabled: true, razon: solicitarReal.razon });
+  const autorizaDirecto = rol === 'admin' && (etapa.estado === 'en_proceso' || etapa.estado === 'con_cambios');
+
+  if (!autorizaDirecto) {
+    const solicitarReal = prueba('solicitar', comentariosAbiertos, '');
+    if (solicitarReal.ok) {
+      botones.push({ id: 'solicitar', disabled: false, razon: '' });
+    } else {
+      const solicitarSinComentarios = prueba('solicitar', 0, '');
+      if (solicitarSinComentarios.ok) botones.push({ id: 'solicitar', disabled: true, razon: solicitarReal.razon });
+    }
   }
 
-  if (prueba('aprobar', comentariosAbiertos, '').ok) botones.push({ id: 'aprobar' });
+  const aprobarReal = prueba('aprobar', comentariosAbiertos, '');
+  if (aprobarReal.ok) {
+    botones.push({ id: 'aprobar', disabled: false, razon: '' });
+  } else if (autorizaDirecto && prueba('aprobar', 0, '').ok) {
+    botones.push({ id: 'aprobar', disabled: true, razon: aprobarReal.razon });
+  }
   if (prueba('pedir_cambios', comentariosAbiertos, 'x').ok) {
     botones.push({ id: 'pedir_cambios', requiereComentario: comentariosAbiertos <= 0 });
   }

@@ -538,7 +538,89 @@ describe('aplicarAccion', () => {
     expect(r).toEqual({ ok: false, razon: 'Solo un administrador puede aprobar' });
   });
 
-  it('aprobar: falla si no está en en_revision', () => {
+  it('aprobar: falla desde no_iniciada o aprobada', () => {
+    for (const estado of ['no_iniciada', 'aprobada'] as const) {
+      const r = aplicarAccion({
+        etapa: et('pilares', { estado, documentoId: 'doc1' }),
+        accion: 'aprobar',
+        rol: 'admin',
+        esOperadorAsignado: false,
+        comentariosAbiertos: 0,
+        comentarioGeneral: '',
+        dependencias: depsOk,
+      });
+      expect(r.ok, estado).toBe(false);
+    }
+  });
+
+  it('aprobar (autorización en un paso): admin desde en_proceso o con_cambios, con documento y sin comentarios abiertos, pasa a aprobada', () => {
+    for (const estado of ['en_proceso', 'con_cambios'] as const) {
+      const r = aplicarAccion({
+        etapa: et('pilares', { estado, documentoId: 'doc1' }),
+        accion: 'aprobar',
+        rol: 'admin',
+        esOperadorAsignado: false,
+        comentariosAbiertos: 0,
+        comentarioGeneral: '',
+        dependencias: depsOk,
+      });
+      expect(r, estado).toEqual({ ok: true, nuevo: 'aprobada' });
+    }
+  });
+
+  it('aprobar (autorización en un paso): el admin no puede sin documento', () => {
+    const r = aplicarAccion({
+      etapa: et('pilares', { estado: 'en_proceso', documentoId: null }),
+      accion: 'aprobar',
+      rol: 'admin',
+      esOperadorAsignado: false,
+      comentariosAbiertos: 0,
+      comentarioGeneral: '',
+      dependencias: depsOk,
+    });
+    expect(r).toEqual({ ok: false, razon: 'Esta etapa aún no tiene documento' });
+  });
+
+  it('aprobar (autorización en un paso): el admin no puede con comentarios abiertos', () => {
+    const r = aplicarAccion({
+      etapa: et('pilares', { estado: 'con_cambios', documentoId: 'doc1' }),
+      accion: 'aprobar',
+      rol: 'admin',
+      esOperadorAsignado: false,
+      comentariosAbiertos: 1,
+      comentarioGeneral: '',
+      dependencias: depsOk,
+    });
+    expect(r).toEqual({ ok: false, razon: 'Primero hay que resolver los comentarios pendientes' });
+  });
+
+  it('aprobar (autorización en un paso): un operador asignado sigue sin poder, ni desde en_proceso', () => {
+    const r = aplicarAccion({
+      etapa: et('pilares', { estado: 'en_proceso', documentoId: 'doc1' }),
+      accion: 'aprobar',
+      rol: 'operador',
+      esOperadorAsignado: true,
+      comentariosAbiertos: 0,
+      comentarioGeneral: '',
+      dependencias: depsOk,
+    });
+    expect(r).toEqual({ ok: false, razon: 'Solo un administrador puede aprobar' });
+  });
+
+  it('aprobar desde en_revision no cambia: no exige documento ni cero comentarios abiertos', () => {
+    const r = aplicarAccion({
+      etapa: et('pilares', { estado: 'en_revision', documentoId: null }),
+      accion: 'aprobar',
+      rol: 'admin',
+      esOperadorAsignado: false,
+      comentariosAbiertos: 3,
+      comentarioGeneral: '',
+      dependencias: depsOk,
+    });
+    expect(r).toEqual({ ok: true, nuevo: 'aprobada' });
+  });
+
+  it('aprobar: falla desde en_proceso sin documento (antes: por estado; ahora: por documento)', () => {
     const r = aplicarAccion({
       etapa: et('pilares', { estado: 'en_proceso' }),
       accion: 'aprobar',
