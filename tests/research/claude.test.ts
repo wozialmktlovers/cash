@@ -92,12 +92,32 @@ describe('pedirJson', () => {
     // La búsqueda web pausa el turno cada diez iteraciones. Reanudar sin mirar
     // el gasto es la vía más rápida de pasarse del tope dentro de una sola etapa.
     const { pedirJson } = await import('@/research/claude');
+    // Sin presupuesto no se reanuda la búsqueda: se hace UNA llamada de cierre
+    // con `tool_choice: none` para que responda con lo que ya encontró. Si
+    // tampoco cierra, la etapa falla por presupuesto.
     crear.mockResolvedValue(respuesta('', 100, 50, { stop_reason: 'pause_turn' }));
     await expect(pedirJson({
       modelo: 'claude-sonnet-5', sistema: 's', usuario: 'u', schema: esquema,
       buscarWeb: true, onUso: () => false,
     })).rejects.toThrow(/presupuesto|tope/i);
-    expect(crear).toHaveBeenCalledTimes(1);
+    expect(crear).toHaveBeenCalledTimes(2);
+    expect(crear.mock.calls[1][0].tool_choice).toEqual({ type: 'none' });
+  });
+
+  it('sin presupuesto a media búsqueda, cierra con lo encontrado en vez de tirar la etapa', async () => {
+    const { pedirJson } = await import('@/research/claude');
+    crear
+      .mockResolvedValueOnce(respuesta('', 100, 50, { stop_reason: 'pause_turn' }))
+      .mockResolvedValueOnce(respuesta('{"valor":"con lo que había"}', 120, 30));
+    const r = await pedirJson({
+      modelo: 'claude-sonnet-5', sistema: 's', usuario: 'u', schema: esquema,
+      buscarWeb: true, onUso: () => false,
+    });
+    expect(r.datos.valor).toBe('con lo que había');
+    const cierre = crear.mock.calls[1][0];
+    expect(cierre.tool_choice).toEqual({ type: 'none' });
+    expect(cierre.messages.at(-1)).toMatchObject({ role: 'user' });
+    expect(cierre.messages.at(-1).content).toMatch(/no busques más/i);
   });
 
   it('sigue reanudando mientras haya presupuesto', async () => {

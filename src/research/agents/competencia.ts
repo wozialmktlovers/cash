@@ -13,17 +13,36 @@ Reglas que no se rompen:
 
 const SISTEMA = `${SISTEMA_COMUN}
 
-Tu tarea: mapear la competencia del cliente.
-- Directos: mismo producto y mismo mercado. Busca precios reales en sus sitios.
-- Indirectos: alternativas más baratas o fraccionadas que compiten por el mismo presupuesto.
-- Referentes: las cuentas más grandes del nicho, con su número de seguidores y país.
+Tu tarea: mapear la competencia del cliente, sea cual sea su giro (tienda, restaurante,
+servicio profesional, producto de consumo, escuela…). No supongas que vende cursos.
+- Directos: lo mismo que vende el cliente, en su mismo mercado. Busca precios reales en sus sitios,
+  tiendas en línea o menús. Si no publican precio, deja precio vacío: no lo estimes.
+- Indirectos: alternativas más baratas, fraccionadas o de otra categoría que compiten por el mismo presupuesto.
+- detalles: lo que distingue cada oferta en ESTE giro (presentación, tamaño, formato, ubicación,
+  horario, entrega, garantía, certificación, duración…). Solo lo que aplique; cada detalle, un texto corto.
+- Referentes: las cuentas más grandes del giro, con su número de seguidores y país.
 - Hallazgos: qué revela el mapa de precios. Si hay una franja desatendida, dilo.`;
+
+export const FORMA_COMPETENCIA = `{
+  "directos": [ {
+    "nombre": "texto",
+    "producto": "texto: qué vende (producto o servicio principal)",
+    "precio": "texto tal como lo publica, o \"\" si no lo publica",
+    "detalles": ["texto corto", "..."],
+    "fuente": { "url": "https://...", "consultado": "AAAA-MM-DD" }
+  } ],
+  "indirectos": [ /* misma forma que directos */ ],
+  "referentes": [ { "cuenta": "texto", "seguidores": 12400, "pais": "texto", "fuente": { "url": "https://...", "consultado": "AAAA-MM-DD" } } ],
+  "hallazgos": ["texto", "..."]
+}
+Cada valor de texto es una cadena, nunca un arreglo ni un objeto. "seguidores" es un número entero.`;
 
 export async function correrCompetencia(ctx: string, onUso?: (e: number, s: number) => boolean) {
   return pedirJson<Competencia>({
     modelo: process.env.MODEL_RESEARCH || 'claude-sonnet-5',
     sistema: SISTEMA,
-    usuario: `${ctx}\n\nInvestiga la competencia y devuelve el JSON del esquema.`,
+    usuario: `${ctx}\n\nInvestiga la competencia y devuelve el JSON con esta forma exacta:\n${FORMA_COMPETENCIA}`,
+    forma: FORMA_COMPETENCIA,
     schema: competenciaSchema,
     buscarWeb: true,
     onUso,

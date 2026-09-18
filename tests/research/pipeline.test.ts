@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { APIError } from '@anthropic-ai/sdk';
 import {
   decidirEtapasPendientes, superaTope, repartirPorTope, ETAPAS, hayDatosParaLectura,
-  entradaLectura, marcarDetenidas, razonDeVacio,
+  entradaLectura, marcarDetenidas, razonDeVacio, repartirPresupuesto, frenoDeGasto,
 } from '@/research/pipeline';
 import { MENSAJE_JSON_INVALIDO, MENSAJE_DECLINO } from '@/research/claude';
 import { CorteDeTrabajo, MENSAJE_SALDO, nuevaCaja } from '@/lib/errores-agentes';
@@ -228,5 +228,65 @@ describe('razón del hueco de una etapa detenida', () => {
     expect(razonDeVacio('abortado')).toMatch(/se detuvo/i);
     expect(razonDeVacio('abortado')).toMatch(/vuelve a lanzarlo/i);
     expect(razonDeVacio('abortado')).not.toMatch(/dos intentos|tope de costo/i);
+  });
+});
+
+describe('reserva para síntesis y lectura', () => {
+  it('con el tope de 15, las etapas de búsqueda solo pueden usar 12: quedan 3 reservados', () => {
+    expect(repartirPresupuesto(15)).toEqual({ investigacion: 12, reserva: 3 });
+    const { investigacion, reserva } = repartirPresupuesto(15);
+    expect(investigacion + reserva).toBe(15); // el tope no cambia
+  });
+
+  it('cuatro búsquedas glotonas en paralelo no se comen la reserva y la síntesis y la lectura corren', async () => {
+    // Cada etapa pide respuestas de 0.5 USD hasta que su freno le dice que
+    // pare, como hace `pedirJson` con `pause_turn`. Es el escenario de «Mar
+    // de miel»: sin reserva, se llegaba a 15.70 y las dos últimas se omitían.
+    const tope = 15;
+    const { investigacion, reserva } = repartirPresupuesto(tope);
+    const gasto = { valor: 0 };
+    const corte = nuevaCaja();
+    const estado: Record<string, string> = {};
+    const PASO = 0.5;
+    const cobrar = () => PASO;
+
+    await repartirPorTope(['competencia', 'audiencia', 'canales', 'mercado'], investigacion, gasto, estado, async () => {
+      const freno = frenoDeGasto(gasto, investigacion, corte, cobrar);
+      // eslint-disable-next-line no-await-in-loop
+      while (freno(1, 1)) await Promise.resolve();
+    });
+
+    // Cada etapa en vuelo puede pasarse a lo más por su última respuesta.
+    expect(gasto.valor).toBeLessThanOrEqual(investigacion + 4 * PASO);
+    expect(superaTope(gasto.valor, tope)).toBe(false);
+    expect(tope - gasto.valor).toBeGreaterThanOrEqual(reserva - 4 * PASO);
+
+    // La síntesis y la lectura se comprueban contra el tope completo: arrancan.
+    const corridas: string[] = [];
+    for (const etapa of ['sintesis', 'lectura']) {
+      if (!superaTope(gasto.valor, tope)) {
+        corridas.push(etapa);
+        const freno = frenoDeGasto(gasto, tope, corte, () => 0.4);
+        freno(1, 1);
+      }
+    }
+    expect(corridas).toEqual(['sintesis', 'lectura']);
+    expect(gasto.valor).toBeLessThanOrEqual(tope);
+  });
+
+  it('una etapa de búsqueda que arranca con la parte de investigación agotada se omite', async () => {
+    const { investigacion } = repartirPresupuesto(15);
+    const estado: Record<string, string> = {};
+    await repartirPorTope(['mercado'], investigacion, { valor: 12.1 }, estado, async () => {});
+    expect(estado.mercado).toBe('omitido_por_costo');
+  });
+
+  it('el freno de la investigación para en 12 y el de la síntesis sigue hasta 15', () => {
+    const gasto = { valor: 11.9 };
+    const corte = nuevaCaja();
+    const investigar = frenoDeGasto(gasto, 12, corte, () => 0.2);
+    expect(investigar(1, 1)).toBe(false);          // 12.1 ≥ 12
+    const sintetizar = frenoDeGasto(gasto, 15, corte, () => 0.2);
+    expect(sintetizar(1, 1)).toBe(true);           // 12.3 < 15
   });
 });

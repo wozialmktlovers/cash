@@ -26,6 +26,42 @@ export function superaTope(costoAcumulado: number, tope: number): boolean {
   return costoAcumulado >= tope;
 }
 
+/**
+ * Parte del tope que las cuatro etapas con búsqueda web no pueden tocar: queda
+ * para la síntesis y la lectura, que corren al final y son las que el cliente
+ * lee. Sin reserva, las cuatro paralelas se comían el tope entero (en «Mar de
+ * miel» llegaron a 15.70 de 15) y las dos últimas salían `omitido_por_costo`:
+ * el dinero se iba en datos crudos que nadie llegaba a resumir.
+ *
+ * 20 % del tope: 3 USD con el tope de 15. Una síntesis con Opus cuesta del
+ * orden de 0.3–1 USD (entrada ~30k tokens, salida hasta 32k) y la lectura
+ * 0.3–0.8; con su reintento en el peor caso, 3 USD alcanzan para las dos.
+ */
+export const FRACCION_RESERVA_FINAL = 0.2;
+
+export function repartirPresupuesto(tope: number): { investigacion: number; reserva: number } {
+  const reserva = Math.round(tope * FRACCION_RESERVA_FINAL * 100) / 100;
+  return { investigacion: tope - reserva, reserva };
+}
+
+/**
+ * Freno de gasto que se le pasa a `pedirJson` como `onUso`: cobra cada
+ * respuesta en la caja compartida y dice si se puede seguir reanudando.
+ * Las etapas de búsqueda reciben el límite de investigación (tope menos la
+ * reserva); la síntesis y la lectura, el tope completo.
+ */
+export function frenoDeGasto(
+  gasto: { valor: number },
+  limite: number,
+  corte: Corte,
+  cobrar: (e: number, s: number) => number,
+) {
+  return (e: number, s: number): boolean => {
+    gasto.valor += cobrar(e, s);
+    return !corte.valor && !superaTope(gasto.valor, limite);
+  };
+}
+
 const PREVIAS_A_LECTURA = ['competencia', 'audiencia', 'canales', 'mercado', 'sintesis'];
 
 /** La lectura reescribe lo investigado: sin nada investigado no hay qué explicar. */
@@ -147,18 +183,19 @@ export async function ejecutarJob(jobId: string): Promise<void> {
    * cuando una hermana ya chocó con el 400 deja de reanudar su búsqueda web en
    * vez de encadenar llamadas que van a fallar todas igual.
    */
-  const vigilar = (modelo: string) => (e: number, s: number) => {
-    gasto.valor += calcularCosto(modelo, e, s);
-    return !corte.valor && !superaTope(gasto.valor, tope);
-  };
+  const presupuesto = repartirPresupuesto(tope);
+  const vigilar = (modelo: string, limite: number) =>
+    frenoDeGasto(gasto, limite, corte, (e, s) => calcularCosto(modelo, e, s));
 
+  // Las de búsqueda frenan en `presupuesto.investigacion`; la síntesis y la
+  // lectura pueden usar hasta el tope, que es donde está su reserva.
   const corredores: Record<Etapa, () => Promise<any>> = {
-    competencia: () => correrCompetencia(ctx, vigilar(modeloInv)),
-    audiencia:   () => correrAudiencia(ctx, vigilar(modeloInv)),
-    canales:     () => correrCanales(ctx, vigilar(modeloInv)),
-    mercado:     () => correrMercado(ctx, vigilar(modeloInv)),
-    sintesis:    () => correrSintesis(ctx, resultados as any, vigilar(modeloSin)),
-    lectura:     () => correrLectura(ctx, resultados as any, vigilar(modeloSin)),
+    competencia: () => correrCompetencia(ctx, vigilar(modeloInv, presupuesto.investigacion)),
+    audiencia:   () => correrAudiencia(ctx, vigilar(modeloInv, presupuesto.investigacion)),
+    canales:     () => correrCanales(ctx, vigilar(modeloInv, presupuesto.investigacion)),
+    mercado:     () => correrMercado(ctx, vigilar(modeloInv, presupuesto.investigacion)),
+    sintesis:    () => correrSintesis(ctx, resultados as any, vigilar(modeloSin, tope)),
+    lectura:     () => correrLectura(ctx, resultados as any, vigilar(modeloSin, tope)),
   };
 
   const pendientes = decidirEtapasPendientes(estado);
@@ -191,10 +228,14 @@ export async function ejecutarJob(jobId: string): Promise<void> {
     // Las cuatro de investigación corren en paralelo
     // El costo ya lo cobró `vigilar` respuesta a respuesta: aquí solo se
     // acumulan los tokens para el reporte. Volver a sumarlo lo contaría doble.
-    await repartirPorTope(paralelas, tope, gasto, estado, async (etapa) => {
+    // Con `presupuesto.investigacion`, no con `tope`: una etapa que arranca
+    // cuando las otras ya gastaron la parte de investigación se omite, y la
+    // reserva sigue intacta para la síntesis y la lectura.
+    await repartirPorTope(paralelas, presupuesto.investigacion, gasto, estado, async (etapa) => {
       const r = await corredores[etapa as Etapa]();
       resultados[etapa] = r.datos;
       tIn += r.tokensEntrada; tOut += r.tokensSalida;
+      if (r.parcial) console.warn(`[${jobId}] ${etapa}: guardada a medias; se descartó: ${(r.descartes ?? []).join(' | ')}`);
     }, publicar, corte);
     await guardarProgreso();
 

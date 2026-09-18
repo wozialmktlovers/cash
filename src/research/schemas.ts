@@ -1,81 +1,141 @@
 import { z } from 'zod';
 import { detectarJerga } from './jerga';
+import { aTexto, aTextoONulo, aArreglo, aListaDeTextos, aEntero } from './normalizar';
 
-export const fuenteSchema = z.object({
-  url: z.url(),
-  consultado: z.string(),
-  nota: z.string().optional(),
-});
+/*
+ * Esquemas de las cuatro etapas con búsqueda web (competencia, audiencia,
+ * canales, mercado). Normalizan en vez de rechazar (ver `normalizar.ts`): el
+ * modelo no siempre respeta si un campo es texto, lista u objeto, y cada
+ * rechazo tiraba una etapa que ya había pagado sus búsquedas. Lo único que se
+ * sigue exigiendo es lo que no se puede reconstruir sin inventar: el nombre de
+ * cada cosa y la URL de su fuente. Un elemento que no lo trae se descarta
+ * (`rescatarParcial`), no la etapa.
+ *
+ * Sintesis y lectura no pasan por aquí: sus reglas (cuatro hallazgos, jerga,
+ * cifras con respaldo) son deliberadas y se corrigen con el reintento.
+ */
+
+/** Texto que tolera arreglos, objetos, números y ausencia (queda ''). */
+const textoLibre = z.preprocess(aTexto, z.string());
+/** Texto que identifica al elemento: sin él, el elemento no sirve y se descarta. */
+const textoRequerido = z.preprocess(aTexto, z.string().trim().min(1));
+/** Texto o null (no aplica). */
+const textoONulo = z.preprocess(aTextoONulo, z.string().nullable());
+/** Lista de textos: un texto suelto se envuelve, los objetos se leen como texto. */
+const listaTextos = z.preprocess(aListaDeTextos, z.array(z.string()));
+/** Arreglo de objetos: ausente da [], un objeto suelto se envuelve. */
+const arreglo = <T extends z.ZodTypeAny>(item: T) => z.preprocess(aArreglo, z.array(item));
+
+/** «www.sitio.mx/x» → «https://www.sitio.mx/x». Lo que no parece dominio se deja para que zod lo rechace. */
+const conEsquema = (u: unknown) => {
+  if (typeof u !== 'string') return u;
+  const t = u.trim();
+  return /^[a-z][a-z0-9+.-]*:/i.test(t) || !/^[\w-]+(\.[\w-]+)+(\/|$)/.test(t) ? t : `https://${t}`;
+};
+
+export const fuenteSchema = z.preprocess(
+  // Una URL suelta en lugar del objeto es la forma más común de desviarse.
+  (v) => {
+    if (typeof v === 'string') return { url: conEsquema(v) };
+    if (v && typeof v === 'object' && !Array.isArray(v)) return { ...v, url: conEsquema((v as any).url) };
+    return v;
+  },
+  z.object({
+    url: z.url(),
+    consultado: textoLibre,
+    nota: z.preprocess((v) => (v == null ? undefined : aTexto(v)), z.string().optional()),
+  }),
+);
 
 const conFuente = <T extends z.ZodRawShape>(shape: T) =>
   z.object({ ...shape, fuente: fuenteSchema });
 
+/**
+ * Un competidor de cualquier giro. `producto` es lo que vende (producto o
+ * servicio), `precio` puede quedar vacío si no lo publica, y `detalles` junta
+ * lo que distingue la oferta en ese giro: formato, presentación, ubicación,
+ * horario, garantía, certificación… `duracion`, `modalidad` y `aval` son de la
+ * primera versión, pensada para cursos: se conservan opcionales para leer las
+ * investigaciones viejas y por si el giro sí es educativo.
+ */
 export const competidorSchema = conFuente({
-  nombre: z.string(),
-  producto: z.string(),
-  precio: z.string(),
-  duracion: z.string(),
-  modalidad: z.string(),
-  aval: z.string(),
+  nombre: textoRequerido,
+  producto: textoLibre,
+  precio: textoLibre,
+  detalles: listaTextos,
+  duracion: textoLibre.optional(),
+  modalidad: textoLibre.optional(),
+  aval: textoLibre.optional(),
 });
 
 export const referenteSchema = conFuente({
-  cuenta: z.string(),
-  seguidores: z.number().int().nonnegative(),
-  pais: z.string(),
+  cuenta: textoRequerido,
+  seguidores: z.preprocess(aEntero, z.number().int().nonnegative()),
+  pais: textoLibre,
 });
 
 export const citaSchema = conFuente({
-  texto: z.string(),
-  contexto: z.string(),
-  anonimizada: z.boolean(),
+  texto: textoRequerido,
+  contexto: textoLibre,
+  // Las citas se piden anonimizadas: si el modelo no dice lo contrario, lo están.
+  anonimizada: z.preprocess((v) => (v == null ? true : v === 'false' ? false : Boolean(v)), z.boolean()),
 });
 
 export const personaSchema = z.object({
-  nombre: z.string(),
-  edad: z.string(),
-  ciudad: z.string(),
-  situacion: z.string(),
-  demografia: z.array(z.string()),
-  comportamiento: z.array(z.string()),
-  dolor: z.array(z.string()),
-  objeciones: z.array(z.string()),
-  comoSeGana: z.string(),
-  riesgo: z.string(),
+  nombre: textoRequerido,
+  edad: textoLibre,
+  ciudad: textoLibre,
+  situacion: textoLibre,
+  demografia: listaTextos,
+  comportamiento: listaTextos,
+  dolor: listaTextos,
+  objeciones: listaTextos,
+  comoSeGana: textoLibre,
+  riesgo: textoLibre,
 });
 
 export const competenciaSchema = z.object({
-  directos: z.array(competidorSchema),
-  indirectos: z.array(competidorSchema),
-  referentes: z.array(referenteSchema),
-  hallazgos: z.array(z.string()),
+  directos: arreglo(competidorSchema),
+  indirectos: arreglo(competidorSchema),
+  referentes: arreglo(referenteSchema),
+  hallazgos: listaTextos,
 });
 
 export const audienciaSchema = z.object({
-  escalera: z.array(z.object({ termino: z.string(), connotacion: z.string() })),
-  jerga: z.array(z.string()),
-  jergaNegocio: z.array(z.string()),
-  tono: z.array(z.string()),
-  dolores: z.array(citaSchema),
-  aspiraciones: z.array(citaSchema),
-  miedoPrincipal: z.object({ nombre: z.string(), evidencia: z.string(), fuente: fuenteSchema }),
-  unidadDeCompra: z.string(),
-  personas: z.array(personaSchema).length(2),
+  escalera: arreglo(z.preprocess(
+    (v) => (typeof v === 'string' ? { termino: v } : v),
+    z.object({ termino: textoRequerido, connotacion: textoLibre }),
+  )),
+  jerga: listaTextos,
+  jergaNegocio: listaTextos,
+  tono: listaTextos,
+  dolores: arreglo(citaSchema),
+  aspiraciones: arreglo(citaSchema),
+  // Sin fuente se conserva el miedo (es la conclusión de la etapa); sin
+  // nombre no hay nada que conservar y queda en null.
+  miedoPrincipal: z.preprocess(
+    (v) => (v == null || v === '' ? null : typeof v === 'string' ? { nombre: v } : v),
+    z.object({ nombre: textoRequerido, evidencia: textoLibre, fuente: fuenteSchema.optional() }).nullable(),
+  ),
+  unidadDeCompra: textoLibre,
+  // Se piden dos; si llegan más se toman las dos primeras y, si llega una,
+  // se conserva en vez de tirar la etapa por eso.
+  personas: arreglo(personaSchema).transform((ps) => ps.slice(0, 2)),
 });
 
 export const canalesSchema = z.object({
-  plataformas: z.array(conFuente({ nombre: z.string(), alcance: z.string(), notas: z.string() })),
-  formatos: z.array(z.string()),
-  horarios: z.string(),
-  tendencias: z.array(z.string()),
-  advertenciaRegulatoria: z.string().nullable(),
+  plataformas: arreglo(conFuente({ nombre: textoRequerido, alcance: textoLibre, notas: textoLibre })),
+  formatos: listaTextos,
+  horarios: textoLibre,
+  tendencias: listaTextos,
+  advertenciaRegulatoria: textoONulo,
 });
 
 export const mercadoSchema = z.object({
-  datos: z.array(conFuente({ etiqueta: z.string(), valor: z.string() })),
-  salarios: z.array(conFuente({ puesto: z.string(), rango: z.string() })),
-  regulacion: z.array(conFuente({ norma: z.string(), implicacion: z.string() })),
-  crecimiento: z.string().nullable(),
+  datos: arreglo(conFuente({ etiqueta: textoRequerido, valor: textoRequerido })),
+  salarios: arreglo(conFuente({ puesto: textoRequerido, rango: textoLibre })),
+  regulacion: arreglo(conFuente({ norma: textoRequerido, implicacion: textoLibre })),
+  crecimiento: textoONulo,
 });
 
 export const sintesisSchema = z.object({

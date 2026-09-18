@@ -8,12 +8,28 @@ type Etapa<T> = { estado: 'ok'; datos: T } | { estado: 'vacio'; razon: string } 
 const datos = <T>(e: Etapa<T>): T | null => (e && e.estado === 'ok' ? e.datos : null);
 
 /** Cobertura de `data-editable` aquí: solo el nombre, el producto y el precio de cada competidor (directo o indirecto) — el resto del detalle (referentes, hallazgos, audiencia, canales, mercado más allá de lo marcado abajo) no lleva marca en esta fase. */
+/**
+ * Rasgos de la oferta como chips. `duracion`, `modalidad` y `aval` son de las
+ * investigaciones pensadas para cursos; las de cualquier giro traen
+ * `detalles`. Se muestran los que haya, sin chips vacíos.
+ */
+export function rasgosCompetidor(c: Partial<Competidor>): string[] {
+  const texto = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+  return [c.duracion, c.modalidad, c.aval, ...(Array.isArray(c.detalles) ? c.detalles : [])]
+    .map(texto)
+    .filter(Boolean);
+}
+
 function tarjetaCompetidor(c: Competidor, ruta: string, editable: boolean, anclas: boolean): string {
+  const rasgos = rasgosCompetidor(c);
+  const precio = c.precio?.trim()
+    ? `<p class="dato-grande"${rutaEditable(editable, `${ruta}.precio`)}>${escapar(c.precio)}</p>`
+    : '<p class="suave">Precio no publicado</p>';
   return `<article class="tarjeta"${rutaAncla(anclas, ruta)}>
     <h4${rutaEditable(editable, `${ruta}.nombre`)}>${escapar(c.nombre)}</h4>
-    <p class="dato-grande"${rutaEditable(editable, `${ruta}.precio`)}>${escapar(c.precio)}</p>
-    <p${rutaEditable(editable, `${ruta}.producto`)}>${escapar(c.producto)}</p>
-    <ul class="chips"><li>${escapar(c.duracion)}</li><li>${escapar(c.modalidad)}</li><li>${escapar(c.aval)}</li></ul>
+    ${precio}
+    ${c.producto?.trim() ? `<p${rutaEditable(editable, `${ruta}.producto`)}>${escapar(c.producto)}</p>` : ''}
+    ${rasgos.length ? `<ul class="chips">${rasgos.map((r) => `<li>${escapar(r)}</li>`).join('')}</ul>` : ''}
     ${fuente(c.fuente)}
   </article>`;
 }
@@ -37,13 +53,14 @@ function panelAudiencia(a: Audiencia | null, editable: boolean): string {
   const citas = (cs: Audiencia['dolores']) => cs.map((c) => `<article class="tarjeta">
     <blockquote class="cita">«${escapar(c.texto)}»</blockquote>
     <p class="suave">${escapar(c.contexto)}</p>${fuente(c.fuente)}</article>`).join('');
-  return `<div class="tarjeta destacado"><h3>Lo que más la frena: <span${rutaEditable(editable, 'audiencia.datos.miedoPrincipal.nombre')}>${escapar(a.miedoPrincipal.nombre)}</span></h3>
-      <p${rutaEditable(editable, 'audiencia.datos.miedoPrincipal.evidencia')}>${escapar(a.miedoPrincipal.evidencia)}</p>${fuente(a.miedoPrincipal.fuente)}</div>
+  const miedo = a.miedoPrincipal;
+  return `${miedo ? `<div class="tarjeta destacado"><h3>Lo que más la frena: <span${rutaEditable(editable, 'audiencia.datos.miedoPrincipal.nombre')}>${escapar(miedo.nombre)}</span></h3>
+      <p${rutaEditable(editable, 'audiencia.datos.miedoPrincipal.evidencia')}>${escapar(miedo.evidencia)}</p>${fuente(miedo.fuente)}</div>` : ''}
     <div class="rejilla dos">
       <div class="pila"><h4>Lo que le duele, en sus palabras</h4>${citas(a.dolores) || sinDatos()}</div>
       <div class="pila"><h4>Lo que desea</h4>${citas(a.aspiraciones) || sinDatos()}</div>
     </div>
-    <div class="tarjeta"><h4>Qué cree que está comprando</h4><p${rutaEditable(editable, 'audiencia.datos.unidadDeCompra')}>${escapar(a.unidadDeCompra)}</p></div>`;
+    ${a.unidadDeCompra?.trim() ? `<div class="tarjeta"><h4>Qué cree que está comprando</h4><p${rutaEditable(editable, 'audiencia.datos.unidadDeCompra')}>${escapar(a.unidadDeCompra)}</p></div>` : ''}`;
 }
 
 function panelCanales(c: Canales | null, editable: boolean): string {
@@ -53,7 +70,7 @@ function panelCanales(c: Canales | null, editable: boolean): string {
     <div class="rejilla dos">
       ${c.formatos.length ? `<div class="tarjeta"><h4>Formatos que funcionan</h4><ul class="chips">${c.formatos.map((f) => `<li>${escapar(f)}</li>`).join('')}</ul></div>` : ''}
       ${c.tendencias.length ? `<div class="tarjeta"><h4>Tendencias</h4><ul class="chips">${c.tendencias.map((t) => `<li>${escapar(t)}</li>`).join('')}</ul></div>` : ''}
-      <div class="tarjeta"><h4>Horarios</h4><p${rutaEditable(editable, 'canales.datos.horarios')}>${escapar(c.horarios)}</p></div>
+      ${c.horarios?.trim() ? `<div class="tarjeta"><h4>Horarios</h4><p${rutaEditable(editable, 'canales.datos.horarios')}>${escapar(c.horarios)}</p></div>` : ''}
       ${c.advertenciaRegulatoria ? `<div class="tarjeta destacado"><h4>Advertencia</h4><p${rutaEditable(editable, 'canales.datos.advertenciaRegulatoria')}>${escapar(c.advertenciaRegulatoria)}</p></div>` : ''}
     </div>`;
 }

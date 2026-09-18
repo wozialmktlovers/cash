@@ -12,11 +12,21 @@ Tu tarea: dimensionar el mercado con datos oficiales.
 - crecimiento: la tendencia del sector si hay serie histórica que la sustente.
   Si no la hay, usa null. No proyectes una cifra que no puedas respaldar.`;
 
+const FUENTE = '{ "url": "https://...", "consultado": "AAAA-MM-DD" }';
+
+export const FORMA_MERCADO = `{
+  "datos": [ { "etiqueta": "texto", "valor": "texto", "fuente": ${FUENTE} } ],
+  "salarios": [ { "puesto": "texto", "rango": "texto", "fuente": ${FUENTE} } ],
+  "regulacion": [ { "norma": "texto", "implicacion": "texto", "fuente": ${FUENTE} } ],
+  "crecimiento": "texto o null"
+}`;
+
 export async function correrMercado(ctx: string, onUso?: (e: number, s: number) => boolean) {
   return pedirJson<Mercado>({
     modelo: process.env.MODEL_RESEARCH || 'claude-sonnet-5',
     sistema: SISTEMA,
-    usuario: `${ctx}\n\nInvestiga el mercado y devuelve el JSON del esquema.`,
+    usuario: `${ctx}\n\nInvestiga el mercado y devuelve el JSON con esta forma exacta:\n${FORMA_MERCADO}`,
+    forma: FORMA_MERCADO,
     schema: mercadoSchema,
     buscarWeb: true,
     onUso,
