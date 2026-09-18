@@ -1,7 +1,7 @@
 import type { Rol } from '@/lib/permisos';
 
-export type ClaveNav = 'inicio' | 'clientes' | 'entregables' | 'pendientes' | 'usuarios' | 'desempeno';
-export type IconoNav = 'inicio' | 'clientes' | 'entregables' | 'bandeja' | 'usuarios' | 'grafica';
+export type ClaveNav = 'inicio' | 'clientes' | 'entregables' | 'pendientes' | 'usuarios' | 'desempeno' | 'manual';
+export type IconoNav = 'inicio' | 'clientes' | 'entregables' | 'bandeja' | 'usuarios' | 'grafica' | 'libro';
 export type ItemNav = { clave: ClaveNav; href: string; texto: string; icono: IconoNav; contador?: number };
 
 /**
@@ -23,6 +23,7 @@ export function navegacionCompleta(rol: Rol, pendientes: number): ItemNav[] {
   }
   if (rol === 'admin') nav.push({ clave: 'usuarios', href: '/admin/usuarios', texto: 'Usuarios', icono: 'usuarios' });
   if (rol === 'admin' || rol === 'operador') nav.push({ clave: 'desempeno', href: '/desempeno', texto: 'Desempeño', icono: 'grafica' });
+  if (rol === 'admin' || rol === 'operador') nav.push({ clave: 'manual', href: '/manual', texto: 'Manual de uso', icono: 'libro' });
   return nav;
 }
 

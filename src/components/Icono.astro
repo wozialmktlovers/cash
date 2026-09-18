@@ -27,6 +27,7 @@ const TRAZOS = {
   usuarios: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4.2 3.7-6.5 7-6.5s6 2.3 7 6.5"/>',
   grafica: '<path d="M4 20V4M4 20h16"/><path d="M8 20v-7M13 20v-10M18 20v-4"/>',
   bandeja: '<path d="M3 12h4.5l1.5 3h6l1.5-3H21"/><path d="M5.5 5h13L21 12v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Z"/>',
+  libro: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 0 6.5 23H20v-5"/><path d="M8 7h8"/>',
 } as const;
 
 interface Props { nombre: keyof typeof TRAZOS; class?: string }

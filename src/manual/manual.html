@@ -1,0 +1,753 @@
+<title>Manual de Wozial Studio</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --fondo:#FFFFFF; --gris:#F6F4F9; --tinta:#1A1624; --texto:#4A4258; --tenue:#7A7288; --linea:#E6E1EC;
+  --rosa:#B8446B; --rosa-s:#FBEEF2; --azul:#4E62C0; --azul-s:#EEF0FB; --verde:#08704E; --verde-s:#E7F6F0;
+  --amarillo:#6E6600; --amarillo-s:#F7F7E0; --neutro:#6B6478; --neutro-s:#EFEDF2;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --fondo:#111017; --gris:#1B1822; --tinta:#F7F4FA; --texto:#DAD3E4; --tenue:#9C94AA; --linea:#2C2836;
+    --rosa:#F08BAC; --rosa-s:#33222A; --azul:#8E9EEB; --azul-s:#1F2236; --verde:#34D399; --verde-s:#14291F;
+    --amarillo:#DCDC4A; --amarillo-s:#2A2A16; --neutro:#A9A2B6; --neutro-s:#24212C;
+  }
+}
+:root[data-theme="dark"]{
+  --fondo:#111017; --gris:#1B1822; --tinta:#F7F4FA; --texto:#DAD3E4; --tenue:#9C94AA; --linea:#2C2836;
+  --rosa:#F08BAC; --rosa-s:#33222A; --azul:#8E9EEB; --azul-s:#1F2236; --verde:#34D399; --verde-s:#14291F;
+  --amarillo:#DCDC4A; --amarillo-s:#2A2A16; --neutro:#A9A2B6; --neutro-s:#24212C;
+}
+*{box-sizing:border-box}
+body{background:var(--fondo);color:var(--texto);font:15px/1.65 Poppins,system-ui,-apple-system,"Segoe UI",sans-serif;padding-inline:16px;padding-block:0 64px}
+h1,h2,h3,h4{color:var(--tinta);line-height:1.25;text-wrap:balance;margin:0}
+a{color:var(--rosa)}
+:focus-visible{outline:2px solid var(--rosa);outline-offset:2px}
+.envoltura{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:230px minmax(0,1fr);gap:48px}
+.volver-app{display:inline-block;font-size:13px;font-weight:600;text-decoration:none;margin-bottom:18px}
+header.portada{max-width:1120px;margin:0 auto;padding-block:40px 28px;border-bottom:1px solid var(--linea);margin-bottom:32px}
+.marca{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--rosa);font-weight:600}
+header.portada h1{font-size:clamp(30px,5vw,44px);font-weight:700;margin-top:8px}
+header.portada p{max-width:64ch;margin:12px 0 0}
+.meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:16px;font-size:13px;color:var(--tenue)}
+nav.indice{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);align-self:start;max-height:calc(100vh - 32px);overflow:auto;font-size:13.5px}
+nav.indice h2{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--tenue);font-weight:600;margin-bottom:10px}
+nav.indice ol{list-style:none;margin:0;padding:0;display:grid;gap:2px;counter-reset:i}
+nav.indice a{display:block;padding:6px 10px;border-radius:8px;color:var(--texto);text-decoration:none}
+nav.indice a:hover{background:var(--gris);color:var(--tinta)}
+nav.indice a.activo{background:var(--rosa-s);color:var(--rosa);font-weight:600}
+main{min-width:0}
+section{padding-block:8px 36px;border-bottom:1px solid var(--linea);margin-bottom:36px;scroll-margin-top:16px}
+section:last-child{border-bottom:0}
+section>h2{font-size:26px;font-weight:700;margin-bottom:6px}
+.sub{color:var(--tenue);margin:0 0 20px;max-width:68ch}
+h3{font-size:18px;font-weight:600;margin:28px 0 10px;scroll-margin-top:16px}
+h4{font-size:15px;font-weight:600;margin:18px 0 6px}
+p,li{max-width:70ch}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin-bottom:5px}
+strong{color:var(--tinta);font-weight:600}
+.btn{display:inline-block;font-size:.86em;font-weight:600;padding:1px 9px;border-radius:7px;border:1px solid var(--linea);background:var(--gris);color:var(--tinta);white-space:nowrap}
+.btn.p{background:var(--rosa);border-color:var(--rosa);color:var(--fondo)}
+.chip{display:inline-block;font-size:.8em;font-weight:600;padding:1px 10px;border-radius:999px;white-space:nowrap}
+.c-gris{background:var(--neutro-s);color:var(--neutro)}
+.c-azul{background:var(--azul-s);color:var(--azul)}
+.c-amarillo{background:var(--amarillo-s);color:var(--amarillo)}
+.c-rosa{background:var(--rosa-s);color:var(--rosa)}
+.c-verde{background:var(--verde-s);color:var(--verde)}
+.ruta{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85em;background:var(--gris);padding:1px 6px;border-radius:5px;color:var(--tinta)}
+.pasos{list-style:none;padding:0;counter-reset:p;display:grid;gap:10px;margin-bottom:18px}
+.pasos>li{counter-increment:p;position:relative;padding-left:40px;max-width:72ch;margin:0}
+.pasos>li::before{content:counter(p);position:absolute;left:0;top:1px;width:26px;height:26px;border-radius:50%;background:var(--rosa-s);color:var(--rosa);font-weight:700;font-size:13px;display:grid;place-items:center}
+.nota{border-radius:12px;padding:14px 16px;margin:14px 0 18px;max-width:72ch;background:var(--gris)}
+.nota p:last-child,.nota ul:last-child{margin-bottom:0}
+.nota b{display:block;color:var(--tinta);margin-bottom:4px;font-weight:600}
+.nota.aviso{background:var(--amarillo-s)}
+.nota.aviso b{color:var(--amarillo)}
+.nota.clave{background:var(--rosa-s)}
+.nota.clave b{color:var(--rosa)}
+.tabla{overflow-x:auto;margin:10px 0 20px;border:1px solid var(--linea);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:560px}
+th,td{text-align:left;padding:9px 12px;vertical-align:top;border-bottom:1px solid var(--linea)}
+th{background:var(--gris);color:var(--tinta);font-weight:600;font-size:12px;letter-spacing:.04em}
+tr:last-child td{border-bottom:0}
+td .chip{margin:1px 0}
+.roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:6px 0 18px}
+.rol{border:1px solid var(--linea);border-radius:14px;padding:16px}
+.rol h4{margin:0 0 6px;font-size:16px}
+.rol p{font-size:14px;margin:0}
+.flujo{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:10px 0 18px;font-size:13.5px}
+.flujo .f{color:var(--tenue)}
+.faq details{border:1px solid var(--linea);border-radius:12px;padding:12px 16px;margin-bottom:10px;max-width:74ch}
+.faq summary{cursor:pointer;font-weight:600;color:var(--tinta)}
+.faq details[open] summary{margin-bottom:8px}
+.faq details p:last-child,.faq details ol:last-child,.faq details ul:last-child{margin-bottom:0}
+.buscar{display:flex;gap:8px;margin-bottom:14px}
+.buscar input{width:100%;font:inherit;font-size:13.5px;padding:8px 12px;border-radius:10px;border:1px solid var(--linea);background:var(--fondo);color:var(--tinta)}
+@media (max-width:860px){
+  .envoltura{grid-template-columns:1fr;gap:0}
+  nav.indice{position:static;max-height:none;border:1px solid var(--linea);border-radius:14px;padding:14px;margin-bottom:28px}
+  nav.indice ol{grid-template-columns:1fr 1fr}
+}
+@media (max-width:420px){ nav.indice ol{grid-template-columns:1fr} }
+@media print{ nav.indice{display:none} .envoltura{display:block} section{break-inside:auto} }
+@media (prefers-reduced-motion:no-preference){ html{scroll-behavior:smooth} }
+</style>
+
+<header class="portada">
+  <a class="volver-app" href="/">← Volver a Wozial Studio</a>
+  <div class="marca">Wozial Studio · Manual de uso</div>
+  <h1>Cómo se trabaja en Wozial Studio, paso a paso</h1>
+  <p>Todo lo que hace cada persona del equipo (admin y operador) y lo que ve el cliente: dar de alta un cliente, generar sus cuatro entregables, revisarlos, autorizarlos y llevar el contenido de cada mes.</p>
+  <div class="meta"><span>Versión del sistema: 18 de septiembre de 2026</span></div>
+</header>
+
+<div class="envoltura">
+<nav class="indice" aria-label="Índice">
+  <h2>Contenido</h2>
+  <div class="buscar"><label for="filtro" style="position:absolute;left:-9999px">Buscar en el manual</label><input id="filtro" type="search" placeholder="Buscar en el manual…"></div>
+  <ol id="lista-indice">
+    <li><a href="#empezar">1. Para empezar</a></li>
+    <li><a href="#recorrido">2. El recorrido de un cliente</a></li>
+    <li><a href="#etapas">3. Las 4 etapas y sus estados</a></li>
+    <li><a href="#operador">4. Guía del operador</a></li>
+    <li><a href="#admin">5. Guía del admin</a></li>
+    <li><a href="#documento">6. Dentro de un documento</a></li>
+    <li><a href="#mensual">7. Desarrollo mensual</a></li>
+    <li><a href="#cliente">8. Lo que ve el cliente</a></li>
+    <li><a href="#avisos">9. Avisos (la campana)</a></li>
+    <li><a href="#tablero">10. Inicio y Pendientes</a></li>
+    <li><a href="#costos">11. Costos y límites</a></li>
+    <li><a href="#problemas">12. Si algo no funciona</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="empezar">
+  <h2>1. Para empezar</h2>
+  <p class="sub">Quién es quién, cómo se entra y dónde está cada cosa.</p>
+
+  <h3>Los tres roles</h3>
+  <div class="roles">
+    <div class="rol"><h4>Admin</h4><p>Ve todos los clientes. Es el único que <strong>autoriza</strong>, <strong>pide cambios</strong> y <strong>reabre</strong> etapas. Administra usuarios, asigna operadores y puede eliminar clientes.</p></div>
+    <div class="rol"><h4>Operador</h4><p>Ve solo <strong>sus clientes asignados</strong>. Genera los entregables, los corrige, atiende comentarios, arma el contenido del mes y <strong>solicita autorización</strong> al admin.</p></div>
+    <div class="rol"><h4>Cliente</h4><p>Entra a su <strong>portal</strong>. Ve sus entregables ya autorizados, deja observaciones en el manual de campaña y aprueba o pide cambios a cada pieza del mes.</p></div>
+  </div>
+
+  <h3>Entrar al sistema</h3>
+  <ol class="pasos">
+    <li>Abre <a href="https://wozial.up.railway.app">wozial.up.railway.app</a>.</li>
+    <li>Escribe tu <strong>Correo</strong> y tu <strong>Contraseña</strong> (el ojito la muestra u oculta) y pulsa <span class="btn p">Entrar</span>.</li>
+    <li>El admin y el operador llegan al <strong>Inicio</strong>; el cliente llega a su <strong>portal</strong>.</li>
+  </ol>
+  <div class="nota"><b>Bueno saber</b>
+    <ul>
+      <li>La sesión dura <strong>30 días</strong> en el mismo navegador.</li>
+      <li>Tres intentos fallidos en 5 minutos bloquean el acceso <strong>15 minutos</strong>: «Demasiados intentos fallidos…». Espera y vuelve a intentar.</li>
+      <li>No hay «olvidé mi contraseña»: si alguien la pierde, un admin le manda una invitación nueva.</li>
+      <li>Para salir, pulsa <span class="btn">Salir</span> arriba a la derecha (en celular, dentro de <span class="btn">Más</span>).</li>
+    </ul>
+  </div>
+
+  <h3>Crear tu cuenta con una invitación</h3>
+  <ol class="pasos">
+    <li>Abre el enlace de invitación que te mandaron (por correo o por mensaje).</li>
+    <li>En «Termina de crear tu cuenta» escribe <strong>Nombre</strong>, <strong>Apellido</strong> y una <strong>Contraseña de al menos 12 caracteres</strong> dos veces.</li>
+    <li>Pulsa <span class="btn p">Crear mi acceso</span>.</li>
+  </ol>
+  <p>La invitación vence a los <strong>7 días</strong> y sirve una sola vez. Si dice que venció, se usó o fue revocada, pide otra.</p>
+
+  <h3>Tu perfil</h3>
+  <p>Toca tu nombre arriba a la derecha (en celular: <span class="btn">Más</span> → <span class="btn">Mi perfil</span>). Ahí cambias <strong>Nombre</strong> y <strong>Apellido</strong> y pulsas <span class="btn p">Guardar cambios</span>. El correo solo lo puede cambiar un admin.</p>
+
+  <h3>El menú</h3>
+  <div class="tabla"><table>
+    <thead><tr><th>Opción</th><th>Para qué sirve</th><th>Admin</th><th>Operador</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Inicio</strong></td><td>Tablero: qué te toca, estado de las entregas, avance, gastos.</td><td>✓</td><td>✓</td></tr>
+      <tr><td><strong>Clientes</strong></td><td>Lista de clientes y acceso a cada ficha.</td><td>✓ todos</td><td>✓ solo los suyos</td></tr>
+      <tr><td><strong>Entregables</strong></td><td>Todos los documentos generados, con sus enlaces para compartir.</td><td>✓</td><td>✓</td></tr>
+      <tr><td><strong>Pendientes</strong> (con número)</td><td>La lista de lo que espera por ti.</td><td>✓</td><td>✓</td></tr>
+      <tr><td><strong>Usuarios</strong></td><td>Invitar, editar y desactivar cuentas.</td><td>✓</td><td>—</td></tr>
+      <tr><td><strong>Desempeño</strong></td><td>Tiempos, rondas de cambios y costos por etapa, operador y cliente.</td><td>✓</td><td>✓</td></tr>
+      <tr><td><span class="btn p">Nuevo cliente</span></td><td>Dar de alta un cliente.</td><td>✓</td><td>✓</td></tr>
+    </tbody>
+  </table></div>
+  <p>En la cabecera también están el <strong>buscador</strong> «Busca un cliente…» (atajo <span class="ruta">⌘K</span>), el cambio <strong>Día/Noche</strong>, la <strong>campana de avisos</strong> y tu nombre. En celular el menú va abajo: Inicio, Clientes, <span class="btn">+</span> (nuevo cliente), Entregables y <span class="btn">Más</span> (Pendientes, Usuarios, Desempeño, Mi perfil, Salir). El logo de Wozial siempre te regresa al Inicio.</p>
+</section>
+
+<section id="recorrido">
+  <h2>2. El recorrido de un cliente, de principio a fin</h2>
+  <p class="sub">Este es el orden normal. Cada paso tiene su detalle más adelante.</p>
+  <ol class="pasos">
+    <li><strong>Operador o admin</strong> da de alta al cliente con <span class="btn p">Nuevo cliente</span>, sube sus archivos y enlaces, y marca qué etapas se contrataron.</li>
+    <li><strong>Admin</strong> asigna el operador responsable en la ficha (si no lo es ya quien lo creó).</li>
+    <li><strong>Operador</strong> lanza la <strong>Investigación</strong> y espera a que termine (unos minutos).</li>
+    <li><strong>Operador</strong> revisa el documento, lo corrige si hace falta y pulsa <span class="btn p">Solicitar autorización</span>.</li>
+    <li><strong>Admin</strong> recibe el aviso, abre el documento y pulsa <span class="btn p">Autorizar</span>, o deja comentarios y pulsa <span class="btn">Pedir cambios</span>.</li>
+    <li>Si hubo cambios, el <strong>operador</strong> los atiende, marca cada comentario como atendido y vuelve a solicitar autorización.</li>
+    <li>Con la investigación lista, se generan el <strong>Mapa de pilares</strong> y el <strong>Manual de campaña</strong>, con el mismo ciclo: generar → revisar → solicitar → autorizar.</li>
+    <li>Lo autorizado aparece en el <strong>portal del cliente</strong>. En el manual, el cliente puede dejar observaciones.</li>
+    <li>Cada mes, el <strong>operador</strong> abre el mes de <strong>Desarrollo mensual</strong>, arma las piezas con sus artes y lo comparte; el <strong>cliente</strong> aprueba o pide cambios pieza por pieza dentro de su plazo.</li>
+  </ol>
+  <div class="flujo" aria-label="Ciclo de una etapa">
+    <span class="chip c-gris">No iniciada</span><span class="f">→ Generar →</span>
+    <span class="chip c-azul">En proceso</span><span class="f">→ Solicitar autorización →</span>
+    <span class="chip c-amarillo">En revisión</span><span class="f">→ Autorizar →</span>
+    <span class="chip c-verde">Aprobada</span>
+  </div>
+  <div class="flujo" aria-label="Cuando hay cambios">
+    <span class="chip c-amarillo">En revisión</span><span class="f">→ Pedir cambios →</span>
+    <span class="chip c-rosa">Con cambios</span><span class="f">→ corregir y Solicitar autorización →</span>
+    <span class="chip c-amarillo">En revisión</span>
+  </div>
+</section>
+
+<section id="etapas">
+  <h2>3. Las 4 etapas y sus estados</h2>
+  <p class="sub">Cada cliente tiene cuatro etapas. Solo la investigación va primero; las otras tres solo necesitan que exista una investigación con datos (no hace falta que esté autorizada).</p>
+
+  <div class="tabla"><table>
+    <thead><tr><th>#</th><th>Etapa</th><th>Qué es</th><th>Qué necesita para generarse</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><strong>Investigación</strong></td><td>Competencia, audiencia, canales, mercado y síntesis del cliente.</td><td>Nada. Solo los datos de la ficha.</td></tr>
+      <tr><td>2</td><td><strong>Mapa de pilares</strong></td><td>La estrategia de contenido: cinco pilares y un banco de temas.</td><td>Una investigación con datos.</td></tr>
+      <tr><td>3</td><td><strong>Desarrollo mensual</strong></td><td>El contenido de cada mes: piezas, copy y artes que aprueba el cliente.</td><td>Una investigación con datos y la etapa contratada.</td></tr>
+      <tr><td>4</td><td><strong>Manual de campaña</strong></td><td>Estructura de campaña, anuncios, Google y archivos.</td><td>Una investigación con datos.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Si falta la investigación verás: «Falta completar la investigación antes de continuar.»</p>
+
+  <h3>Los cinco estados</h3>
+  <div class="tabla"><table>
+    <thead><tr><th>Estado</th><th>Qué significa</th><th>Lo que ve el cliente</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip c-gris">No iniciada</span></td><td>Todavía no se genera nada.</td><td>Por iniciar</td></tr>
+      <tr><td><span class="chip c-azul">En proceso</span></td><td>Ya hay documento; el operador lo está trabajando.</td><td>En preparación</td></tr>
+      <tr><td><span class="chip c-amarillo">En revisión</span></td><td>El operador pidió autorización. <strong>La pelota la tiene el admin.</strong></td><td>En revisión</td></tr>
+      <tr><td><span class="chip c-rosa">Con cambios</span></td><td>El admin pidió cambios o reabrió la etapa. <strong>La pelota la tiene el operador.</strong></td><td>En preparación</td></tr>
+      <tr><td><span class="chip c-verde">Aprobada</span></td><td>Autorizada. El cliente ya la puede ver.</td><td>Listo</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>La misma etapa, dicha según quién la mira</h3>
+  <p>Las tarjetas de la ficha, el Inicio, Pendientes y el documento usan las mismas frases:</p>
+  <div class="tabla"><table>
+    <thead><tr><th>Estado</th><th>Lo que lee el admin</th><th>Lo que lee el operador</th></tr></thead>
+    <tbody>
+      <tr><td><span class="chip c-azul">En proceso</span></td><td>«En proceso · lo lleva Laura Ruiz»</td><td>«En tu mesa». «Cuando esté listo, pide autorización.»</td></tr>
+      <tr><td><span class="chip c-amarillo">En revisión</span></td><td><span class="chip c-rosa">Espera tu autorización</span> «Laura Ruiz te pidió autorización hace 3 horas. Revisa el documento y autorízalo o pide cambios.»</td><td>«Enviada a autorización». «Pediste autorización hace 3 horas. Esperando a que un admin la revise.»</td></tr>
+      <tr><td><span class="chip c-rosa">Con cambios</span></td><td>«Cambios pedidos · esperando a Laura Ruiz», con tu comentario.</td><td><span class="chip c-rosa">Tienes cambios por hacer</span> con quién los pidió, su comentario y cuántos comentarios faltan.</td></tr>
+      <tr><td>Reabierta</td><td>«Reabriste la etapa», con el motivo.</td><td>«Carlos Ruiz reabrió la etapa», con el motivo.</td></tr>
+      <tr><td><span class="chip c-verde">Aprobada</span></td><td>«Autorizada por ti el 17 sep»</td><td>«Autorizada por Carlos Ruiz el 17 sep»</td></tr>
+    </tbody>
+  </table></div>
+  <p>Si el cliente dejó observaciones, la tarjeta muestra además un recuadro amarillo: «Casa Luna dejó 2 observaciones.»</p>
+
+  <h3>Quién puede hacer qué</h3>
+  <div class="tabla"><table>
+    <thead><tr><th>Botón</th><th>Quién</th><th>Desde qué estado</th><th>Queda en</th><th>Condición</th></tr></thead>
+    <tbody>
+      <tr><td><span class="btn">Generar</span></td><td>Admin y operador asignado</td><td>No iniciada, En proceso, Con cambios</td><td>En proceso</td><td>Que exista la investigación (para 2, 3 y 4). En revisión o aprobada no se puede: primero hay que reabrir.</td></tr>
+      <tr><td><span class="btn p">Solicitar autorización</span></td><td>Operador asignado</td><td>En proceso, Con cambios</td><td>En revisión</td><td>Que haya documento y <strong>ningún comentario abierto</strong>. Si quedan, el botón sale gris con el motivo.</td></tr>
+      <tr><td><span class="btn p">Autorizar</span></td><td>Solo admin</td><td>En revisión</td><td>Aprobada</td><td>Ninguna.</td></tr>
+      <tr><td><span class="btn p">Autorizar</span> directo</td><td>Solo admin</td><td>En proceso, Con cambios</td><td>Aprobada</td><td>Que haya documento y ningún comentario abierto.</td></tr>
+      <tr><td><span class="btn">Pedir cambios</span></td><td>Solo admin</td><td>En revisión</td><td>Con cambios</td><td>Al menos un comentario abierto en el documento, o escribir uno en la ventana.</td></tr>
+      <tr><td><span class="btn">Reabrir</span></td><td>Solo admin</td><td>Aprobada</td><td>Con cambios</td><td>Comentario obligatorio con el motivo.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="nota aviso"><b>Ojo</b>
+    <ul>
+      <li>Si alguien <strong>edita o restaura</strong> un documento ya aprobado, la etapa regresa a <span class="chip c-rosa">Con cambios</span> y hay que volver a autorizarla.</li>
+      <li>Si el cliente deja una observación en un manual ya aprobado, también regresa a <span class="chip c-rosa">Con cambios</span>.</li>
+      <li>Una etapa marcada <strong>Interna</strong> se trabaja igual, pero el cliente no la ve. <strong>No contratada</strong> significa que no forma parte del servicio de ese cliente.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="operador">
+  <h2>4. Guía del operador</h2>
+  <p class="sub">Tu trabajo diario: dar de alta, generar, corregir y pedir autorización.</p>
+
+  <h3 id="alta">Dar de alta un cliente</h3>
+  <ol class="pasos">
+    <li>Pulsa <span class="btn p">Nuevo cliente</span> (en celular, el <span class="btn">+</span>).</li>
+    <li>Llena lo obligatorio: <strong>Nombre</strong>, <strong>Giro</strong> y <strong>Producto o servicio</strong>.</li>
+    <li>Llena lo opcional, que mejora mucho la investigación:
+      <ul>
+        <li><strong>Ciudad</strong>. Sin ciudad, el foco será nacional.</li>
+        <li><strong>Ticket</strong>, que define si el ciclo de compra es largo.</li>
+        <li><strong>Contacto</strong> y <strong>Notas del operador</strong>.</li>
+      </ul>
+    </li>
+    <li>En <strong>Etapas contratadas</strong> deja marcadas las que el cliente pagó. Vienen marcadas Investigación, Mapa de pilares y Manual de campaña; Desarrollo mensual viene sin marcar.</li>
+    <li>Pulsa <span class="btn p">Guardar cliente</span>. Quedas como responsable y llegas a su ficha.</li>
+  </ol>
+
+  <h3 id="ficha">Completar la ficha</h3>
+  <p>En la ficha del cliente, abajo, hay cuatro pestañas:</p>
+  <ul>
+    <li><strong>Datos</strong>: el mismo formulario del alta. Guarda con <span class="btn p">Guardar cambios</span>.</li>
+    <li><strong>Enlaces</strong>: sitio web, página de venta, Instagram, Facebook, TikTok, YouTube u otro. La investigación los usa.</li>
+    <li><strong>Archivos</strong>: arrastra PDF, DOCX, TXT, PNG o JPEG de hasta 25 MB. Cada archivo dice «Texto extraído» (listo), «Pendiente» o «No se pudo leer».</li>
+    <li><strong>Historial</strong>: todo lo que se ha generado y hecho con este cliente.</li>
+  </ul>
+
+  <h3 id="investigar">Lanzar la investigación</h3>
+  <ol class="pasos">
+    <li>En la ficha, tarjeta <strong>1 · Investigación</strong>, pulsa <span class="btn">Generar</span>.</li>
+    <li>Revisa «Lo que se va a enviar». Las advertencias amarillas (por ejemplo, que falta la ciudad) no bloquean, pero conviene corregirlas antes.</li>
+    <li>Verás el <strong>Costo estimado</strong> (unos 8 USD) y el <strong>Tope duro</strong> (15 USD). Pulsa <span class="btn p">Lanzar investigación</span>.</li>
+    <li>Se abre la pantalla del trabajo, que se actualiza sola cada 3 segundos. Muestra cada paso («Competencia», «Audiencia», «Canales», «Mercado», «Síntesis», «Lectura para cliente») y el gasto.</li>
+    <li>Al terminar pulsa <span class="btn p">Ver la presentación</span>. También te llega el aviso «Investigación de X está lista».</li>
+  </ol>
+  <p>Solo puede correr un trabajo por cliente a la vez. Mientras corre, puedes cerrar la pantalla: sigue trabajando solo.</p>
+
+  <h3>Generar el mapa de pilares y el manual</h3>
+  <ul>
+    <li><strong>Mapa de pilares</strong>: tarjeta 2 → <span class="btn">Generar</span> → <span class="btn p">Generar mapa de pilares</span> (unos 3 USD).</li>
+    <li><strong>Manual de campaña</strong>: tarjeta 4 → <span class="btn">Generar</span>. Se encola directo, sin pantalla previa.</li>
+  </ul>
+
+  <h3 id="revisar-op">Revisar y corregir tu documento</h3>
+  <ol class="pasos">
+    <li>En la tarjeta pulsa <span class="btn">Ver documento</span>.</li>
+    <li>Léelo completo. Para corregir texto usa <span class="btn">Editar</span> (ver <a href="#documento">sección 6</a>).</li>
+    <li>Arriba del documento verás la <strong>barra de la etapa</strong> con su estado y lo que puedes hacer.</li>
+  </ol>
+
+  <h3 id="solicitar">Pedir autorización</h3>
+  <ol class="pasos">
+    <li>Asegúrate de que no queden comentarios abiertos. Si quedan, la barra dice «Tienes N comentarios por atender» y el botón está gris.</li>
+    <li>Pulsa <span class="btn p">Solicitar autorización</span>. Está en la barra de arriba del documento y también en la tarjeta de la ficha.</li>
+    <li>La etapa pasa a <span class="chip c-amarillo">En revisión</span> y leerás «Enviada a autorización · esperando al admin». A todos los admins les llega el aviso.</li>
+  </ol>
+  <div class="nota"><b>Mientras está en revisión</b>
+    <p>No puedes editar ni regenerar: el documento queda congelado hasta que el admin decida.</p>
+  </div>
+
+  <h3 id="cambios-op">Cuando te piden cambios</h3>
+  <ol class="pasos">
+    <li>Te llega el aviso «X · Manual de campaña tiene cambios pedidos». Tócalo: te lleva <strong>directo al documento, en el primer comentario</strong>.</li>
+    <li>Arriba verás «Tienes 4 comentarios por atender en 3 secciones». Los bloques comentados están teñidos de rosa, y en el índice lateral cada sección con comentarios lleva un número.</li>
+    <li>Recorre los comentarios con <span class="btn">Ir al primero</span> y las flechas de anterior y siguiente. Al bajar, en la esquina inferior derecha queda un recorrido fijo que dice «2 de 4».</li>
+    <li>Corrige el bloque con <span class="btn">Editar</span> → <span class="btn p">Guardar</span>, o regenera si hace falta.</li>
+    <li>Toca el marcador del bloque («2 comentarios») o abre <span class="btn">Comentarios</span>, y pulsa <strong>Marcar atendido</strong> en cada uno. Puedes <strong>Responder</strong> si necesitas aclarar algo.</li>
+    <li>Cuando atiendes el último, el botón <span class="btn p">Solicitar autorización</span> se activa solo. Púlsalo.</li>
+  </ol>
+
+  <h3>Invitar al cliente a su portal</h3>
+  <ol class="pasos">
+    <li>En la ficha, en <strong>Usuarios del cliente</strong>, pulsa <span class="btn">Invitar usuario</span>.</li>
+    <li>Escribe su <strong>Correo</strong> y pulsa <span class="btn p">Invitar</span>.</li>
+    <li>Pulsa <span class="btn">Copiar</span> y mándale el enlace por WhatsApp o correo. Vence en 7 días; puedes <strong>Revocar</strong> una invitación pendiente.</li>
+  </ol>
+  <p>Con <span class="btn">Ver portal del cliente</span> ves exactamente lo que él ve. Para regresar, usa «Volver a la ficha» en la banda de arriba.</p>
+</section>
+
+<section id="admin">
+  <h2>5. Guía del admin</h2>
+  <p class="sub">Tu trabajo: autorizar, pedir cambios, repartir clientes y cuidar el equipo.</p>
+
+  <h3 id="autorizar">Autorizar una etapa</h3>
+  <ol class="pasos">
+    <li>Te llega el aviso «X · Manual de campaña espera tu autorización». También aparece en <strong>Te toca a ti</strong> del Inicio y en <strong>Pendientes</strong>.</li>
+    <li>Toca el aviso: te lleva <strong>directo al documento</strong>. Arriba verás <span class="chip c-rosa">Espera tu autorización</span> y quién te la pidió.</li>
+    <li>Revisa el documento.</li>
+    <li>Si está bien, pulsa <span class="btn p">Autorizar</span> y confirma con <span class="btn p">Sí, autorizar</span>. La etapa queda <span class="chip c-verde">Aprobada</span>, el operador recibe el aviso y el cliente ya la ve en su portal.</li>
+  </ol>
+  <div class="nota clave"><b>Autorizar sin que te lo pidan</b>
+    <p>Si una etapa está <span class="chip c-azul">En proceso</span> o <span class="chip c-rosa">Con cambios</span>, tienes documento y no hay comentarios abiertos, ves <span class="btn p">Autorizar</span> directo, sin esperar a que el operador lo solicite.</p>
+  </div>
+
+  <h3 id="pedir-cambios">Pedir cambios</h3>
+  <ol class="pasos">
+    <li>En el documento pulsa <span class="btn">Comentar</span> y toca cada bloque que quieres cambiar. Escribe qué cambiar y pulsa <span class="btn p">Enviar</span>. Repite por cada bloque y, al terminar, pulsa <span class="btn">Listo</span>.</li>
+    <li>Pulsa <span class="btn">Pedir cambios</span> (en la barra de arriba del documento o en la tarjeta).</li>
+    <li>La ventana pide un comentario general: es <strong>opcional</strong> si ya dejaste comentarios en bloques, y <strong>obligatorio</strong> si no dejaste ninguno.</li>
+    <li>La etapa pasa a <span class="chip c-rosa">Con cambios</span> y al operador le llega el aviso, que lo lleva a tu primer comentario.</li>
+  </ol>
+  <p>Comenta bloque por bloque en vez de escribir todo en el comentario general: así el operador ve exactamente dónde está cada cambio.</p>
+
+  <h3>Reabrir algo ya aprobado</h3>
+  <p>En la tarjeta de una etapa <span class="chip c-verde">Aprobada</span> pulsa <span class="btn">Reabrir</span>, escribe el motivo (obligatorio) y confirma. La etapa pasa a <span class="chip c-rosa">Con cambios</span> y el operador recibe el aviso con el motivo.</p>
+
+  <h3>Asignar o cambiar el operador</h3>
+  <p>En la ficha, en <strong>Responsable</strong>, elige el operador en <strong>Operador asignado</strong>. Se guarda al elegirlo y al nuevo responsable le llega «X es ahora tu cliente». Mientras un cliente no tenga operador, ningún operador lo ve.</p>
+
+  <h3>Contratar o quitar etapas</h3>
+  <p>En la ficha, en el recuadro <strong>Etapas contratadas</strong>, marca o desmarca las casillas y pulsa <span class="btn p">Guardar etapas</span>. Un operador no puede quitar una etapa ya iniciada; un admin sí.</p>
+
+  <h3 id="usuarios">Usuarios</h3>
+  <ul>
+    <li><strong>Invitar</strong>: en Usuarios pulsa <span class="btn p">Invitar</span>, escribe el correo y elige el rol: <strong>Admin</strong>, <strong>Operador</strong> o <strong>Usuario de cliente</strong> (en este último, elige de qué cliente). Copia el enlace y envíaselo.</li>
+    <li><strong>Editar</strong>: en cada persona pulsa <span class="btn">Editar</span> para cambiar Nombre, Apellido o Correo.</li>
+    <li><strong>Rol</strong>: cámbialo con el selector Admin/Operador.</li>
+    <li><strong>Desactivar</strong>: usa el interruptor. La persona deja de poder entrar sin borrar su historial.</li>
+    <li>Nadie puede desactivarse ni quitarse el rol de admin a sí mismo, y el último admin activo no se puede degradar.</li>
+  </ul>
+
+  <h3>Eliminar un cliente</h3>
+  <ol class="pasos">
+    <li>En la ficha, baja hasta <strong>Zona de peligro</strong> y pulsa <span class="btn">Eliminar cliente</span>.</li>
+    <li>Lee la lista de lo que se va a borrar.</li>
+    <li>Escribe el nombre del cliente <strong>exactamente</strong>, con mayúsculas y acentos. Solo entonces se activa <span class="btn">Eliminar para siempre</span>.</li>
+  </ol>
+  <div class="nota aviso"><b>No hay papelera</b><p>Se borran el cliente, sus documentos, comentarios, enlaces y archivos. No se puede deshacer.</p></div>
+
+  <h3>Desempeño</h3>
+  <p>En <strong>Desempeño</strong> eliges el periodo (Este mes, Mes anterior, Últimos 90 días, Todo) y, como admin, un operador. Muestra:</p>
+  <ul>
+    <li>días promedio para aprobar;</li>
+    <li>tiempo de espera en revisión;</li>
+    <li>rondas de cambios;</li>
+    <li>costo, por etapa, por operador y por cliente.</li>
+  </ul>
+</section>
+
+<section id="documento">
+  <h2>6. Dentro de un documento</h2>
+  <p class="sub">Investigación, mapa de pilares y manual de campaña comparten la misma pantalla.</p>
+
+  <h3>La barra de la etapa</h3>
+  <p>Arriba del documento hay una barra que dice en qué estado está la etapa y qué te toca, con los botones para avanzar. No tienes que regresar a la ficha.</p>
+  <div class="tabla"><table>
+    <thead><tr><th>Situación</th><th>Lo que dice la barra</th><th>Botones</th></tr></thead>
+    <tbody>
+      <tr><td>Admin · en revisión</td><td>«Espera tu autorización · X te pidió autorización hace…»</td><td><span class="btn p">Autorizar</span> <span class="btn">Pedir cambios</span></td></tr>
+      <tr><td>Admin · en proceso o con cambios, sin comentarios</td><td>El estado de la etapa</td><td><span class="btn p">Autorizar</span></td></tr>
+      <tr><td>Operador · sin comentarios abiertos</td><td>«En tu mesa. Cuando esté listo, pide autorización.»</td><td><span class="btn p">Solicitar autorización</span></td></tr>
+      <tr><td>Operador · con comentarios abiertos</td><td>«Tienes N comentarios por atender»</td><td><span class="btn">Ir al primero</span> y Solicitar autorización en gris</td></tr>
+      <tr><td>Operador · en revisión</td><td>«Enviada a autorización · esperando al admin»</td><td>—</td></tr>
+      <tr><td>Aprobada</td><td>«✓ Autorizada por X el …»</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Los botones de la cabecera</h3>
+  <p>En computadora están arriba a la derecha; en celular, dentro del botón <span class="btn">⋯</span>.</p>
+
+  <h4>Editar</h4>
+  <ol class="pasos">
+    <li>Pulsa <span class="btn">Editar</span>: los textos se vuelven editables y el botón cambia a «Salir de editar».</li>
+    <li>Escribe directo sobre el texto. Abajo aparece una barra con «N cambios».</li>
+    <li>Pulsa <span class="btn p">Guardar</span> para crear una versión nueva, o <span class="btn">Descartar</span> para deshacer.</li>
+  </ol>
+  <p>El operador no puede editar mientras la etapa está en revisión. Editar un documento aprobado lo regresa a <span class="chip c-rosa">Con cambios</span>.</p>
+
+  <h4>Versiones</h4>
+  <p>Muestra cada versión («v3 · Edición», «v2 · Generado», «Aprobada», «Restaurada») con autor y fecha. <span class="btn">Restaurar</span> regresa el documento a esa versión; antes guarda la actual, así que no se pierde nada.</p>
+
+  <h4>Comentar</h4>
+  <ol class="pasos">
+    <li>Pulsa <span class="btn">Comentar</span>. Aparece «Toca un bloque para comentarlo».</li>
+    <li>Toca el bloque, escribe tu comentario (hasta 2000 caracteres) y pulsa <span class="btn p">Enviar</span>.</li>
+    <li>Repite con otros bloques y pulsa <span class="btn">Listo</span> al terminar.</li>
+  </ol>
+
+  <h4>Cómo se ven los comentarios</h4>
+  <ul>
+    <li><strong>Aviso arriba</strong>: «Tienes 4 comentarios por atender en 3 secciones…», con <span class="btn">Ir al primero</span>, flechas y <span class="btn">Ver lista</span>. Los comentarios generales, que no van en un bloque, se cuentan aparte y viven en la lista.</li>
+    <li><strong>Bloque teñido</strong> de rosa con una franja a la izquierda.</li>
+    <li><strong>Marcador</strong> «2 comentarios» sobre el bloque: al tocarlo se abre ese hilo.</li>
+    <li><strong>Índice lateral</strong>: cada sección muestra cuántos comentarios abiertos tiene.</li>
+    <li><strong>Recorrido fijo</strong> abajo a la derecha al hacer scroll: «2 de 4» con flechas.</li>
+  </ul>
+
+  <h4>Panel de Comentarios</h4>
+  <p>Filtros <strong>Abiertos</strong>, <strong>Resueltos</strong> y <strong>Todos</strong>. Cada comentario muestra quién lo escribió, con su rol, y la fecha. Sus botones:</p>
+  <ul>
+    <li><span class="btn">Ver en el documento</span>: te lleva al bloque.</li>
+    <li><span class="btn">Responder</span>: abre una conversación dentro del hilo.</li>
+    <li><span class="btn">Marcar atendido</span>: admin u operador.</li>
+    <li><span class="btn">Descartar</span> y <span class="btn">Reabrir</span>: solo admin.</li>
+  </ul>
+
+  <h4>Compartir</h4>
+  <ol class="pasos">
+    <li>Pulsa <span class="btn">Compartir</span> y luego <span class="btn p">Crear link público</span>.</li>
+    <li>Pulsa <span class="btn">Copiar</span> y envíalo. Quien lo abra ve el documento en solo lectura, sin comentarios ni botones.</li>
+    <li><span class="btn">Revocar</span> apaga el enlace para siempre (da error 404). <span class="btn">Regenerar</span> crea uno nuevo.</li>
+  </ol>
+  <p>El operador solo puede compartir documentos <strong>aprobados</strong>; el admin puede compartir cualquiera. En <strong>Entregables</strong> están todos los documentos con sus enlaces y cuántas veces se han visto.</p>
+
+  <h4>Extras del mapa de pilares</h4>
+  <ul>
+    <li>Cada tema del banco tiene su estado («Pendiente», «En desarrollo», «Desarrollado», «Publicado») y una nota.</li>
+    <li><span class="btn">Exportar CSV</span> y <span class="btn">Imprimir / PDF</span> descargan el mapa.</li>
+  </ul>
+</section>
+
+<section id="mensual">
+  <h2>7. Desarrollo mensual</h2>
+  <p class="sub">El contenido que se publica cada mes: el operador arma las piezas, lo comparte y el cliente aprueba o pide cambios pieza por pieza.</p>
+
+  <h3>Antes de empezar</h3>
+  <ul>
+    <li>La etapa <strong>Desarrollo mensual</strong> debe estar marcada en <strong>Etapas contratadas</strong> de la ficha, con <span class="btn p">Guardar etapas</span>.</li>
+    <li>Debe existir una investigación con datos. Conviene tener el mapa de pilares, porque las piezas se ligan a sus temas.</li>
+  </ul>
+
+  <h3>Abrir el mes</h3>
+  <ol class="pasos">
+    <li>En la ficha, tarjeta <strong>3 · Desarrollo mensual</strong>, pulsa <span class="btn">Abrir septiembre</span> (o el mes que toque).</li>
+    <li>Pulsa <span class="btn p">Abrir el lote de Septiembre</span>. La etapa pasa a <span class="chip c-azul">En proceso</span>.</li>
+    <li>Arriba verás <strong>El mes en números</strong>: cuántos posts, carruseles, reels e historias llevas contra el paquete del cliente. Si faltan o sobran piezas, solo es un recordatorio: el mes se puede cerrar así.</li>
+  </ol>
+  <p>Con las flechas vas al mes anterior o al siguiente, y abajo aparecen los meses que ya tienen lote.</p>
+
+  <h3>Armar cada pieza</h3>
+  <ol class="pasos">
+    <li>En <strong>Agregar una pieza</strong> elige Formato, Plataforma y Fecha, y pulsa <span class="btn p">Agregar pieza</span>. El número se asigna solo.</li>
+    <li>Llena la pieza:
+      <ul>
+        <li><strong>Fecha de publicación</strong>, <strong>Formato</strong> y <strong>Plataforma</strong> (Facebook, Instagram o Facebook e Instagram).</li>
+        <li><strong>Tema del mapa de pilares</strong>.</li>
+        <li><strong>Copy</strong> (hasta 2200 caracteres), <strong>Llamado a la acción</strong> y <strong>Hashtags</strong>.</li>
+        <li><strong>Brief visual</strong> (hasta 400 caracteres).</li>
+      </ul>
+    </li>
+    <li>Para que la IA te ayude con el texto: elige el tema y pulsa <span class="btn">Pedir propuestas de copy</span>. Llegan «Tres caminos para este tema»; pulsa <span class="btn">Usar esta opción</span> en la que te guste y ajústala.</li>
+    <li>Sube los artes con <span class="btn">Subir arte</span> (PNG o JPEG hasta 25 MB) o con <span class="btn">Agregar enlace</span> para video u otra URL. Caben hasta 10 por pieza. El carrusel va en formato 4:5.</li>
+    <li>Pulsa <span class="btn p">Guardar la pieza</span>.</li>
+  </ol>
+
+  <h3>Compartir el mes con el cliente</h3>
+  <ol class="pasos">
+    <li>Cuando todo esté listo, pulsa <span class="btn p">Compartir el mes</span>.</li>
+    <li>El enlace se copia solo. <strong>Mándaselo tú al cliente</strong> por WhatsApp o correo: el sistema no le avisa.</li>
+    <li>El mes pasa a <span class="chip c-amarillo">En revisión</span> y empieza a correr el plazo: «Mes compartido · el plazo empezó a correr».</li>
+  </ol>
+
+  <h3>El plazo y la aprobación automática</h3>
+  <ul>
+    <li>El cliente tiene <strong>2 días hábiles</strong> para revisar. El plazo vence a las 23:59 (hora de México) del segundo día hábil; salta sábados y domingos, pero no días festivos.</li>
+    <li>Si el plazo vence y nadie tocó el contenido desde que se compartió, <strong>el mes se aprueba solo</strong> y al operador le llega el aviso «…se aprobó por vencimiento».</li>
+    <li>Si editaste algo después de compartirlo, <strong>no se aprueba solo</strong>. El Inicio lo marca: «Se editó después de compartirlo: no se aprobará solo.»</li>
+  </ul>
+
+  <h3>Cuando el cliente pide cambios</h3>
+  <ol class="pasos">
+    <li>Te llega el aviso y la pieza muestra <span class="chip c-rosa">Con cambios</span> con «El cliente pidió cambios: …».</li>
+    <li>Corrige la pieza y guárdala.</li>
+    <li>Vuelve a compartir con <span class="btn p">Volver a compartir el mes</span> y avísale al cliente.</li>
+  </ol>
+  <p>Si agregas o borras piezas en un mes ya compartido, regresa a <span class="chip c-azul">En proceso</span>: «El mes volvió a estar en proceso: hay contenido que el cliente no ha visto. Compártelo otra vez cuando esté listo.»</p>
+
+  <h3>Retirar un enlace</h3>
+  <p>En <strong>Enlaces de este mes</strong> pulsa <span class="btn">Retirar</span> y confirma. Ese enlace deja de funcionar para siempre. Si era el último, el cliente pierde el acceso, el plazo se detiene y el mes vuelve a <span class="chip c-azul">En proceso</span>.</p>
+
+  <h3>Cuándo queda aprobado el mes</h3>
+  <p>Cuando el cliente aprueba todas las piezas, o cuando vence el plazo sin cambios. La etapa pasa a <span class="chip c-verde">Aprobada</span>.</p>
+</section>
+
+<section id="cliente">
+  <h2>8. Lo que ve el cliente</h2>
+  <p class="sub">Para explicárselo al cliente o para saber qué verá.</p>
+  <ul>
+    <li><strong>Su portal</strong>: «Hola, Nombre», un anillo con el % de avance y <strong>Tus etapas</strong>, con cada etapa contratada que no es interna.</li>
+    <li><strong>Documentos</strong>: <span class="btn">Ver documento</span> aparece <strong>solo cuando la etapa está autorizada</strong>, y le muestra la versión autorizada, nunca un borrador.</li>
+    <li><strong>Manual de campaña</strong>: puede pulsar <span class="btn">Dejar observaciones</span> y comentar bloques. Solo ve sus propios hilos. Si deja una observación sobre un manual aprobado, la etapa regresa a <span class="chip c-rosa">Con cambios</span> y al equipo le llega el aviso.</li>
+    <li><strong>Contenido del mes</strong>: con <span class="btn">Ver el contenido de Septiembre</span> revisa cada pieza. Pulsa <span class="btn p">Aprobar</span> o <span class="btn">Solicitar cambios</span>, y en este último es obligatorio llenar «¿Qué cambiamos?».</li>
+    <li><strong>Cambiar de opinión</strong>: puede cambiar su decisión sobre una pieza mientras el plazo siga vivo. Después ve que el mes quedó cerrado y que escriba al equipo.</li>
+    <li><strong>Meses anteriores</strong>: la lista de meses ya compartidos.</li>
+    <li><strong>Actividad reciente</strong>: avisos como «…ya está lista para ti» o «El equipo respondió tu observación».</li>
+    <li><strong>Enlaces públicos</strong> (los que empiezan con <span class="ruta">/p/</span>): son de solo lectura y no piden cuenta. Para aprobar o pedir cambios el cliente tiene que entrar a su portal.</li>
+  </ul>
+  <p>Puede dejar hasta 20 observaciones por hora y 100 por día.</p>
+</section>
+
+<section id="avisos">
+  <h2>9. Avisos (la campana)</h2>
+  <p class="sub">La campana revisa cada minuto. Al tocar un aviso se marca como leído y te lleva a donde lo resuelves.</p>
+  <div class="tabla"><table>
+    <thead><tr><th>Qué pasó</th><th>Aviso</th><th>Le llega a</th><th>Te lleva a</th></tr></thead>
+    <tbody>
+      <tr><td>El operador pidió autorización</td><td>«X · Etapa espera tu autorización»</td><td>Todos los admins</td><td>El documento, con Autorizar y Pedir cambios</td></tr>
+      <tr><td>El admin pidió cambios</td><td>«…tiene cambios pedidos»</td><td>Operador asignado</td><td>El documento, en el primer comentario</td></tr>
+      <tr><td>El admin reabrió</td><td>«…se reabrió»</td><td>Operador asignado</td><td>El documento, en el primer comentario</td></tr>
+      <tr><td>El admin autorizó</td><td>«…fue aprobada»</td><td>Operador (y el cliente, si la etapa es visible)</td><td>El documento (el cliente, a su portal)</td></tr>
+      <tr><td>El cliente comentó o devolvió una pieza</td><td>«X comentó en Etapa»</td><td>Operador y admins</td><td>El documento con ese hilo abierto, o la pantalla del mes</td></tr>
+      <tr><td>El cliente respondió un hilo</td><td>«X respondió en Etapa»</td><td>Operador</td><td>El documento con ese hilo abierto</td></tr>
+      <tr><td>El equipo respondió al cliente</td><td>«Nueva respuesta en Etapa»</td><td>El cliente</td><td>Su portal</td></tr>
+      <tr><td>Terminó de generarse un documento</td><td>«Etapa de X está lista»</td><td>Quien lo lanzó</td><td>El documento</td></tr>
+      <tr><td>Falló un trabajo</td><td>«…falló»</td><td>Quien lo lanzó</td><td>La pantalla del trabajo</td></tr>
+      <tr><td>Te asignaron un cliente</td><td>«X es ahora tu cliente»</td><td>El nuevo responsable</td><td>La ficha</td></tr>
+      <tr><td>Un mes se aprobó por vencimiento</td><td>«…se aprobó por vencimiento»</td><td>Operador</td><td>La pantalla del mes</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li>Nunca te llega aviso de algo que hiciste tú.</li>
+    <li>«Marcar todas como leídas» limpia el contador.</li>
+    <li>Compartir un mes no genera aviso al cliente: el enlace lo mandas tú.</li>
+  </ul>
+  <div class="nota aviso"><b>Correo</b><p>Los avisos también pueden llegar por correo con el botón «Ver en Wozial Studio», pero el envío de correos <strong>todavía no está configurado</strong>. Por ahora los avisos solo aparecen en la campana, y las invitaciones hay que copiarlas y mandarlas a mano.</p></div>
+</section>
+
+<section id="tablero">
+  <h2>10. Inicio y Pendientes</h2>
+  <p class="sub">Lo primero que ves al entrar. El admin ve todo; el operador solo sus clientes.</p>
+
+  <h3>Las seis cifras de arriba</h3>
+  <p>Cada una te lleva a su bloque:</p>
+  <ul>
+    <li><strong>Clientes activos</strong>.</li>
+    <li><strong>Esperan por ti</strong>.</li>
+    <li><strong>Avance promedio</strong>.</li>
+    <li><strong>Gasto del mes</strong>.</li>
+    <li><strong>Meses por vencer</strong>.</li>
+    <li><strong>Con cambios pedidos</strong>.</li>
+  </ul>
+
+  <h3>Te toca a ti</h3>
+  <p>Lo que espera tu acción, con la misma frase de la tarjeta («Laura Ruiz te pidió autorización hace 3 horas», «Laura (cliente) comentó hace 2 horas») y un botón <span class="btn">Ver</span>. Si está vacío dice «Nada espera por ti».</p>
+  <ul>
+    <li><strong>Admin</strong>: las etapas en revisión.</li>
+    <li><strong>Operador</strong>: sus etapas con cambios o en proceso, y los comentarios abiertos.</li>
+  </ul>
+
+  <h3>Estado de las entregas</h3>
+  <p>Cuatro columnas para ver de un vistazo cómo va todo:</p>
+  <ul>
+    <li><span class="chip c-amarillo">Esperan autorización</span></li>
+    <li><span class="chip c-rosa">Con cambios pedidos</span>: las reabiertas van primero, marcadas «Reabierta».</li>
+    <li><span class="chip c-azul">En proceso</span>: incluye los meses compartidos que esperan respuesta del cliente.</li>
+    <li><span class="chip c-verde">Autorizadas este mes</span></li>
+  </ul>
+  <p>Cada columna muestra 5; el resto se ve con «Ver las N».</p>
+
+  <h3>Los demás bloques</h3>
+  <ul>
+    <li><strong>Avance por cliente</strong>: % de avance, etapa actual, responsable y días sin movimiento. «Atascado» aparece con 7 días o más sin movimiento, y esos clientes van primero.</li>
+    <li><strong>Por etapa</strong>: cuántas etapas hay en cada estado.</li>
+    <li><strong>Por operador</strong> (admin) o <strong>Tu trabajo</strong> (operador): clientes, avance, cuántas etapas «Por mover» y aprobadas este mes.</li>
+    <li><strong>Gastos</strong>: este mes contra el anterior, por tipo de trabajo y por cliente.</li>
+    <li><strong>Meses por vencer</strong>: cuenta regresiva de los meses compartidos.</li>
+    <li><strong>En curso</strong>: trabajos que están corriendo ahora.</li>
+  </ul>
+
+  <h3>Pendientes</h3>
+  <ul>
+    <li><strong>Admin</strong>: una tabla con Cliente, Etapa, Solicitud (quién te pidió autorización y cuándo) y Operador, y el botón <span class="btn">Revisar</span>.</li>
+    <li><strong>Operador</strong>: cuatro listas:
+      <ul>
+        <li>Con cambios pedidos.</li>
+        <li>En preparación.</li>
+        <li>Esperando al cliente (meses compartidos; no te toca a ti).</li>
+        <li>Comentarios abiertos recientes.</li>
+      </ul>
+    </li>
+  </ul>
+  <p>El número de Pendientes del menú, el del Inicio y el de esta página siempre coinciden.</p>
+</section>
+
+<section id="costos">
+  <h2>11. Costos y límites</h2>
+  <div class="tabla"><table>
+    <thead><tr><th>Trabajo</th><th>Costo aproximado</th><th>Tope</th><th>Si llega al tope</th></tr></thead>
+    <tbody>
+      <tr><td>Investigación</td><td>~8 USD</td><td>15 USD</td><td>Los pasos que falten quedan vacíos.</td></tr>
+      <tr><td>Mapa de pilares</td><td>~3 USD</td><td>15 USD</td><td>Los pilares que falten quedan sin generar.</td></tr>
+      <tr><td>Manual de campaña</td><td>—</td><td>15 USD</td><td>Se detiene.</td></tr>
+      <tr><td>Propuestas de copy</td><td>centavos</td><td>0.5 USD por petición</td><td>«Se alcanzó el tope de gasto de esta petición.»</td></tr>
+    </tbody>
+  </table></div>
+  <p>El gasto del mes se ve en <strong>Inicio → Gastos</strong> y en <strong>Desempeño</strong>. Las propuestas de copy todavía no se suman ahí.</p>
+
+  <h3>Tiempos y límites</h3>
+  <ul>
+    <li>Una investigación tarda unos minutos.</li>
+    <li>Invitaciones: vencen a los 7 días.</li>
+    <li>Sesión: dura 30 días.</li>
+    <li>Plazo del mes: 2 días hábiles.</li>
+    <li>Cliente «Atascado»: 7 días sin movimiento.</li>
+  </ul>
+</section>
+
+<section id="problemas" class="faq">
+  <h2>12. Si algo no funciona</h2>
+  <p class="sub">Los casos más comunes y qué hacer.</p>
+
+  <details><summary>No veo el botón Autorizar</summary>
+    <ul>
+      <li>Solo los <strong>admins</strong> autorizan. Revisa tu rol junto a tu nombre, arriba a la derecha.</li>
+      <li>Si la etapa está en proceso o con cambios, el botón solo sale si hay documento y <strong>ningún comentario abierto</strong>. Si sale gris, léelo: dice por qué.</li>
+      <li>Si la etapa ya está <span class="chip c-verde">Aprobada</span>, no hay nada que autorizar. Para cambiarla, usa <span class="btn">Reabrir</span>.</li>
+    </ul>
+  </details>
+
+  <details><summary>«Solicitar autorización» está en gris</summary>
+    <p>Quedan comentarios abiertos. Pulsa <span class="btn">Ir al primero</span>, atiende cada uno y márcalo como atendido. Al atender el último, el botón se activa solo.</p>
+  </details>
+
+  <details><summary>No puedo editar el documento</summary>
+    <p>Si eres operador y la etapa está <span class="chip c-amarillo">En revisión</span>, el documento está congelado hasta que el admin decida. Si hace falta cambiar algo urgente, pídele al admin que pida cambios.</p>
+  </details>
+
+  <details><summary>No puedo generar el mapa de pilares, el manual o el mes</summary>
+    <ul>
+      <li>Primero tiene que existir una investigación con datos.</li>
+      <li>Si la etapa está en revisión o aprobada, no se puede regenerar: el admin tiene que reabrirla.</li>
+      <li>Solo puede correr un trabajo por cliente a la vez.</li>
+    </ul>
+  </details>
+
+  <details><summary>El trabajo dice «Se agotó el saldo de la cuenta de Anthropic»</summary>
+    <p>Se acabó el crédito de la IA. El responsable de la cuenta tiene que recargar en console.anthropic.com. Después, vuelve a lanzar el trabajo.</p>
+  </details>
+
+  <details><summary>El cliente dice que no ve su documento</summary>
+    <ul>
+      <li>Solo ve lo <strong>autorizado</strong>. Revisa que la etapa esté <span class="chip c-verde">Aprobada</span>.</li>
+      <li>Una etapa marcada <strong>Interna</strong> no se le muestra nunca.</li>
+      <li>Comprueba con <span class="btn">Ver portal del cliente</span> en la ficha.</li>
+    </ul>
+  </details>
+
+  <details><summary>El cliente no recibió el mes</summary>
+    <p>Compartir el mes no le manda nada automáticamente. Copia el enlace (en <strong>Enlaces de este mes</strong> → <span class="btn">Copiar</span>) y mándaselo tú, o pídele que entre a su portal.</p>
+  </details>
+
+  <details><summary>No llegan correos de invitación ni de avisos</summary>
+    <p>El correo todavía no está configurado. Copia el enlace de invitación con <span class="btn">Copiar</span> y mándalo por WhatsApp o correo. Los avisos se ven en la campana.</p>
+  </details>
+
+  <details><summary>Un operador no ve a un cliente</summary>
+    <p>El operador solo ve los clientes que tiene asignados. Un admin debe elegirlo en la ficha, en <strong>Responsable → Operador asignado</strong>.</p>
+  </details>
+
+  <details><summary>Me bloqueó el acceso</summary>
+    <p>Después de 3 intentos fallidos en 5 minutos hay que esperar 15 minutos. Si olvidaste la contraseña, pide a un admin una invitación nueva.</p>
+  </details>
+
+  <details><summary>El mes no se aprobó solo al vencer el plazo</summary>
+    <p>No se aprueba solo si alguien editó el contenido después de compartirlo. Vuelve a compartir el mes para que el cliente vea la versión nueva y empiece un plazo nuevo.</p>
+  </details>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var enlaces = Array.prototype.slice.call(document.querySelectorAll('#lista-indice a'));
+  var secciones = enlaces.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+  function marcar(){
+    var y = window.scrollY + 120, actual = 0;
+    secciones.forEach(function(s,i){ if (s && s.offsetTop <= y) actual = i; });
+    enlaces.forEach(function(a,i){ a.classList.toggle('activo', i === actual); });
+  }
+  window.addEventListener('scroll', marcar, {passive:true}); marcar();
+
+  var filtro = document.getElementById('filtro');
+  filtro.addEventListener('input', function(){
+    var q = filtro.value.trim().toLowerCase();
+    secciones.forEach(function(s,i){
+      var coincide = !q || s.textContent.toLowerCase().indexOf(q) !== -1;
+      s.hidden = !coincide; enlaces[i].parentNode.hidden = !coincide;
+      if (q && coincide) s.querySelectorAll('details').forEach(function(d){ if (d.textContent.toLowerCase().indexOf(q) !== -1) d.open = true; });
+    });
+  });
+})();
+</script>
