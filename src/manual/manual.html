@@ -103,6 +103,17 @@ td .chip{margin:1px 0}
   <div class="meta"><span>Versión del sistema: 18 de septiembre de 2026</span></div>
 </header>
 
+<aside class="nota clave" style="max-width:1120px;margin:0 auto 28px">
+  <b>Lo nuevo · 18 de septiembre</b>
+  <ul>
+    <li><strong>Generar el mes con IA:</strong> define el paquete mensual del cliente y la IA arma todas las piezas del mes desde el mapa de pilares (<a href="#generar-mes">ver cómo</a>).</li>
+    <li><strong>Arte en el manual de campaña:</strong> cada anuncio tiene «Subir arte»; el cliente lo ve en su portal (<a href="#artes-manual">ver cómo</a>).</li>
+    <li><strong>Contador de uso por pilar:</strong> sube en cuanto eliges un tema del banco.</li>
+    <li><strong>Investigación, mapa y manual más confiables:</strong> un detalle de formato ya no tumba un paso, se guarda lo que sí salió y siempre queda presupuesto para la síntesis.</li>
+    <li><strong>Manual de uso</strong> en el menú, para todo el equipo.</li>
+  </ul>
+</aside>
+
 <div class="envoltura">
 <nav class="indice" aria-label="Índice">
   <h2>Contenido</h2>
@@ -172,6 +183,7 @@ td .chip{margin:1px 0}
       <tr><td><strong>Pendientes</strong> (con número)</td><td>La lista de lo que espera por ti.</td><td>✓</td><td>✓</td></tr>
       <tr><td><strong>Usuarios</strong></td><td>Invitar, editar y desactivar cuentas.</td><td>✓</td><td>—</td></tr>
       <tr><td><strong>Desempeño</strong></td><td>Tiempos, rondas de cambios y costos por etapa, operador y cliente.</td><td>✓</td><td>✓</td></tr>
+      <tr><td><strong>Manual de uso</strong></td><td>Este manual.</td><td>✓</td><td>✓</td></tr>
       <tr><td><span class="btn p">Nuevo cliente</span></td><td>Dar de alta un cliente.</td><td>✓</td><td>✓</td></tr>
     </tbody>
   </table></div>
@@ -190,7 +202,7 @@ td .chip{margin:1px 0}
     <li>Si hubo cambios, el <strong>operador</strong> los atiende, marca cada comentario como atendido y vuelve a solicitar autorización.</li>
     <li>Con la investigación lista, se generan el <strong>Mapa de pilares</strong> y el <strong>Manual de campaña</strong>, con el mismo ciclo: generar → revisar → solicitar → autorizar.</li>
     <li>Lo autorizado aparece en el <strong>portal del cliente</strong>. En el manual, el cliente puede dejar observaciones.</li>
-    <li>Cada mes, el <strong>operador</strong> abre el mes de <strong>Desarrollo mensual</strong>, arma las piezas con sus artes y lo comparte; el <strong>cliente</strong> aprueba o pide cambios pieza por pieza dentro de su plazo.</li>
+    <li>Cada mes, el <strong>operador</strong> abre el mes de <strong>Desarrollo mensual</strong>, lo genera con IA a partir del paquete y del mapa de pilares, lo revisa, sube los artes y lo comparte; el <strong>cliente</strong> aprueba o pide cambios pieza por pieza dentro de su plazo.</li>
   </ol>
   <div class="flujo" aria-label="Ciclo de una etapa">
     <span class="chip c-gris">No iniciada</span><span class="f">→ Generar →</span>
@@ -289,7 +301,7 @@ td .chip{margin:1px 0}
   <h3 id="ficha">Completar la ficha</h3>
   <p>En la ficha del cliente, abajo, hay cuatro pestañas:</p>
   <ul>
-    <li><strong>Datos</strong>: el mismo formulario del alta. Guarda con <span class="btn p">Guardar cambios</span>.</li>
+    <li><strong>Datos</strong>: el mismo formulario del alta, más el <strong>Paquete mensual</strong> (cuántos posts, carruseles, reels e historias lleva al mes). Guarda con <span class="btn p">Guardar cambios</span>.</li>
     <li><strong>Enlaces</strong>: sitio web, página de venta, Instagram, Facebook, TikTok, YouTube u otro. La investigación los usa.</li>
     <li><strong>Archivos</strong>: arrastra PDF, DOCX, TXT, PNG o JPEG de hasta 25 MB. Cada archivo dice «Texto extraído» (listo), «Pendiente» o «No se pudo leer».</li>
     <li><strong>Historial</strong>: todo lo que se ha generado y hecho con este cliente.</li>
@@ -307,9 +319,12 @@ td .chip{margin:1px 0}
 
   <h3>Generar el mapa de pilares y el manual</h3>
   <ul>
-    <li><strong>Mapa de pilares</strong>: tarjeta 2 → <span class="btn">Generar</span> → <span class="btn p">Generar mapa de pilares</span> (unos 3 USD).</li>
-    <li><strong>Manual de campaña</strong>: tarjeta 4 → <span class="btn">Generar</span>. Se encola directo, sin pantalla previa.</li>
+    <li><strong>Mapa de pilares</strong>: tarjeta 2 → <span class="btn">Generar</span> → <span class="btn p">Generar mapa de pilares</span>. Tarda unos 4 minutos y cuesta alrededor de 1 USD.</li>
+    <li><strong>Manual de campaña</strong>: tarjeta 4 → <span class="btn">Generar</span>. Se encola directo, sin pantalla previa. Tarda unos 5 minutos y cuesta alrededor de 1 USD. Corre en orden: Estructura, luego Creativos y Google, y al final Prompts.</li>
   </ul>
+  <div class="nota"><b>Si un paso sale «Falló» pero el documento muestra información</b>
+    <p>Los pasos que salieron bien se guardan aunque otro falle. Revisa el documento: si le falta una sección importante, vuelve a pulsar <span class="btn">Generar</span>. Si el mismo paso falla dos veces seguidas, avisa para revisarlo.</p>
+  </div>
 
   <h3 id="revisar-op">Revisar y corregir tu documento</h3>
   <ol class="pasos">
@@ -464,6 +479,21 @@ td .chip{margin:1px 0}
     <li><span class="btn">Descartar</span> y <span class="btn">Reabrir</span>: solo admin.</li>
   </ul>
 
+  <h4 id="artes-manual">Arte de los anuncios (manual de campaña)</h4>
+  <p>Cada anuncio del manual muestra el recuadro «Arte por producir» con su proporción y medidas, el <strong>Brief visual</strong> para copiar y sus dos copys. Cuando el arte esté listo:</p>
+  <ol class="pasos">
+    <li><strong>Imagen</strong> (1080 × 1080): pulsa <span class="btn p">Subir arte</span> y elige un PNG o JPEG de hasta 25 MB.</li>
+    <li><strong>Carrusel</strong> (1080 × 1350): sube hasta 5 tarjetas con <span class="btn">Agregar tarjeta</span>; puedes elegir varias a la vez y quedan en orden.</li>
+    <li><strong>Video</strong> (1080 × 1920): sube el MP4 o usa <span class="btn">Agregar enlace</span>, y aparte su portada.</li>
+    <li>Para cambiarlo usa <span class="btn">Reemplazar</span>; para borrarlo, <span class="btn">Quitar</span> (pide confirmación).</li>
+  </ol>
+  <ul>
+    <li>Lo pueden subir el admin y el operador asignado. El cliente <strong>ve el arte</strong> en su portal y en el enlace público, pero no puede cambiarlo.</li>
+    <li>Subir arte <strong>no cambia la autorización</strong> del manual ni crea versión nueva: el cliente lo ve en cuanto se sube.</li>
+    <li>El sistema revisa que el archivo sea de verdad una imagen o un video; un archivo disfrazado se rechaza.</li>
+    <li>Los botones se ocultan mientras estás en modo Editar o Comentar.</li>
+  </ul>
+
   <h4>Compartir</h4>
   <ol class="pasos">
     <li>Pulsa <span class="btn">Compartir</span> y luego <span class="btn p">Crear link público</span>.</li>
@@ -474,7 +504,9 @@ td .chip{margin:1px 0}
 
   <h4>Extras del mapa de pilares</h4>
   <ul>
-    <li>Cada tema del banco tiene su estado («Pendiente», «En desarrollo», «Desarrollado», «Publicado») y una nota.</li>
+    <li>Cada tema del banco tiene su estado («Pendiente», «En desarrollo», «Desarrollado», «Publicado») y una nota. Marca la casilla o pulsa el estado para cambiarlo.</li>
+    <li>Arriba del banco, cada pilar muestra <strong>«N de 60 en uso»</strong> (todo tema elegido cuenta) y debajo cuántos ya están desarrollados. El contador se mueve al instante, sin recargar.</li>
+    <li>Los temas que usa la generación del mes con IA quedan «En desarrollo» solos.</li>
     <li><span class="btn">Exportar CSV</span> y <span class="btn">Imprimir / PDF</span> descargan el mapa.</li>
   </ul>
 </section>
@@ -486,7 +518,8 @@ td .chip{margin:1px 0}
   <h3>Antes de empezar</h3>
   <ul>
     <li>La etapa <strong>Desarrollo mensual</strong> debe estar marcada en <strong>Etapas contratadas</strong> de la ficha, con <span class="btn p">Guardar etapas</span>.</li>
-    <li>Debe existir una investigación con datos. Conviene tener el mapa de pilares, porque las piezas se ligan a sus temas.</li>
+    <li>Debe existir una investigación con datos. Conviene tener el mapa de pilares: la IA saca de ahí los temas del mes.</li>
+    <li>Define el <strong>Paquete mensual</strong> del cliente en la ficha, pestaña <strong>Datos</strong>: cuántos posts (imagen), carruseles, reels e historias lleva al mes. Lo editan el admin y el operador asignado.</li>
   </ul>
 
   <h3>Abrir el mes</h3>
@@ -497,7 +530,28 @@ td .chip{margin:1px 0}
   </ol>
   <p>Con las flechas vas al mes anterior o al siguiente, y abajo aparecen los meses que ya tienen lote.</p>
 
-  <h3>Armar cada pieza</h3>
+  <h3 id="generar-mes">Generar el mes con IA</h3>
+  <ol class="pasos">
+    <li>Con el mes abierto y <span class="chip c-azul">En proceso</span>, pulsa <span class="btn p">Generar el mes con IA</span>. Si el cliente no tiene paquete, el botón te lleva a la ficha para definirlo.</li>
+    <li>Si el mes ya tiene piezas, elige:
+      <ul>
+        <li><strong>Completar lo que falta</strong> del paquete, o</li>
+        <li><strong>Reemplazar las piezas sin revisar</strong>. Nunca toca piezas aprobadas por el cliente ni con cambios pedidos; las que ya tienen arte solo se reemplazan si marcas la casilla que lo permite.</li>
+      </ul>
+    </li>
+    <li>Se lanza un trabajo en segundo plano: puedes cerrar la ventana. Ves el avance por semana en el Inicio («En curso») y te llega el aviso a la campana al terminar.</li>
+    <li>Revisa y ajusta cada pieza, sube los artes y comparte el mes.</li>
+  </ol>
+  <div class="nota"><b>Qué decide el sistema y qué escribe la IA</b>
+    <ul>
+      <li><strong>El sistema</strong> fija la cantidad exacta del paquete, reparte las fechas en días hábiles del mes sin amontonarlas y reparte las piezas por pilar y función según el mix del mapa, empezando por los pilares menos usados. Nunca repite un tema usado en otro mes.</li>
+      <li><strong>La IA</strong> elige el tema entre los candidatos y escribe cada pieza: plataforma, copy, llamado a la acción, hashtags, brief visual, prompt para la imagen de base, guion por escenas (reels) y texto de cada tarjeta (carruseles).</li>
+      <li>Los temas usados quedan «En desarrollo» en el mapa de pilares.</li>
+      <li>Cuesta alrededor de 1 USD por mes (tope 5 USD). Si una semana falla, se guarda el resto y el trabajo dice cuántas piezas faltaron.</li>
+    </ul>
+  </div>
+
+  <h3>Armar o ajustar cada pieza a mano</h3>
   <ol class="pasos">
     <li>En <strong>Agregar una pieza</strong> elige Formato, Plataforma y Fecha, y pulsa <span class="btn p">Agregar pieza</span>. El número se asigna solo.</li>
     <li>Llena la pieza:
@@ -505,7 +559,8 @@ td .chip{margin:1px 0}
         <li><strong>Fecha de publicación</strong>, <strong>Formato</strong> y <strong>Plataforma</strong> (Facebook, Instagram o Facebook e Instagram).</li>
         <li><strong>Tema del mapa de pilares</strong>.</li>
         <li><strong>Copy</strong> (hasta 2200 caracteres), <strong>Llamado a la acción</strong> y <strong>Hashtags</strong>.</li>
-        <li><strong>Brief visual</strong> (hasta 400 caracteres).</li>
+        <li><strong>Brief visual</strong> (hasta 400 caracteres) y <strong>Prompt de imagen</strong> (hasta 1000), para generar la imagen de base.</li>
+        <li><strong>Guion por escenas</strong> en los reels (hasta 12 escenas) y <strong>texto de cada tarjeta</strong> en los carruseles (hasta 10).</li>
       </ul>
     </li>
     <li>Para que la IA te ayude con el texto: elige el tema y pulsa <span class="btn">Pedir propuestas de copy</span>. Llegan «Tres caminos para este tema»; pulsa <span class="btn">Usar esta opción</span> en la que te guste y ajústala.</li>
@@ -548,6 +603,7 @@ td .chip{margin:1px 0}
   <ul>
     <li><strong>Su portal</strong>: «Hola, Nombre», un anillo con el % de avance y <strong>Tus etapas</strong>, con cada etapa contratada que no es interna.</li>
     <li><strong>Documentos</strong>: <span class="btn">Ver documento</span> aparece <strong>solo cuando la etapa está autorizada</strong>, y le muestra la versión autorizada, nunca un borrador.</li>
+    <li><strong>Arte de los anuncios</strong>: en el manual de campaña ve el arte que subió el equipo en cada anuncio.</li>
     <li><strong>Manual de campaña</strong>: puede pulsar <span class="btn">Dejar observaciones</span> y comentar bloques. Solo ve sus propios hilos. Si deja una observación sobre un manual aprobado, la etapa regresa a <span class="chip c-rosa">Con cambios</span> y al equipo le llega el aviso.</li>
     <li><strong>Contenido del mes</strong>: con <span class="btn">Ver el contenido de Septiembre</span> revisa cada pieza. Pulsa <span class="btn p">Aprobar</span> o <span class="btn">Solicitar cambios</span>, y en este último es obligatorio llenar «¿Qué cambiamos?».</li>
     <li><strong>Cambiar de opinión</strong>: puede cambiar su decisión sobre una pieza mientras el plazo siga vivo. Después ve que el mes quedó cerrado y que escriba al equipo.</li>
@@ -647,9 +703,10 @@ td .chip{margin:1px 0}
   <div class="tabla"><table>
     <thead><tr><th>Trabajo</th><th>Costo aproximado</th><th>Tope</th><th>Si llega al tope</th></tr></thead>
     <tbody>
-      <tr><td>Investigación</td><td>~8 USD</td><td>15 USD</td><td>Los pasos que falten quedan vacíos.</td></tr>
-      <tr><td>Mapa de pilares</td><td>~3 USD</td><td>15 USD</td><td>Los pilares que falten quedan sin generar.</td></tr>
-      <tr><td>Manual de campaña</td><td>—</td><td>15 USD</td><td>Se detiene.</td></tr>
+      <tr><td>Investigación</td><td>8.5 a 11 USD</td><td>15 USD</td><td>Las búsquedas frenan en 12 USD y los 3 USD restantes quedan reservados para la síntesis y la lectura.</td></tr>
+      <tr><td>Mapa de pilares</td><td>~1 USD</td><td>15 USD</td><td>Los pilares que falten quedan sin generar.</td></tr>
+      <tr><td>Manual de campaña</td><td>~1 USD</td><td>15 USD</td><td>Se guarda lo que ya salió.</td></tr>
+      <tr><td>Mes con IA</td><td>~1 USD</td><td>5 USD</td><td>Se guardan las semanas que ya salieron.</td></tr>
       <tr><td>Propuestas de copy</td><td>centavos</td><td>0.5 USD por petición</td><td>«Se alcanzó el tope de gasto de esta petición.»</td></tr>
     </tbody>
   </table></div>
@@ -657,7 +714,8 @@ td .chip{margin:1px 0}
 
   <h3>Tiempos y límites</h3>
   <ul>
-    <li>Una investigación tarda unos minutos.</li>
+    <li>Investigación: de 10 a 25 minutos. Mapa de pilares: unos 4. Manual de campaña: unos 5.</li>
+    <li><strong>Mientras corre un trabajo no se sube ninguna versión nueva del sistema ni se cambia nada en Railway:</strong> un reinicio lo vuelve a empezar desde cero y se cobra dos veces.</li>
     <li>Invitaciones: vencen a los 7 días.</li>
     <li>Sesión: dura 30 días.</li>
     <li>Plazo del mes: 2 días hábiles.</li>
@@ -694,7 +752,8 @@ td .chip{margin:1px 0}
   </details>
 
   <details><summary>El trabajo dice «Se agotó el saldo de la cuenta de Anthropic»</summary>
-    <p>Se acabó el crédito de la IA. El responsable de la cuenta tiene que recargar en console.anthropic.com. Después, vuelve a lanzar el trabajo.</p>
+    <p>Se acabó el crédito de la IA. El responsable de la cuenta tiene que recargar en console.anthropic.com → Plans &amp; Billing → Buy credits (el plan de claude.ai no cuenta). Después, vuelve a lanzar el trabajo.</p>
+    <p>Si ya se recargó y sigue saliendo, lo más común es que se recargó <strong>otra organización</strong> distinta a la de la llave del sistema. La llave debe ser de la organización que tiene el saldo y estar dentro de un <strong>workspace</strong>; se cambia en Railway, variable <span class="ruta">ANTHROPIC_API_KEY</span>.</p>
   </details>
 
   <details><summary>El cliente dice que no ve su documento</summary>
