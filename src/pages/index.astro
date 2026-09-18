@@ -12,8 +12,9 @@ import { COLOR_ESTADO, type ColorEstado } from '@/flujo/ui';
 import { plazoOponible } from '@/contenido/reglas';
 import { periodo, type EtapaM, type Evento, type JobM } from '@/lib/desempeno';
 import { nombrePeriodo, periodoActual, periodoVecino } from '@/lib/ui/periodo';
-import { etapasDeClientes } from '@/flujo/servicio';
-import { listarPendientes, type MotivoPendiente } from '@/lib/pendientes';
+import { etapasDeClientes, eventosDeEntrada } from '@/flujo/servicio';
+import { situacionEtapa, situacionPendiente, fraseComentario, type Situacion } from '@/flujo/situacion';
+import { listarPendientes } from '@/lib/pendientes';
 import { asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
 import { nombreVisible } from '@/lib/usuarios';
 import { condicionClientes } from '@/lib/visibilidad';
@@ -25,7 +26,7 @@ import {
 import { resumirPorCliente, resumenDe } from '@/lib/ui/estado-cliente';
 import { porcentaje, etapasDe, resumenAvance } from '@/lib/ui/progreso';
 import { enlacePendiente } from '@/lib/ui/enlaces';
-import { fechaCorta, fechaLarga, fechaHora } from '@/lib/ui/fecha';
+import { fechaLarga, fechaHora } from '@/lib/ui/fecha';
 
 const usuario = Astro.locals.usuario;
 
@@ -62,18 +63,10 @@ const pendientes = await listarPendientes(usuario, { limite: LIMITE_PENDIENTES }
 // cuando se cruza el límite: con 3 etapas y 6 comentarios se ven los nueve.
 const pendientesMostrados = pendientes.etapas.length + pendientes.comentarios.length;
 
-// `esperando_cliente` no llega nunca a `pendientes.etapas` —viaja en su propia
-// lista, que este Inicio no pide (`incluirEsperandoCliente`, src/lib/pendientes.ts)
-// porque no es algo que le toque a quien mira—, pero el `Record` lo exige y así,
-// si algún día se decide enseñarlo aquí, ya hay texto. Y nótese que NO dice
-// «Espera tu autorización»: confundir los dos idiomas de `en_revision` es
-// exactamente lo que llenaba la bandeja del admin de meses ajenos.
-const ETIQUETA_MOTIVO: Record<MotivoPendiente, string> = {
-  en_revision: 'Espera tu autorización',
-  con_cambios: 'Cambios pedidos',
-  en_proceso: 'En preparación',
-  esperando_cliente: 'Esperando al cliente',
-};
+// Cada renglón dice qué pasó, quién y cuándo con la misma frase que la tarjeta
+// de la ficha y `/pendientes` (`situacionEtapa`, src/flujo/situacion.ts). El
+// cliente nunca llega aquí; si llegara, se le da la mirada que no autoriza.
+const mirada = { rol: usuario.rol === 'admin' ? 'admin' as const : 'operador' as const, usuarioId: usuario.id };
 
 // Una sola consulta para las etapas de toda la lista (`etapasDeClientes`, no
 // `etapasDelCliente`, que iría cliente por cliente y además crearía las filas
@@ -234,6 +227,81 @@ const COLOR_TOKEN: Record<ColorEstado, string> = {
   gris: 'var(--suave)', azul: 'var(--azul)', amarillo: 'var(--amarillo)', rosa: 'var(--rosa)', verde: 'var(--verde)',
 };
 
+// ── Estado de las entregas ───────────────────────────────────────────────
+// Las etapas contratadas de los clientes visibles (ya pasaron por
+// `condicionClientes`: un operador solo ve las suyas), agrupadas por lo que
+// les pasa, con la frase de quién/qué/cuándo según quien mira. Las etapas ya
+// vienen de `etapasDeClientes` (una consulta); los eventos, de otra
+// (`eventosDeEntrada`), para todas a la vez. El mes (`desarrollo_mensual`)
+// entra con su estado, pero sin eventos ni autorizaciones: su flujo es otro.
+const ETAPA_MENSUAL = 'desarrollo_mensual';
+const contratadas = todasLasEtapas.filter((e) => e.contratada);
+const eventoDe = await eventosDeEntrada(
+  contratadas.filter((e) => e.etapa !== ETAPA_MENSUAL && e.estado !== 'no_iniciada').map((e) => e.id),
+);
+
+type EntradaEntrega = { id: string; cliente: string; etapa: (typeof todasLasEtapas)[number]['etapa']; situacion: Situacion; enlace: string; fecha: Date };
+const entrada = (e: (typeof todasLasEtapas)[number]): EntradaEntrega => {
+  const c = porId.get(e.clientId);
+  const evento = eventoDe.get(e.id) ?? null;
+  return {
+    id: e.id,
+    cliente: c?.nombre ?? '',
+    etapa: e.etapa,
+    situacion: situacionEtapa({
+      etapa: e.etapa, estado: e.estado, actualizadoEn: e.actualizadoEn, evento,
+      operador: c?.operadorId ? (nombres.get(c.operadorId) ?? null) : null,
+      // El renglón no enseña el conteo de comentarios (eso es de la tarjeta).
+      comentariosAbiertos: 0,
+    }, mirada, ahora),
+    enlace: enlacePendiente(e),
+    fecha: evento?.creadoEn ?? e.actualizadoEn,
+  };
+};
+const masViejoPrimero = (a: EntradaEntrega, b: EntradaEntrega) => a.fecha.getTime() - b.fecha.getTime();
+
+// «Autorizadas este mes»: el `aprobar` cae dentro del mes en curso (`periodo`,
+// el mismo corte que «Por operador»). El mes no tiene `aprobar`: cuenta si su
+// etapa quedó aprobada este mes.
+const autorizadaEsteMes = (e: (typeof todasLasEtapas)[number]) => {
+  if (e.estado !== 'aprobada') return false;
+  if (e.etapa === ETAPA_MENSUAL) return e.actualizadoEn >= mesActual.desde!;
+  const ev = eventoDe.get(e.id);
+  return ev?.accion === 'aprobar' && ev.creadoEn >= mesActual.desde!;
+};
+
+const conCambiosEntregas = contratadas.filter((e) => e.estado === 'con_cambios').map(entrada).sort(masViejoPrimero);
+const reabiertas = conCambiosEntregas.filter((x) => x.situacion.reabierta).length;
+const columnasEntregas = [
+  {
+    id: 'entregas-autorizacion', titulo: 'Esperan autorización', color: 'amarillo',
+    vacio: 'Nada espera autorización.',
+    items: contratadas.filter((e) => e.estado === 'en_revision').map(entrada).sort(masViejoPrimero),
+    nota: null as string | null,
+  },
+  {
+    id: 'entregas-cambios', titulo: 'Con cambios pedidos', color: 'rosa',
+    vacio: 'Ninguna etapa tiene cambios pedidos.',
+    // Las reabiertas van primero: son las que ya estaban autorizadas.
+    items: [...conCambiosEntregas.filter((x) => x.situacion.reabierta), ...conCambiosEntregas.filter((x) => !x.situacion.reabierta)],
+    nota: reabiertas > 0 ? (reabiertas === 1 ? '1 reabierta' : `${reabiertas} reabiertas`) : null,
+  },
+  {
+    id: 'entregas-proceso', titulo: 'En proceso', color: 'azul',
+    vacio: 'Nada en proceso ahora mismo.',
+    items: contratadas.filter((e) => e.estado === 'en_proceso').map(entrada).sort(masViejoPrimero),
+    nota: null,
+  },
+  {
+    id: 'entregas-autorizadas', titulo: 'Autorizadas este mes', color: 'verde',
+    vacio: 'Todavía nada autorizado este mes.',
+    items: contratadas.filter(autorizadaEsteMes).map(entrada).sort((a, b) => b.fecha.getTime() - a.fecha.getTime()),
+    nota: null,
+  },
+];
+// Cuántas se ven de entrada por columna; el resto, detrás de «Ver las N».
+const VISIBLES_POR_COLUMNA = 5;
+
 // ── Por operador ─────────────────────────────────────────────────────────
 // `lista` ya viene recortada por `condicionClientes`: al operador le llegan
 // solo sus clientes y, por tanto, solo su fila. Los operadores activos sin
@@ -292,7 +360,7 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
   {/* Cada cifra es un enlace a su bloque de esta misma página. El nombre
      accesible es la frase completa («Clientes activos: 3. Ir a avance por
      cliente»), no solo el número. */}
-  <nav class="indicadores cinco" aria-label="Indicadores">
+  <nav class="indicadores seis" aria-label="Indicadores">
     <a href="#avance" class="indicador rosa" aria-label={`Clientes activos: ${clientesActivos}. Ir a avance por cliente`}>
       <Icono nombre="clientes" /><span class="valor cifra">{clientesActivos}</span><span class="nombre">Clientes activos</span>
     </a>
@@ -307,6 +375,9 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
     </a>
     <a href="#por-vencer" class="indicador rosa" aria-label={`Meses por vencer: ${porVencer.length}. Ir a meses por vencer`}>
       <Icono nombre="reloj" /><span class="valor cifra">{porVencer.length}</span><span class="nombre">Meses por vencer</span>
+    </a>
+    <a href="#entregas-cambios" class="indicador rosa" aria-label={`Con cambios pedidos: ${conCambiosEntregas.length}. Ir a estado de las entregas`}>
+      <Icono nombre="alerta" /><span class="valor cifra">{conCambiosEntregas.length}</span><span class="nombre">Con cambios pedidos</span>
     </a>
   </nav>
 
@@ -332,7 +403,7 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
             <li class="renglon">
               <div class="cuerpo">
                 <strong>{e.cliente}</strong>
-                <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · {ETIQUETA_MOTIVO[e.motivo]} · desde {fechaCorta(e.actualizadoEn)}</p>
+                <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · {situacionPendiente(e, mirada, ahora).resumen}</p>
               </div>
               <a href={enlacePendiente(e)} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
             </li>
@@ -341,7 +412,7 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
             <li class="renglon">
               <div class="cuerpo">
                 <strong>{c.cliente}</strong>
-                <p class="secundario">{NOMBRE_ETAPA[c.etapa]} · Comentario sin atender · {fechaCorta(c.creadoEn)}</p>
+                <p class="secundario">{NOMBRE_ETAPA[c.etapa]} · {fraseComentario(c, mirada, ahora)}</p>
                 <p class="secundario comentario-texto">{c.texto}</p>
               </div>
               <a href={`/clientes/${c.clientId}`} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
@@ -350,6 +421,66 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
         </ul>
       </div>
     )}
+  </section>
+
+  {/* Estado de las entregas: las etapas contratadas de los clientes visibles,
+     por situación. La frase de cada una es la misma de la tarjeta de la ficha,
+     según quien mira (`situacionEtapa`). En escritorio, cuatro columnas; en
+     celular, una debajo de otra. */}
+  <section class="seccion" id="entregas" aria-labelledby="t-entregas">
+    <div class="seccion-cabeza">
+      <h2 id="t-entregas">Estado de las entregas</h2>
+    </div>
+    <div class="entregas">
+      {columnasEntregas.map((col) => (
+        <section class="tarjeta entregas-columna" id={col.id} aria-labelledby={`${col.id}-titulo`}>
+          <header class="entregas-cabeza">
+            <h3 id={`${col.id}-titulo`}>{col.titulo}</h3>
+            <span class={`etiqueta ${col.color}`}><span class="cifra">{col.items.length}</span></span>
+          </header>
+          {col.nota && <p class="secundario entregas-nota">{col.nota}</p>}
+          {col.items.length === 0 ? (
+            <p class="secundario entregas-vacio">{col.vacio}</p>
+          ) : (
+            <>
+              <ul class="entregas-lista">
+                {col.items.slice(0, VISIBLES_POR_COLUMNA).map((x) => (
+                  <li>
+                    <a href={x.enlace}>
+                      <strong>{x.cliente}</strong>
+                      <span class="secundario">{NOMBRE_ETAPA[x.etapa]}</span>
+                      <span class={`entregas-frase${x.situacion.destacada ? ' le-toca' : ''}`}>
+                        {x.situacion.reabierta && <span class="etiqueta rosa">Reabierta</span>}
+                        {x.situacion.resumen}
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              {col.items.length > VISIBLES_POR_COLUMNA && (
+                <details class="entregas-mas">
+                  <summary>Ver las {col.items.length}</summary>
+                  <ul class="entregas-lista">
+                    {col.items.slice(VISIBLES_POR_COLUMNA).map((x) => (
+                      <li>
+                        <a href={x.enlace}>
+                          <strong>{x.cliente}</strong>
+                          <span class="secundario">{NOMBRE_ETAPA[x.etapa]}</span>
+                          <span class={`entregas-frase${x.situacion.destacada ? ' le-toca' : ''}`}>
+                            {x.situacion.reabierta && <span class="etiqueta rosa">Reabierta</span>}
+                            {x.situacion.resumen}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </>
+          )}
+        </section>
+      ))}
+    </div>
   </section>
 
   <section class="seccion" id="avance" aria-labelledby="t-avance">
@@ -594,12 +725,11 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
      de la pantalla. Completo se lee en /pendientes. */
   .comentario-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* ── Cifras de arriba: cinco enlaces con aspecto de tarjeta ────────────
-     Cinco no caben en la rejilla de cuatro de `.indicadores`; a partir de
-     1100px van en una fila, antes en dos columnas y la quinta a lo ancho. */
-  @media (min-width: 900px) { .indicadores.cinco { grid-template-columns: repeat(3, 1fr); } }
-  @media (min-width: 1100px) { .indicadores.cinco { grid-template-columns: repeat(5, 1fr); } }
-  @media (max-width: 899px) { .indicadores.cinco > :last-child { grid-column: 1 / -1; } }
+  /* ── Cifras de arriba: seis enlaces con aspecto de tarjeta ─────────────
+     Seis no caben en la rejilla de cuatro de `.indicadores`: en celular van
+     de dos en dos (tres filas parejas) y desde 900px de tres en tres. En una
+     sola fila de seis, el gasto en dólares no cabe a 1280px. */
+  @media (min-width: 900px) { .indicadores.seis { grid-template-columns: repeat(3, 1fr); } }
   a.indicador {
     display: block; min-width: 0; text-decoration: none; color: inherit; cursor: pointer;
     border: 1px solid transparent; transition: transform 0.15s ease, border-color 0.15s ease;
@@ -608,11 +738,34 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
   a.indicador:focus-visible { border-radius: var(--r); }
   /* El gasto en dólares es la cifra más ancha («USD 1,234.56»): se encoge
      un poco en vez de desbordar la tarjeta a cinco columnas. */
-  .indicadores.cinco .valor { font-size: clamp(22px, 2.4vw, 30px); overflow-wrap: anywhere; }
+  .indicadores.seis .valor { font-size: clamp(22px, 2.4vw, 30px); overflow-wrap: anywhere; }
 
   /* Al saltar desde una cifra, el título del bloque no queda escondido
      debajo de la barra superior pegajosa (`header.superior`, 81px). */
   .seccion[id] { scroll-margin-top: 100px; }
+
+  /* ── Estado de las entregas ──────────────────────────────────────────── */
+  .entregas { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 700px) { .entregas { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1100px) { .entregas { grid-template-columns: repeat(4, 1fr); } }
+  /* `.tarjeta + .tarjeta` separa tarjetas apiladas; en la rejilla sobra. */
+  .entregas-columna { padding: 18px; min-width: 0; margin: 0; }
+  .entregas-cabeza { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .entregas-cabeza h3 { min-width: 0; }
+  .entregas-nota { margin-top: 4px; }
+  .entregas-vacio { margin-top: 12px; }
+  .entregas-lista { list-style: none; padding: 0; margin: 10px 0 0; }
+  .entregas-lista li { border-top: 1px solid var(--linea); }
+  .entregas-lista a {
+    display: flex; flex-direction: column; gap: 2px; padding: 10px 0; min-height: 44px;
+    text-decoration: none; color: inherit; overflow-wrap: anywhere;
+  }
+  .entregas-lista a:hover strong { color: var(--rosa); }
+  .entregas-lista strong { color: var(--tinta); font: var(--t-small); font-weight: 600; }
+  .entregas-frase { font: var(--t-small); color: var(--texto); }
+  .entregas-frase.le-toca { color: var(--rosa); font-weight: 600; }
+  .entregas-frase .etiqueta { margin-right: 6px; vertical-align: 1px; }
+  .entregas-mas summary { cursor: pointer; font: var(--t-small); color: var(--rosa); padding: 10px 0; min-height: 44px; display: flex; align-items: center; }
 
   .aviso-atascados { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 14px; }
 

@@ -5,6 +5,7 @@ import { NOMBRE_ETAPA } from '@/flujo/reglas';
 import { listarPendientes } from '@/lib/pendientes';
 import { enlacePendiente } from '@/lib/ui/enlaces';
 import { fechaCorta } from '@/lib/ui/fecha';
+import { situacionPendiente, fraseComentario } from '@/flujo/situacion';
 
 const usuario = Astro.locals.usuario;
 
@@ -52,6 +53,13 @@ const esperandoCliente = pendientes.esperandoCliente;
 const comentariosPendientes = pendientes.comentarios;
 const totalComentariosPendientes = pendientes.totalComentarios;
 const conteoPorEtapa = new Map<string, number>(pendientes.etapas.map((e) => [e.id, e.comentariosAbiertos]));
+
+// Quién pidió qué y cuándo, con la misma frase que la tarjeta de la ficha y el
+// Inicio (`situacionEtapa`, src/flujo/situacion.ts). Solo el texto: la lista y
+// los totales son los de `listarPendientes`, sin tocar.
+const ahora = new Date();
+const mirada = { rol: usuario.rol === 'admin' ? 'admin' as const : 'operador' as const, usuarioId: usuario.id };
+const frase = (e: (typeof pendientes.etapas)[number]) => situacionPendiente(e, mirada, ahora).resumen;
 ---
 
 <Base titulo="Pendientes" activo="pendientes">
@@ -78,16 +86,16 @@ const conteoPorEtapa = new Map<string, number>(pendientes.etapas.map((e) => [e.i
         <div class="tabla-envoltura">
           <table>
             <thead>
-              <tr><th>Cliente</th><th>Etapa</th><th>Desde</th><th>Operador</th><th></th></tr>
+              <tr><th>Cliente</th><th>Etapa</th><th>Solicitud</th><th>Operador</th><th></th></tr>
             </thead>
             <tbody>
               {enRevision.map((e) => (
                 <tr>
                   <td>{e.cliente}</td>
                   <td>{NOMBRE_ETAPA[e.etapa]}</td>
-                  <td>{fecha(e.actualizadoEn)}</td>
+                  <td>{frase(e)}</td>
                   <td>{e.operador ?? 'Sin asignar'}</td>
-                  <td><a class="btn fantasma chico" href={enlacePendiente(e)}><Icono nombre="abrir" />Ver</a></td>
+                  <td><a class="btn fantasma chico" href={enlacePendiente(e)}><Icono nombre="abrir" />Revisar</a></td>
                 </tr>
               ))}
             </tbody>
@@ -112,7 +120,7 @@ const conteoPorEtapa = new Map<string, number>(pendientes.etapas.map((e) => [e.i
                   <li class="renglon">
                     <div class="cuerpo">
                       <strong>{e.cliente}</strong>
-                      <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · desde {fecha(e.actualizadoEn)}{n > 0 ? ` · ${n} ${n === 1 ? 'comentario abierto' : 'comentarios abiertos'}` : ''}</p>
+                      <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · {frase(e)}{n > 0 ? ` · ${n} ${n === 1 ? 'comentario abierto' : 'comentarios abiertos'}` : ''}</p>
                     </div>
                     <a href={enlacePendiente(e)} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
                   </li>
@@ -134,7 +142,7 @@ const conteoPorEtapa = new Map<string, number>(pendientes.etapas.map((e) => [e.i
                 <li class="renglon">
                   <div class="cuerpo">
                     <strong>{e.cliente}</strong>
-                    <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · desde {fecha(e.actualizadoEn)}</p>
+                    <p class="secundario">{NOMBRE_ETAPA[e.etapa]} · {frase(e)}</p>
                   </div>
                   <a href={`/clientes/${e.clientId}`} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>
                 </li>
@@ -182,7 +190,7 @@ const conteoPorEtapa = new Map<string, number>(pendientes.etapas.map((e) => [e.i
                 <li class="renglon">
                   <div class="cuerpo">
                     <strong>{c.cliente}</strong>
-                    <p class="secundario">{NOMBRE_ETAPA[c.etapa]} · {fecha(c.creadoEn)}</p>
+                    <p class="secundario">{NOMBRE_ETAPA[c.etapa]} · {fraseComentario(c, mirada, ahora)}</p>
                     <p class="secundario">{c.texto}</p>
                   </div>
                   <a href={`/clientes/${c.clientId}`} class="btn fantasma chico"><Icono nombre="abrir" />Ver</a>

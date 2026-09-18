@@ -19,6 +19,7 @@ import { clienteOperable, clienteVisible, esUuid } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
 import { nombreVisible } from '@/lib/usuarios';
 import { enlaceDocumento } from '@/lib/ui/enlaces';
+import type { EventoEntrada } from './situacion';
 import { avisarJob, avisarTransicion, avisarComentarioCliente, avisarRespuestaCliente, avisarRespuestaDelCliente, type EventoAviso } from './avisos';
 
 /**
@@ -407,6 +408,75 @@ export async function comentariosAbiertosPorEtapa(filas: { id: string }[], ejecu
     .groupBy(comentarios.etapaId);
 
   for (const f of filasConteo) resultado.set(f.etapaId, f.n);
+  return resultado;
+}
+
+/**
+ * Observaciones del cliente todavía abiertas, por etapa: comentarios de
+ * primer nivel con `autor_rol = 'cliente'`. Una sola consulta agrupada para
+ * todas las etapas recibidas; la que no tiene ninguna no viene en el `Map`.
+ */
+export async function observacionesClientePorEtapa(etapaIds: string[], ejecutor: Ejecutor = db): Promise<Map<string, number>> {
+  const ids = [...new Set(etapaIds)];
+  if (ids.length === 0) return new Map();
+  const filas = await ejecutor
+    .select({ etapaId: comentarios.etapaId, n: sql<number>`count(*)::int` })
+    .from(comentarios)
+    .where(and(
+      inArray(comentarios.etapaId, ids), eq(comentarios.estado, 'abierto'),
+      isNull(comentarios.respuestaDe), eq(comentarios.autorRol, 'cliente'),
+    ))
+    .groupBy(comentarios.etapaId);
+  return new Map(filas.map((f) => [f.etapaId, f.n]));
+}
+
+/**
+ * El evento que dejó a cada etapa en su estado actual —quién pidió la
+ * autorización, quién pidió los cambios, quién la reabrió o la autorizó—, con
+ * su autor ya formateado (`nombreVisible`). Es lo que lee `situacionEtapa`
+ * (src/flujo/situacion.ts) para decir qué pasó, quién y cuándo.
+ *
+ * **Una sola consulta para todas las etapas recibidas** (`DISTINCT ON`), no
+ * una por etapa ni por tipo de evento: la ficha la pide para sus cuatro
+ * etapas, y el Inicio y `/pendientes` para todas las que enseñan.
+ *
+ * Se toma el último evento cuyo `a` es el estado de hoy y que de verdad cambió
+ * de estado (`de` distinto de `a`): una edición o un comentario dentro de la
+ * misma revisión no cuentan como «quién la dejó así». Así, en una etapa
+ * `en_revision` sale el `solicitar` de ESTA revisión, no uno viejo de un ciclo
+ * anterior; y en una `con_cambios` sale el `pedir_cambios` o el `reabrir` que
+ * la trajo, o el `generado`/`comentario_cliente` si llegó por ahí.
+ *
+ * La etapa que no tiene un evento así no viene en el `Map`: quien lo lee dice
+ * la frase sin nombre, sin inventar a nadie. Con la lista vacía no consulta.
+ */
+export async function eventosDeEntrada(etapaIds: string[], ejecutor: Ejecutor = db): Promise<Map<string, EventoEntrada>> {
+  const resultado = new Map<string, EventoEntrada>();
+  const ids = [...new Set(etapaIds)];
+  if (ids.length === 0) return resultado;
+
+  const filas = await ejecutor
+    .selectDistinctOn([etapaEventos.etapaId], {
+      etapaId: etapaEventos.etapaId, accion: etapaEventos.accion, usuarioId: etapaEventos.usuarioId,
+      comentario: etapaEventos.comentario, creadoEn: etapaEventos.creadoEn,
+      nombre: users.nombre, apellido: users.apellido, email: users.email,
+    })
+    .from(etapaEventos)
+    .innerJoin(clienteEtapas, and(eq(clienteEtapas.id, etapaEventos.etapaId), eq(clienteEtapas.estado, etapaEventos.a)))
+    .leftJoin(users, eq(users.id, etapaEventos.usuarioId))
+    .where(and(inArray(etapaEventos.etapaId, ids), sql`${etapaEventos.de} IS DISTINCT FROM ${etapaEventos.a}`))
+    .orderBy(etapaEventos.etapaId, desc(etapaEventos.creadoEn));
+
+  for (const f of filas) {
+    resultado.set(f.etapaId, {
+      accion: f.accion,
+      usuarioId: f.usuarioId,
+      // El `leftJoin` deja el correo en NULL si la cuenta ya no existe.
+      autor: f.email === null ? null : nombreVisible({ nombre: f.nombre, apellido: f.apellido, email: f.email }),
+      creadoEn: f.creadoEn,
+      comentario: f.comentario,
+    });
+  }
   return resultado;
 }
 

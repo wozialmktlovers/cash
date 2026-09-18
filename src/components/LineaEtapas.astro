@@ -11,7 +11,9 @@ import { NOMBRE_ETAPA } from '@/flujo/reglas';
 export type BotonResuelto =
   | { id: 'generar'; href: string }
   | { id: 'generar-growth' }
-  | { id: 'ver'; href: string }
+  // `texto` cambia la etiqueta: «Revisar documento» cuando la etapa espera la
+  // autorización de quien mira (`ordenBotones`, src/flujo/situacion.ts).
+  | { id: 'ver'; href: string; texto?: string }
   // El acceso al mes del desarrollo mensual (B3). No sale de `botonesEtapa`
   // como los demás: esa función decide qué transiciones puede pedir el
   // usuario, y esto no es una transición sino un enlace a la pantalla donde
@@ -28,8 +30,15 @@ export interface TarjetaEtapaVM {
   etapa: Etapa;
   numero: number;
   estado: Estado;
+  /** Texto del chip, ya según quién mira (`situacionEtapa`, src/flujo/situacion.ts). */
   etiquetaEstado: string;
   colorEstado: ColorEstado;
+  /** Le toca actuar a quien mira: chip lleno y recuadro resaltado. */
+  destacada: boolean;
+  /** Qué pasó, quién, cuándo y qué sigue. `null`: no se pinta. */
+  recuadro: string | null;
+  /** Lo que pidió el cliente (`avisoCliente`). `null`: no se pinta. */
+  recuadroCliente: string | null;
   marca: MarcaEtapa;
   actualizadoTexto: string;
   comentariosAbiertos: number;
@@ -75,10 +84,13 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'desarrollo_me
         <h3>{NOMBRE_ETAPA[t.etapa]}</h3>
       </header>
       <div class="etapa-chips">
-        <span class={`etiqueta ${t.colorEstado}`}>{t.etiquetaEstado}</span>
+        <span class={`etiqueta ${t.colorEstado}${t.destacada ? ' destacada' : ''}`}>{t.etiquetaEstado}</span>
         {t.marca === 'interna' && <span class="etiqueta marca">Interna</span>}
         {t.marca === 'no_contratada' && <span class="etiqueta marca">No contratada</span>}
       </div>
+
+      {t.recuadro && <p class={`etapa-recuadro${t.destacada ? ' le-toca' : ''}`}>{t.recuadro}</p>}
+      {t.recuadroCliente && <p class="etapa-recuadro cliente">{t.recuadroCliente}</p>}
 
       <p class="secundario">Actualizada: {t.actualizadoTexto}</p>
       <p class="secundario">
@@ -89,7 +101,7 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'desarrollo_me
         <div class="etapa-botones">
           {t.botones.map((b) => {
             if (b.id === 'generar') return <a href={b.href} class="btn chico">{ETIQUETA_BOTON.generar}</a>;
-            if (b.id === 'ver') return <a href={b.href} class="btn fantasma chico">{ETIQUETA_BOTON.ver}</a>;
+            if (b.id === 'ver') return <a href={b.href} class="btn fantasma chico">{b.texto ?? ETIQUETA_BOTON.ver}</a>;
             if (b.id === 'mensual') return <a href={b.href} class="btn chico">{b.texto}</a>;
             if (b.id === 'generar-growth') return <button type="button" class="btn chico" data-generar-growth data-etapa-id={t.etapaId}>{ETIQUETA_BOTON['generar-growth']}</button>;
             if (b.id === 'iniciar') return <button type="button" class="btn chico" data-accion="iniciar" data-etapa-id={t.etapaId}>{ETIQUETA_BOTON.iniciar}</button>;
@@ -203,6 +215,21 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'desarrollo_me
   }
   .etapa-cabeza h3 { flex: 1; min-width: 0; }
   .etapa-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  /* El chip ahora lleva nombres («Cambios pedidos · esperando a Ana Paw»):
+     en una tarjeta de un cuarto de ancho tiene que poder partirse. */
+  .etapa-chips .etiqueta { white-space: normal; line-height: 1.35; }
+  /* Le toca a quien mira: el chip va lleno, con el rosa del sistema. */
+  .etapa-chips .etiqueta.destacada { background: var(--rosa); color: var(--sobre-acento); font-weight: 600; }
+
+  /* Qué pasó, quién y cuándo. Neutro si solo informa; con el rosa del sistema
+     si la acción le toca a quien mira. */
+  .etapa-recuadro {
+    margin: 2px 0 0; padding: 10px 12px; border-radius: var(--r-sm);
+    font: var(--t-small); color: var(--texto); background: var(--gris);
+    border-left: 3px solid var(--linea); overflow-wrap: anywhere;
+  }
+  .etapa-recuadro.le-toca { background: var(--rosa-s); color: var(--tinta); border-left-color: var(--rosa); }
+  .etapa-recuadro.cliente { background: var(--amarillo-s); color: var(--tinta); border-left-color: var(--amarillo); }
   /* Los cinco colores de `COLOR_ESTADO` se fueron a global.css: la pantalla
      del lote mensual pinta los mismos chips y un <style> con scope no llega
      hasta allá. */

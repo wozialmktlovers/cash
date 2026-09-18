@@ -1,5 +1,5 @@
 ---
-import { eq, desc, and, ne, gt, isNull, asc } from 'drizzle-orm';
+import { eq, desc, and, ne, gt, isNull, asc, sql } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
 import LinksEditor from '@/components/LinksEditor';
@@ -12,10 +12,11 @@ import { puedeOperarCliente } from '@/lib/permisos';
 import { clienteVisible } from '@/lib/visibilidad';
 import { itemsPerdida } from '@/lib/borrado';
 import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
-import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults, clienteEtapas, etapaEventos, users, invitaciones } from '@/db';
+import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults, clienteEtapas, etapaEventos, users, invitaciones, contenidoPiezas } from '@/db';
 import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, tipoDocumentoDe, type Etapa } from '@/flujo/reglas';
-import { botonesEtapa, marcaEtapa, COLOR_ESTADO } from '@/flujo/ui';
-import { etapasDelCliente, comentariosAbiertosPorEtapa, enlaceDocumento } from '@/flujo/servicio';
+import { botonesEtapa, marcaEtapa } from '@/flujo/ui';
+import { etapasDelCliente, comentariosAbiertosPorEtapa, enlaceDocumento, eventosDeEntrada, observacionesClientePorEtapa } from '@/flujo/servicio';
+import { situacionEtapa, avisoCliente, ordenBotones } from '@/flujo/situacion';
 import { loteActivo } from '@/contenido/servicio';
 import { ACCION_AUTO_APROBADA, asegurarLotesAlDia } from '@/contenido/auto-aprobacion';
 import { fechaHora as fechaHoraMx, fechaCorta } from '@/lib/ui/fecha';
@@ -105,6 +106,25 @@ const RUTA_GENERAR: Partial<Record<Etapa, string>> = {
 const loteDelMes = await loteActivo(cliente.id);
 const mesMensual = loteDelMes?.periodo ?? periodoActual();
 
+// Qué pasó con cada etapa, quién y cuándo (`situacionEtapa`,
+// src/flujo/situacion.ts): el evento que la dejó en su estado actual, las
+// observaciones abiertas del cliente y las piezas del mes que el cliente
+// devolvió. Una consulta cada una para todas las etapas, nunca una por etapa.
+const ahoraFicha = new Date();
+const idsEtapas = etapasCliente.map((e) => e.id);
+const [eventoPorEtapa, observacionesPorEtapa, [{ n: piezasConCambios }]] = await Promise.all([
+  eventosDeEntrada(idsEtapas),
+  observacionesClientePorEtapa(idsEtapas),
+  loteDelMes
+    ? db.select({ n: sql<number>`count(*)::int` }).from(contenidoPiezas)
+        .where(and(eq(contenidoPiezas.loteId, loteDelMes.id), eq(contenidoPiezas.estadoCliente, 'cambios')))
+    : Promise.resolve([{ n: 0 }]),
+]);
+const nombreResponsable = responsable ? nombreVisible(responsable) : null;
+// El cliente nunca llega a la ficha, pero el tipo de `usuario.rol` lo admite:
+// se le da la mirada del operador, que es la que no autoriza nada.
+const mirada = { rol: esAdmin ? 'admin' as const : 'operador' as const, usuarioId: usuario.id };
+
 const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
   const comentariosAbiertos = comentariosAbiertosPorEtapaId.get(fila.id) ?? 0;
 
@@ -114,11 +134,25 @@ const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
 
   // Traduce cada botón «permitido» del motor de reglas a lo que la interfaz
   // necesita para pintarlo (enlace de Generar/Ver documento según la etapa).
-  const botonesResueltos: BotonResuelto[] = botones.map((b): BotonResuelto => {
+  const situacion = situacionEtapa({
+    etapa: fila.etapa, estado: fila.estado, actualizadoEn: fila.actualizadoEn,
+    evento: eventoPorEtapa.get(fila.id) ?? null, operador: nombreResponsable, comentariosAbiertos,
+  }, mirada, ahoraFicha);
+
+  // Cuando la etapa espera la autorización de quien mira, el enlace al
+  // documento es el primer paso («Revisar documento») y va antes que
+  // «Autorizar» y «Pedir cambios» (`ordenBotones`).
+  const esperaMiAutorizacion = mirada.rol === 'admin' && fila.estado === 'en_revision';
+  const botonesResueltos: BotonResuelto[] = ordenBotones(botones, fila.estado, mirada.rol).map((b): BotonResuelto => {
     if (b.id === 'generar') {
       return fila.etapa === 'manual_campana' ? { id: 'generar-growth' } : { id: 'generar', href: RUTA_GENERAR[fila.etapa]! };
     }
-    if (b.id === 'ver') return { id: 'ver', href: enlaceDocumento(tipoDocumentoDe(fila.etapa)!, fila.documentoId!) };
+    if (b.id === 'ver') {
+      return {
+        id: 'ver', href: enlaceDocumento(tipoDocumentoDe(fila.etapa)!, fila.documentoId!),
+        ...(esperaMiAutorizacion ? { texto: 'Revisar documento' } : {}),
+      };
+    }
     return b;
   });
 
@@ -140,8 +174,14 @@ const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
     etapa: fila.etapa,
     numero: i + 1,
     estado: fila.estado,
-    etiquetaEstado: ETIQUETA_ESTADO_ETAPA[fila.estado],
-    colorEstado: COLOR_ESTADO[fila.estado],
+    etiquetaEstado: situacion.chip,
+    colorEstado: situacion.color,
+    destacada: situacion.destacada,
+    recuadro: situacion.recuadro,
+    recuadroCliente: avisoCliente({
+      etapa: fila.etapa, cliente: cliente.nombre,
+      observaciones: observacionesPorEtapa.get(fila.id) ?? 0, piezasConCambios,
+    }),
     marca: marcaEtapa(fila),
     actualizadoTexto: fechaHora(fila.actualizadoEn),
     comentariosAbiertos,

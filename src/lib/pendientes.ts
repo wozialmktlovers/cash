@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, isNull, ne, sql, type SQL } from 'drizzle-orm';
 import { db, clienteEtapas, clients, users, comentarios } from '@/db';
-import { comentariosAbiertosPorEtapa } from '@/flujo/servicio';
+import { comentariosAbiertosPorEtapa, eventosDeEntrada } from '@/flujo/servicio';
+import type { EventoEntrada } from '@/flujo/situacion';
 import type { Etapa, TipoDocumento } from '@/flujo/reglas';
 import { condicionClientes } from './visibilidad';
 import { nombreVisible } from './usuarios';
@@ -175,12 +176,23 @@ export type EtapaPendiente = {
    * las `con_cambios` (es el único grupo que lo enseña); el resto va en 0.
    */
   comentariosAbiertos: number;
+  /**
+   * El evento que dejó la etapa en su estado (`eventosDeEntrada`): quién pidió
+   * la autorización, quién pidió los cambios o reabrió, y cuándo. Solo para
+   * decir la frase (`situacionEtapa`); no decide nada de lo que cuenta como
+   * pendiente. `null` si no hay un evento así.
+   */
+  evento: EventoEntrada | null;
 };
 
 export type ComentarioPendiente = {
   id: string;
   texto: string;
   creadoEn: Date;
+  /** Quién lo dejó, ya con `nombreVisible`; `null` si la cuenta ya no existe. */
+  autorId: string | null;
+  autor: string | null;
+  autorRol: 'admin' | 'operador' | 'cliente';
   etapa: Etapa;
   clientId: string;
   cliente: string;
@@ -303,6 +315,7 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
       motivo: 'en_revision' as const,
       operador: operadorEmail === null ? null : nombreVisible({ nombre: operadorNombre, apellido: operadorApellido, email: operadorEmail }),
       comentariosAbiertos: 0,
+      evento: null,
     }));
   } else if (usuario.rol === 'operador') {
     const cond = condicionClientes(usuario);
@@ -325,8 +338,8 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
     // separado en `/pendientes` y así el orden dentro de cada uno es el que
     // decidió Postgres para esa consulta, igual que antes de extraer esto.
     todas = [
-      ...conCambios.map((fila) => ({ ...fila, motivo: 'con_cambios' as const, operador: null, comentariosAbiertos: 0 })),
-      ...enProceso.map((fila) => ({ ...fila, motivo: 'en_proceso' as const, operador: null, comentariosAbiertos: 0 })),
+      ...conCambios.map((fila) => ({ ...fila, motivo: 'con_cambios' as const, operador: null, comentariosAbiertos: 0, evento: null })),
+      ...enProceso.map((fila) => ({ ...fila, motivo: 'en_proceso' as const, operador: null, comentariosAbiertos: 0, evento: null })),
     ];
     // Lo más viejo arriba, mezclando los dos grupos. `sort` es estable, así
     // que dos etapas con la misma fecha conservan el orden en que vinieron de
@@ -343,7 +356,7 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
         .where(and(esperaAlCliente(), cond))
         .orderBy(asc(clienteEtapas.actualizadoEn));
       todasEsperandoCliente = esperando.map((fila) => ({
-        ...fila, motivo: 'esperando_cliente' as const, operador: null, comentariosAbiertos: 0,
+        ...fila, motivo: 'esperando_cliente' as const, operador: null, comentariosAbiertos: 0, evento: null,
       }));
     }
 
@@ -353,13 +366,22 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
       .select({
         id: comentarios.id, texto: comentarios.texto, creadoEn: comentarios.creadoEn,
         etapa: clienteEtapas.etapa, clientId: clients.id, cliente: clients.nombre,
+        autorId: comentarios.autorId, autorRol: comentarios.autorRol,
+        autorNombre: users.nombre, autorApellido: users.apellido, autorEmail: users.email,
       })
       .from(comentarios)
       .innerJoin(clienteEtapas, eq(clienteEtapas.id, comentarios.etapaId))
       .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+      // Solo para el nombre de quien comentó: un `leftJoin` a una fila por
+      // comentario no cambia cuántos hay, y el `count` de abajo no lo lleva.
+      .leftJoin(users, eq(users.id, comentarios.autorId))
       .where(condicionComentarios)
       .orderBy(desc(comentarios.creadoEn));
-    comentariosPendientes = limiteComentarios === undefined ? await comentariosQuery : await comentariosQuery.limit(limiteComentarios);
+    const filasComentarios = limiteComentarios === undefined ? await comentariosQuery : await comentariosQuery.limit(limiteComentarios);
+    comentariosPendientes = filasComentarios.map(({ autorNombre, autorApellido, autorEmail, ...c }) => ({
+      ...c,
+      autor: autorEmail === null ? null : nombreVisible({ nombre: autorNombre, apellido: autorApellido, email: autorEmail }),
+    }));
 
     // Cuenta aparte (barata, sin traer filas) para saber si la lista de arriba
     // se quedó corta y hay que ofrecer «Ver todos».
@@ -382,6 +404,12 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
   const conCambiosVisibles = etapas.filter((e) => e.motivo === 'con_cambios');
   const conteoPorEtapa = await comentariosAbiertosPorEtapa(conCambiosVisibles);
   for (const e of conCambiosVisibles) e.comentariosAbiertos = conteoPorEtapa.get(e.id) ?? 0;
+
+  // Quién pidió qué y cuándo, para la frase de cada renglón. Una sola consulta
+  // para todas las etapas que se van a enseñar, después de recortar: no toca
+  // `todas` ni ningún total, así que los tres números siguen cuadrando.
+  const eventos = await eventosDeEntrada(etapas.map((e) => e.id));
+  for (const e of etapas) e.evento = eventos.get(e.id) ?? null;
 
   return {
     etapas,
