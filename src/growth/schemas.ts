@@ -178,7 +178,9 @@ export const growthSchema = z.object({
   // ninguna, ni el documento guardado debe quedar imposible de editar.
   campanasMeta: z.array(campanaMetaSchema).min(1).max(3),
   campanasGoogle: z.array(campanaGoogleSchema).min(1).max(5),
-  creativos: z.array(creativoSchema).length(9),
+  // Nueve es lo esperado (3 grupos × 3 formatos), pero un manual con menos
+  // se guarda y se puede completar a mano, en vez de perder la etapa entera.
+  creativos: z.array(creativoSchema).min(1).max(9),
 
   promptsImagen: z.object({
     base: z.string().trim().min(1),

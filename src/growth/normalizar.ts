@@ -1,5 +1,5 @@
 import { aEntero, aListaDeTextos, aTexto } from '@/research/normalizar';
-import { CLAVES_GOOGLE, GRUPOS } from './schemas';
+import { CLAVES_GOOGLE, GRUPOS, FORMATOS, RATIO_POR_FORMATO } from './schemas';
 
 /**
  * Arreglos de forma de los agentes del manual de campaña, antes de validar.
@@ -175,4 +175,52 @@ export function prepararGoogle(crudo: unknown): unknown {
     };
   }
   return v;
+}
+
+const SINONIMOS_FORMATO: Record<string, (typeof FORMATOS)[number]> = {
+  imagen: 'imagen', image: 'imagen', estatico: 'imagen', estatica: 'imagen', foto: 'imagen', post: 'imagen',
+  carrusel: 'carrusel', carousel: 'carrusel', carrousel: 'carrusel',
+  video: 'video', reel: 'video', reels: 'video', historia: 'video', story: 'video',
+};
+const MEDIDAS_POR_RATIO: Record<string, string> = { '1x1': '1080 × 1080 px', '4x5': '1080 × 1350 px', '9x16': '1080 × 1920 px' };
+
+/** «Carrusel 4:5», «Reel», «Imagen estática» → imagen/carrusel/video, si se reconoce. */
+function formatoMeta(v: unknown): unknown {
+  if (typeof v !== 'string') return v;
+  const t = sinAcentos(v).toLowerCase();
+  for (const p of t.split(/[^a-z]+/).filter(Boolean)) if (SINONIMOS_FORMATO[p]) return SINONIMOS_FORMATO[p];
+  return v;
+}
+
+/**
+ * Creativos: el ratio y las medidas no los elige el modelo, los dicta el
+ * formato (Mar de miel falló por «4:5» en vez de `4x5`). El ángulo, si no
+ * vino, se toma del de su grupo en la estructura, que es de donde sale.
+ */
+export function prepararCreativos(angulos: Partial<Record<(typeof GRUPOS)[number], string>> = {}) {
+  return (crudo: unknown): unknown => {
+    let v = desenvolver(llavesSinAcentos(crudo), ['creativos']);
+    if (Array.isArray(v)) v = { creativos: v };
+    if (!esObjeto(v)) return v;
+    renombrar(v, 'creativos', ['anuncios', 'piezas', 'creatividades']);
+    if (!Array.isArray(v.creativos)) return v;
+    v.creativos = v.creativos.filter(esObjeto).map((c) => {
+      const o: Record<string, unknown> = { ...c };
+      renombrar(o, 'copyA', ['copy1', 'opcionA', 'textoA']);
+      renombrar(o, 'copyB', ['copy2', 'opcionB', 'textoB']);
+      if ((!o.copyA || !o.copyB) && Array.isArray(o.copies ?? o.copys ?? o.opciones)) {
+        const lista = (o.copies ?? o.copys ?? o.opciones) as unknown[];
+        o.copyA ??= lista[0]; o.copyB ??= lista[1];
+      }
+      for (const k of ['copyA', 'copyB', 'angulo']) if (k in o) o[k] = aTexto(o[k]);
+      const grupo = grupoMeta(o.grupo);
+      if (grupo) o.grupo = grupo;
+      o.formato = formatoMeta(o.formato);
+      const ratio = RATIO_POR_FORMATO[o.formato as (typeof FORMATOS)[number]];
+      if (ratio) { o.ratio = ratio; o.medidas = MEDIDAS_POR_RATIO[ratio]; }
+      if (!o.angulo && grupo && angulos[grupo]) o.angulo = angulos[grupo];
+      return o;
+    });
+    return v;
+  };
 }

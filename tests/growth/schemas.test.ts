@@ -11,10 +11,10 @@ describe('growthSchema', () => {
     expect(r.success).toBe(true);
   });
 
-  it('rechaza ocho creativos: la estructura de la casa son nueve', () => {
-    const malo = clonar();
-    malo.creativos = malo.creativos.slice(0, 8);
-    expect(growthSchema.safeParse(malo).success).toBe(false);
+  it('acepta ocho creativos: un manual incompleto se guarda y se completa a mano', () => {
+    const parcial = clonar();
+    parcial.creativos = parcial.creativos.slice(0, 8);
+    expect(growthSchema.safeParse(parcial).success).toBe(true);
   });
 
   it('rechaza diez creativos', () => {
