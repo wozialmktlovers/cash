@@ -31,6 +31,8 @@ const ids = vi.hoisted(() => ({
   PIEZA_OTRO_MES: '00000000-0000-4000-8000-0000000000f2',
   PIEZA_AJENA: '00000000-0000-4000-8000-0000000000f3',
   ARTE_OTRO_MES: '00000000-0000-4000-8000-0000000000a4',
+  ARTE_NUEVO: '00000000-0000-4000-8000-0000000000a5',
+  PIEZA_NUEVA: '00000000-0000-4000-8000-0000000000f4',
 }));
 
 const espia = vi.hoisted(() => ({
@@ -79,6 +81,8 @@ vi.mock('@/db', async (importarReal) => {
       const json = valores.find((v): v is string => typeof v === 'string' && v.startsWith('['));
       const fileId = json ? (JSON.parse(json)[0] as { fileId: string }).fileId : null;
       const loteId = valores.find((v) => typeof v === 'string' && v !== json);
+      // Sin `@>`: las piezas del lote, como las pide el entregable.
+      if (!json) return filas.filter((p) => p.loteId === loteId);
       return filas.filter((p) => p.loteId === loteId
         && ((p.arte ?? []) as { fileId?: string }[]).some((a) => a.fileId === fileId));
     }
@@ -89,7 +93,7 @@ vi.mock('@/db', async (importarReal) => {
     const q: {
       tabla: string; valores: unknown[];
       from: (t: unknown) => typeof q; innerJoin: (t: unknown, c: unknown) => typeof q;
-      where: (c: unknown) => typeof q; limit: () => typeof q;
+      where: (c: unknown) => typeof q; limit: () => typeof q; orderBy: () => typeof q;
       then: (ok: (f: unknown[]) => unknown, err: (e: unknown) => unknown) => Promise<unknown>;
     } = {
       tabla: 'desconocida',
@@ -98,6 +102,7 @@ vi.mock('@/db', async (importarReal) => {
       innerJoin(_t, c) { atados(c, q.valores); return q; },
       where(c) { atados(c, q.valores); return q; },
       limit() { return q; },
+      orderBy() { return q; },
       then(ok, err) {
         espia.consultas.push({ tabla: q.tabla, valores: q.valores });
         return Promise.resolve(filtrar(q.tabla, q.valores)).then(ok, err);
@@ -126,7 +131,12 @@ vi.mock('@/lib/files', async (importarReal) => {
   };
 });
 
+// El barrido de vencimientos tiene sus propias pruebas; aquí solo estorbaría.
+vi.mock('@/contenido/auto-aprobacion', () => ({ asegurarLotesAlDia: async () => {} }));
+
 import { GET as GET_INTERNO } from '@/pages/api/clientes/[id]/files/[fileId]';
+import { resolverDocumentoPublico } from '@/lib/documento-publico';
+import { textoEnPreparacion } from '@/render/contenido/documento';
 import { GET as GET_PUBLICO } from '@/pages/p/[slug]/[token]/archivo/[fileId]';
 
 const admin = { id: '00000000-0000-4000-8000-00000000000a', email: 'admin@wozial.mx', nombre: null, apellido: null, rol: 'admin' as const, clientId: null, activo: true };
@@ -168,13 +178,23 @@ function poblarBase({ nombreArte = 'portada.png', mimeArte = 'image/png' } = {})
   espia.datos.researchResults = [
     { id: ids.DOCUMENTO, clientId: ids.CLIENTE },
   ];
+  // Los tres compartidos: un enlace solo nace al compartir el mes.
+  const lote = (id: string, clientId: string, periodo: string) => ({
+    id, clientId, periodo, estado: 'en_revision',
+    compartidoEn: new Date('2026-09-01T15:00:00Z'), limiteRevision: new Date('2026-09-04T15:00:00Z'),
+    creadoEn: new Date('2026-08-25T15:00:00Z'), contenidoActualizadoEn: null,
+  });
   espia.datos.contenidoLotes = [
-    { id: ids.LOTE, clientId: ids.CLIENTE },
-    { id: ids.LOTE_OTRO_MES, clientId: ids.CLIENTE },
-    { id: ids.LOTE_AJENO, clientId: ids.OTRO_CLIENTE },
+    lote(ids.LOTE, ids.CLIENTE, '2026-09'),
+    lote(ids.LOTE_OTRO_MES, ids.CLIENTE, '2026-08'),
+    lote(ids.LOTE_AJENO, ids.OTRO_CLIENTE, '2026-09'),
   ];
   espia.datos.contenidoPiezas = [
-    { id: ids.PIEZA, loteId: ids.LOTE, arte: [{ tipo: 'imagen', fileId: ids.ARTE }] },
+    {
+      id: ids.PIEZA, loteId: ids.LOTE, numero: 1, formato: 'post', plataforma: 'instagram',
+      fechaPublicacion: '2026-09-10', copy: 'Copy ya compartido', cta: '', hashtags: '',
+      arte: [{ tipo: 'imagen', fileId: ids.ARTE }], estadoCliente: 'pendiente', notaCliente: null,
+    },
     { id: ids.PIEZA_OTRO_MES, loteId: ids.LOTE_OTRO_MES, arte: [{ tipo: 'imagen', fileId: ids.ARTE_OTRO_MES }] },
     { id: ids.PIEZA_AJENA, loteId: ids.LOTE_AJENO, arte: [{ tipo: 'imagen', fileId: ids.ARTE_AJENO }] },
   ];
@@ -403,5 +423,82 @@ describe('GET archivo del enlace público', () => {
     espia.fallaElDisco = true;
     expect((await publico(ids.ARTE)).status).toBe(404);
     expect(errores).toHaveLength(1);
+  });
+});
+
+/**
+ * Un mes que se compartió, se reabrió y todavía no se vuelve a compartir.
+ *
+ * El enlace sigue vivo —está en el WhatsApp del cliente— pero el mes que hay
+ * detrás ya no es el que se le mandó: el operador le agregó una pieza con su
+ * arte y el lote volvió a «en proceso» con `compartido_en` nulo. El portal ya
+ * lo escondía (404); el enlace lo enseñaba entero. Ahora no enseña nada del
+ * lote: ni la pieza nueva, ni su arte, ni tampoco lo que sí se le había
+ * mandado, que igual vuelve con el reparto nuevo.
+ */
+describe('el enlace de un mes reabierto', () => {
+  const reabrir = () => {
+    const lote = espia.datos.contenidoLotes.find((l) => l.id === ids.LOTE)!;
+    Object.assign(lote, { estado: 'en_proceso', compartidoEn: null, limiteRevision: null });
+    espia.datos.clientFiles.push({
+      id: ids.ARTE_NUEVO, clientId: ids.CLIENTE, nombreOriginal: 'pieza-nueva.png', mime: 'image/png', ruta: `${ids.CLIENTE}/nueva.png`,
+    });
+    espia.datos.contenidoPiezas.push({
+      id: ids.PIEZA_NUEVA, loteId: ids.LOTE, numero: 2, formato: 'post', plataforma: 'instagram',
+      fechaPublicacion: '2026-09-20', copy: 'COPY DE LA PIEZA NUEVA SIN COMPARTIR', cta: '', hashtags: '',
+      arte: [{ tipo: 'imagen', fileId: ids.ARTE_NUEVO }], estadoCliente: 'pendiente', notaCliente: null,
+    });
+  };
+
+  it('no sirve el arte de la pieza nueva', async () => {
+    reabrir();
+    expect((await publico(ids.ARTE_NUEVO)).status).toBe(404);
+    expect(espia.leidos).toEqual([]);
+  });
+
+  it('tampoco el arte que sí se había compartido: el mes entero queda en pausa', async () => {
+    reabrir();
+    expect((await publico(ids.ARTE)).status).toBe(404);
+    expect(espia.leidos).toEqual([]);
+  });
+
+  it('el mismo arte, antes de reabrir, sí se servía', async () => {
+    expect((await publico(ids.ARTE)).status).toBe(200);
+  });
+
+  it('otro mes del mismo cliente, compartido, sigue sirviendo lo suyo', async () => {
+    reabrir();
+    expect((await publico(ids.ARTE_OTRO_MES, TOKEN_OTRO_MES)).status).toBe(200);
+  });
+
+  it('el documento no enseña la pieza nueva ni pide su arte: da el aviso amable', async () => {
+    reabrir();
+    const r = await resolverDocumentoPublico(TOKEN);
+    expect(r.tipo).toBe('en-preparacion');
+    if (r.tipo === 'no-encontrado') throw new Error('inalcanzable');
+    expect(r.slug).toBe('cafe-malinche');
+    expect(r.html).not.toContain('COPY DE LA PIEZA NUEVA SIN COMPARTIR');
+    expect(r.html).not.toContain(ids.ARTE_NUEVO);
+    expect(r.html).not.toContain(ids.ARTE);
+    expect(r.html).not.toContain('/archivo/');
+    const aviso = textoEnPreparacion('2026-09');
+    expect(aviso.titulo).toBe('Estamos actualizando tu contenido de septiembre.');
+    expect(r.html).toContain(aviso.titulo);
+    expect(r.html).toContain(aviso.detalle);
+    // Ni siquiera lee las piezas del lote.
+    expect(espia.consultas.some((c) => c.tabla === 'contenidoPiezas')).toBe(false);
+  });
+
+  it('sin reabrir, el mismo enlace enseña el entregable con sus artes', async () => {
+    const r = await resolverDocumentoPublico(TOKEN);
+    expect(r.tipo).toBe('html');
+    if (r.tipo === 'no-encontrado') throw new Error('inalcanzable');
+    expect(r.html).toContain(`archivo/${ids.ARTE}`);
+    expect(r.html).not.toContain(textoEnPreparacion('2026-09').titulo);
+  });
+
+  it('un token revocado sigue siendo un 404, no el aviso', async () => {
+    reabrir();
+    expect((await resolverDocumentoPublico(TOKEN_REVOCADO)).tipo).toBe('no-encontrado');
   });
 });

@@ -13,7 +13,7 @@
 // `envolverDocumento`; aquí solo se arman las cuatro secciones y la portada.
 
 import type { FlujoDatos } from '@/render/editorial/flujo-cliente';
-import { envolverDocumento } from '@/render/editorial/comunes';
+import { envolverDocumento, escapar } from '@/render/editorial/comunes';
 import { nombrePeriodo } from '@/lib/ui/periodo';
 import { ESTILOS_CONTENIDO } from './estilos';
 import { REVISION_SOLO_LECTURA, nombreMes, type MetaContenido, type PiezaEntregable, type Revision } from './datos';
@@ -107,4 +107,57 @@ export function renderizarContenido(
     flujo: opciones.flujo,
     volver: opciones.volver,
   });
+}
+
+/**
+ * Lo que ve el cliente cuando abre el enlace de un mes que **dejó de estar
+ * compartido**: se le mandó, se aprobó o se revisó, y después el equipo lo
+ * reabrió para agregarle o rehacerle algo (el lote vuelve a «en proceso» con
+ * `compartido_en` nulo).
+ *
+ * El enlace sigue vivo —está en el WhatsApp del cliente—, pero lo que hay
+ * detrás ya no es lo que se le mandó: puede traer piezas nuevas que nadie ha
+ * revisado, con su arte. Enseñarlas sería mandárselas sin querer, y un 404
+ * seco lo asustaría con un enlace que ayer servía. Así que se le dice la
+ * verdad en su idioma: lo estamos actualizando y se lo volvemos a compartir.
+ *
+ * No lleva **nada** del lote más que su mes: ni piezas, ni cifras, ni artes
+ * (que además su ruta niega, ver `resolverArchivoDelLote`). Misma envoltura
+ * editorial que el entregable, para que se vea como la misma casa.
+ */
+export function renderizarContenidoEnPreparacion(meta: { cliente: string; periodo: string; fecha: string }): string {
+  const mes = nombreMes(meta.periodo);
+  const aviso = textoEnPreparacion(meta.periodo);
+  const cuerpo = `<section class="portada" id="inicio">
+    <div class="portada-texto">
+      <div class="pila">
+        <p class="eyebrow">Contenido mensual · ${escapar(meta.cliente)} · ${escapar(nombrePeriodo(meta.periodo))}</p>
+        <h1>Contenido de ${escapar(mes)}</h1>
+      </div>
+    </div>
+    <section class="mensaje-cliente aparece">
+      <h2>${escapar(aviso.titulo)}</h2>
+      <p>${escapar(aviso.detalle)}</p>
+    </section>
+  </section>`;
+
+  return envolverDocumento({
+    titulo: `Contenido de ${mes} · ${meta.cliente}`,
+    etiqueta: `Contenido · ${nombrePeriodo(meta.periodo)}`,
+    cliente: meta.cliente,
+    fecha: meta.fecha,
+    // Sin secciones no hay índice: la raya vacía del índice lateral sobra.
+    estilos: `${ESTILOS_CONTENIDO}\n.indice-lateral ol:empty{border-left:0;}`,
+    indice: [],
+    cuerpo,
+  });
+}
+
+/** El texto del aviso, aparte para que las pruebas lo comparen tal cual. */
+export function textoEnPreparacion(periodo: string): { titulo: string; detalle: string } {
+  const mes = nombreMes(periodo);
+  return {
+    titulo: `Estamos actualizando tu contenido de ${mes}.`,
+    detalle: 'En cuanto esté listo te lo volvemos a compartir. No tienes que hacer nada mientras tanto.',
+  };
 }

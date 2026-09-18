@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { planContratacion } from '@/flujo/servicio';
-import { ETAPAS } from '@/flujo/reglas';
+import { ETAPAS, puedeGenerar } from '@/flujo/reglas';
 
 describe('planContratacion', () => {
   it('devuelve las 4 etapas siempre, en el orden de ETAPAS', () => {
@@ -36,10 +36,29 @@ describe('planContratacion', () => {
     expect(desarrollo).toEqual({ etapa: 'desarrollo_mensual', contratada: true, interna: false });
   });
 
-  it('sin investigación ni pilares ni manual_campana, la investigación no contratada no es interna (nadie la necesita)', () => {
+  // La etapa 3 depende de la investigación igual que pilares y el manual. Antes
+  // quedaba fuera de la regla y un cliente con solo «Desarrollo mensual» se
+  // atascaba: investigación ni contratada ni interna → no se podía generar →
+  // el mes no se podía abrir («Falta completar la investigación»).
+  it('si se contrata solo desarrollo_mensual, la investigación queda interna y no contratada', () => {
     const p = planContratacion(['desarrollo_mensual']);
-    const investigacion = p.find((e) => e.etapa === 'investigacion')!;
-    expect(investigacion).toEqual({ etapa: 'investigacion', contratada: false, interna: false });
+    expect(p).toEqual([
+      { etapa: 'investigacion', contratada: false, interna: true },
+      { etapa: 'pilares', contratada: false, interna: false },
+      { etapa: 'desarrollo_mensual', contratada: true, interna: false },
+      { etapa: 'manual_campana', contratada: false, interna: false },
+    ]);
+  });
+
+  it('con solo desarrollo_mensual, la investigación interna se puede generar (no «no está contratada»)', () => {
+    const p = planContratacion(['desarrollo_mensual']);
+    const etapas = p.map((e, i) => ({ id: `e${i}`, ...e, estado: 'no_iniciada' as const, documentoId: null }));
+    expect(puedeGenerar('investigacion', etapas, false)).toEqual({ ok: true, razon: expect.anything() });
+  });
+
+  it('con investigación contratada junto a desarrollo_mensual, no queda interna', () => {
+    const p = planContratacion(['investigacion', 'desarrollo_mensual']);
+    expect(p.find((e) => e.etapa === 'investigacion')).toEqual({ etapa: 'investigacion', contratada: true, interna: false });
   });
 
   it('selección vacía: ninguna contratada, investigación no queda interna (nadie la necesita)', () => {

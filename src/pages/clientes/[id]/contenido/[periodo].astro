@@ -136,9 +136,11 @@ const archivos: ArchivoCliente[] = await db
 // cliente vea lo nuevo.
 const reabierto = !!lote && lote.compartidoEn === null && filas.some((p) => p.estadoCliente !== 'pendiente');
 
-// **Un mes al que se le apagó el plazo.** Es lo que hace el sistema cuando el
-// plazo de la ronda se consumió mientras el mes esperaba al operador y algo lo
-// saca de `con_cambios` sin pasar por un reparto: `registrarRevision`
+// **Un mes al que se le apagó el plazo.** Al entrar en `con_cambios` el plazo
+// se apaga SIEMPRE, le queden los días que le queden (invariante (1),
+// `transicionarLote`, commit 265882b): la pelota pasa al operador. Si después
+// algo saca el mes de `con_cambios` sin pasar por un reparto, se queda sin
+// fecha: `registrarRevision`
 // (src/contenido/revision.ts) si el gesto es del cliente —se retracta de la
 // pieza que había devuelto— y `refrescarLote` (src/contenido/servicio.ts) si es
 // del operador —resuelve la petición borrando esa pieza—. La firma es un lote
@@ -153,7 +155,7 @@ const sinPlazo = !!lote && lote.compartidoEn !== null && lote.limiteRevision ===
 
 // De los dos meses sin fecha, este es el que además quedó **aprobado**: al salir
 // de `con_cambios` no quedaba ninguna pieza pendiente, así que el recálculo
-// dedujo `aprobada` y el plazo se apagó igual. Se distingue porque lo que hay
+// dedujo `aprobada`, sin fecha como el otro. Se distingue porque lo que hay
 // que decirle al operador es distinto: aquí el cliente no está revisando nada
 // —el mes está aprobado entero—, pero sigue pudiendo cambiar de opinión
 // mientras el mes no tenga fecha, y compartirlo otra vez es lo que lo cierra
@@ -215,20 +217,20 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
 
   {sinPlazo && (aprobadoSinPlazo ? (
     <p class="aviso amarillo" style="margin-bottom:18px">
-      <strong>Este mes está aprobado, pero sin fecha límite.</strong> El plazo de la ronda anterior se consumió
-      mientras el mes estaba de tu lado, y después se resolvió la petición que el cliente había dejado abierta
-      —él mismo retiró sus cambios, o se quitó esa pieza del mes—: con eso quedó aprobado lo que queda. Ese
-      reloj se paró a su favor, así que mientras no haya fecha sigue pudiendo cambiar de opinión sobre
-      cualquier pieza. Para cerrarlo, comparte el mes otra vez: eso le pone un plazo nuevo de {plazo} y,
-      cuando pase, el mes deja de admitir cambios.
+      <strong>Este mes está aprobado, pero sin fecha límite.</strong> Pasó por «con cambios», y ahí el plazo
+      se apaga siempre, aunque le quedaran días. Después la petición del cliente se resolvió sin volver a
+      compartir el mes —él mismo retiró sus cambios, o se quitó esa pieza del mes— y con eso quedó aprobado
+      lo que queda. Mientras no haya fecha, el cliente sigue pudiendo cambiar de opinión sobre cualquier
+      pieza. Para cerrarlo, comparte el mes otra vez: eso le pone un plazo nuevo de {plazo} y, cuando pase,
+      el mes deja de admitir cambios.
     </p>
   ) : (
     <p class="aviso amarillo" style="margin-bottom:18px">
-      <strong>Este mes se quedó sin fecha límite.</strong> El plazo de la ronda anterior se consumió mientras
-      el mes estaba de tu lado, y después se resolvió la petición que el cliente había dejado abierta. Hacer
-      valer ahí un plazo vencido habría dado por aprobadas, en el acto, las piezas que todavía no ha mirado,
-      así que se detuvo: el cliente sigue revisando en su portal, pero el mes ya no se va a aprobar solo.
-      Para que vuelva a tener fecha, comparte el mes otra vez: eso arranca un plazo nuevo de {plazo}.
+      <strong>Este mes se quedó sin fecha límite.</strong> Pasó por «con cambios», y ahí el plazo se apaga
+      siempre, aunque le quedaran días. Después la petición del cliente se resolvió sin volver a compartir
+      el mes, así que no hay plazo que retomar: el cliente sigue revisando en su portal, pero el mes ya no
+      se va a aprobar solo. Para que vuelva a tener fecha, comparte el mes otra vez: eso arranca un plazo
+      nuevo de {plazo}.
     </p>
   ))}
 

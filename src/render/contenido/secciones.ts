@@ -54,9 +54,9 @@ function cifraTarjeta(valor: string, etiqueta: string): string {
  * ── Y el mes compartido que se quedó SIN fecha límite ─────────────────────
  *
  * Es un estado real y hay que decirlo con todas las letras: un lote compartido
- * con `limite_revision` nulo, el que queda cuando el plazo se consumió mientras
- * el mes esperaba al equipo y después algo lo sacó de `con_cambios` sin pasar
- * por un reparto —el cliente retractándose (`registrarRevision`,
+ * con `limite_revision` nulo, el que queda cuando el mes pasó por `con_cambios`
+ * —donde el plazo se apaga siempre, le quedaran días o no— y después algo lo
+ * sacó de ahí sin pasar por un reparto —el cliente retractándose (`registrarRevision`,
  * src/contenido/revision.ts) o el operador resolviendo la petición con el
  * borrado de la pieza devuelta (`refrescarLote`, src/contenido/servicio.ts)—.
  * Llega aquí tanto `en_revision`, si al cliente le quedan piezas por mirar,
@@ -107,7 +107,7 @@ function mensajeAlCliente(meta: MetaContenido, revision: Revision): string {
     return `<section class="mensaje-cliente aparece">
       <h2>¡Hola! Tu contenido de ${escapar(mes)} sigue aquí, sin prisa.</h2>
       <p>Terminamos el calendario de publicaciones de ${escapar(mes)} para ${escapar(meta.cliente)}. Revísalo con calma: cada pieza trae su arte, su copy listo para copiar, su llamado a la acción y sus hashtags.</p>
-      <p><strong>Este mes ya no tiene fecha límite.</strong> El plazo de ${escapar(dias)} se agotó mientras la pelota estaba de nuestro lado, así que lo detuvimos en vez de hacerlo valer sobre lo que todavía no has visto: <strong>no vamos a dar por aprobado nada que no hayas aprobado tú</strong>. Tómate el tiempo que necesites con las piezas que te quedan.</p>
+      <p><strong>Este mes ya no tiene fecha límite.</strong> El plazo de ${escapar(dias)} se detuvo cuando nos pediste cambios, y desde entonces no hemos vuelto a compartirte el mes, así que no corre ningún reloj: <strong>no vamos a dar por aprobado nada que no hayas aprobado tú</strong>. Tómate el tiempo que necesites con las piezas que te quedan.</p>
       <p>Si más adelante volvemos a compartirte el mes, empieza un plazo nuevo de ${escapar(dias)} y lo verás aquí mismo, con su fecha y su cuenta regresiva.</p>
       ${comoDecidir}
       <div class="plazo">

@@ -8,7 +8,7 @@ import { aceptaDecision } from '@/contenido/revision';
 import { renderizarInvestigacion } from '@/render/investigacion/documento';
 import { renderizarManual } from '@/render/growth/manual';
 import { renderizarPilares } from '@/render/pilares/documento';
-import { renderizarContenido, type PiezaEntregable } from '@/render/contenido/documento';
+import { renderizarContenido, renderizarContenidoEnPreparacion, type PiezaEntregable } from '@/render/contenido/documento';
 import type { Arte } from '@/contenido/piezas';
 import { slugificar } from '@/lib/slug';
 
@@ -86,8 +86,20 @@ async function piezasDelLote(loteId: string): Promise<PiezaEntregable[]> {
  * cuenta regresiva ya en cero, es decir, el mismo documento diciéndole dos
  * cosas distintas. En el caso normal es una consulta sin filas y ninguna
  * escritura, y `asegurarLotesAlDia` nunca lanza.
+ *
+ * **Solo enseña un mes compartido** (`compartido_en` no nulo), igual que
+ * `/portal/contenido/[loteId]`. Un enlace solo nace al compartir, pero no
+ * muere cuando el mes se reabre: si el operador le agrega una pieza a un mes
+ * ya aprobado, el lote vuelve a «en proceso» con `compartido_en` nulo y el
+ * enlace que el cliente tiene en su WhatsApp le enseñaría la pieza nueva, sin
+ * revisar, con su arte. En vez de eso —y en vez de un 404 que lo asustaría—
+ * recibe el aviso de `renderizarContenidoEnPreparacion`, sin nada del lote más
+ * que su mes. Los artes los niega aparte `resolverArchivoDelLote`.
  */
-async function entregableDelLote(loteId: string, token: string): Promise<{ html: string; slug: string } | null> {
+async function entregableDelLote(
+  loteId: string,
+  token: string,
+): Promise<{ html: string; slug: string; compartido: boolean } | null> {
   // Una lectura mínima primero, solo para saber de qué cliente resolver los
   // vencimientos; el lote se vuelve a leer después porque el barrido pudo
   // cambiarle el estado y las piezas.
@@ -102,12 +114,24 @@ async function entregableDelLote(loteId: string, token: string): Promise<{ html:
   const [c] = await db.select().from(clients).where(eq(clients.id, lote.clientId)).limit(1);
   if (!c) return null;
 
+  if (!lote.compartidoEn) {
+    return {
+      html: renderizarContenidoEnPreparacion({
+        cliente: c.nombre,
+        periodo: lote.periodo,
+        fecha: new Date().toISOString().slice(0, 10),
+      }),
+      slug: slugificar(c.nombre),
+      compartido: false,
+    };
+  }
+
   const piezas = await piezasDelLote(lote.id);
 
   const html = renderizarContenido(piezas, {
     cliente: c.nombre,
     periodo: lote.periodo,
-    fecha: (lote.compartidoEn ?? lote.creadoEn).toISOString().slice(0, 10),
+    fecha: lote.compartidoEn.toISOString().slice(0, 10),
     compartidoEn: lote.compartidoEn,
     limiteRevision: lote.limiteRevision,
     diasRevision: c.diasRevision ?? DIAS_REVISION_POR_OMISION,
@@ -119,7 +143,7 @@ async function entregableDelLote(loteId: string, token: string): Promise<{ html:
     cerrado: !aceptaDecision(lote, new Date()),
   }, { baseArchivos: baseArchivosPublica(token) });
 
-  return { html, slug: slugificar(c.nombre) };
+  return { html, slug: slugificar(c.nombre), compartido: true };
 }
 
 /**
@@ -131,6 +155,8 @@ async function entregableDelLote(loteId: string, token: string): Promise<{ html:
  */
 export async function resolverDocumentoPublico(token: string): Promise<
   | { tipo: 'html'; html: string; slug: string }
+  /** Un mes reabierto: el aviso amable, no el entregable (ver `entregableDelLote`). */
+  | { tipo: 'en-preparacion'; html: string; slug: string }
   | { tipo: 'no-encontrado' }
 > {
   // Un token revocado o inexistente devuelve lo mismo: confirmar que existió
@@ -140,7 +166,9 @@ export async function resolverDocumentoPublico(token: string): Promise<
 
   if (link.documentoTipo === 'contenido') {
     const entregable = await entregableDelLote(link.documentoId, token);
-    return entregable ? { tipo: 'html', ...entregable } : { tipo: 'no-encontrado' };
+    if (!entregable) return { tipo: 'no-encontrado' };
+    const { html, slug, compartido } = entregable;
+    return { tipo: compartido ? 'html' : 'en-preparacion', html, slug };
   }
 
   const tabla = tablaDe(link.documentoTipo);
@@ -185,7 +213,7 @@ export async function resolverDocumentoPublico(token: string): Promise<
  * 2. **El token es de un entregable del mes.** Es el único documento que
  *    incrusta archivos; los otros tres se rinden desde su `datos` y no piden
  *    ninguno, así que su token no abre nada aquí.
- * 3. **El archivo es un arte de ESE lote.** Tiene que estar puesto como arte de
+ * 3. **El archivo es un arte de ESE lote, y el lote está compartido.** Tiene que estar puesto como arte de
  *    alguna pieza del lote al que abre el token (`contenido_piezas.arte`), no
  *    de cualquier pieza del cliente y mucho menos de cualquier archivo suyo: en
  *    la ficha de un cliente se suben briefs, contratos y demás cosas que se
@@ -219,9 +247,14 @@ export async function resolverArchivoPublico(
 export type ArchivoDeLote = { clientId: string; archivo: { nombreOriginal: string; mime: string; ruta: string } };
 
 /**
- * Los puntos 3 y 4 de `resolverArchivoPublico`, sin el token: el archivo tiene
- * que ser del cliente del lote **y** estar puesto como arte de alguna pieza de
- * ESE lote.
+ * Los puntos 3 y 4 de `resolverArchivoPublico`, sin el token: el lote tiene que
+ * estar **compartido**, y el archivo tiene que ser del cliente del lote **y**
+ * estar puesto como arte de alguna pieza de ESE lote.
+ *
+ * Lo de compartido es lo mismo que exigen el entregable público y la página
+ * del portal: un mes reabierto (`compartido_en` nulo) puede traer una pieza
+ * nueva que nadie ha revisado, y su arte no debe salir ni por el enlace viejo
+ * ni pidiéndolo por id desde el portal.
  *
  * Aparte porque el portal del cliente (C2) pide sus artes por otra puerta
  * —tiene sesión, no token— y tiene que aplicar exactamente el mismo filtro. Es
@@ -235,9 +268,10 @@ export type ArchivoDeLote = { clientId: string; archivo: { nombreOriginal: strin
 export async function resolverArchivoDelLote(loteId: string, fileId: string): Promise<ArchivoDeLote | null> {
   if (!esUuid(fileId) || !esUuid(loteId)) return null;
 
-  const [lote] = await db.select({ id: contenidoLotes.id, clientId: contenidoLotes.clientId })
+  const [lote] = await db
+    .select({ id: contenidoLotes.id, clientId: contenidoLotes.clientId, compartidoEn: contenidoLotes.compartidoEn })
     .from(contenidoLotes).where(eq(contenidoLotes.id, loteId)).limit(1);
-  if (!lote) return null;
+  if (!lote || !lote.compartidoEn) return null;
 
   const [archivo] = await db
     .select({ nombreOriginal: clientFiles.nombreOriginal, mime: clientFiles.mime, ruta: clientFiles.ruta })

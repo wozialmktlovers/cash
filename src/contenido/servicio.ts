@@ -561,9 +561,10 @@ export type ResultadoCompartir = {
  * ── Y el cuarto caso: el `en_revision` al que se le apagó el plazo ────────
  *
  * `registrarRevision` (./revision.ts) deja un lote `en_revision` con
- * `limite_revision` **nulo** cuando el plazo de la ronda anterior se consumió
- * mientras el mes esperaba al operador y el cliente se retracta de la pieza que
- * había devuelto. El mes sigue siendo del cliente —por eso no vuelve a
+ * `limite_revision` **nulo** cuando el cliente se retracta de la pieza que
+ * había devuelto: al entrar en `con_cambios` el plazo se apagó —siempre, le
+ * quedaran los días que le quedaran (invariante (1), `transicionarLote`)— y
+ * salir de ahí sin un reparto no lo vuelve a encender. El mes sigue siendo del cliente —por eso no vuelve a
  * `en_proceso`— pero ya no tiene reloj, y sin este caso se quedaría así para
  * siempre: `loteAutoAprobado` no auto-aprueba un lote sin fecha, y el botón
  * «Compartir» no arrancaría nada porque el lote ya está `en_revision`. Es el
@@ -576,7 +577,7 @@ export type ResultadoCompartir = {
  * este reparto le pone fecha nueva, el siguiente «Compartir» vuelve a ser un
  * enlace más que no mueve nada. Recompartir dos veces seguidas no alarga un
  * plazo vivo: hace falta que el sistema lo haya apagado antes, y eso solo pasa
- * al sacar el mes de `con_cambios` con el reloj ya consumido.
+ * al pasar el mes por `con_cambios` y sacarlo de ahí sin un reparto.
  *
  * ── Y el quinto: el mes APROBADO al que se le apagó el plazo ──────────────
  *
@@ -592,8 +593,9 @@ export type ResultadoCompartir = {
  *
  * Un mes así está aprobado pero **no cerrado**: `aceptaDecision` admite siempre
  * un lote sin fecha, así que el cliente puede seguir cambiando de opinión
- * mientras no la tenga, que es lo correcto —el reloj se detuvo porque el equipo
- * dejó correr el suyo—, pero no puede quedarse así para siempre.
+ * mientras no la tenga, que es lo correcto —el reloj se apagó al pasarnos la
+ * pelota y nadie lo ha vuelto a encender—, pero no puede quedarse así para
+ * siempre.
  *
  * Compartirlo otra vez es el remedio, y aquí hace algo distinto que en los otros
  * cuatro casos: estampa la fecha y **deja el mes `aprobada`**. El porqué está
@@ -667,17 +669,18 @@ export async function compartirLote(
     && lote.contenidoActualizadoEn !== null
     && lote.contenidoActualizadoEn.getTime() > lote.compartidoEn.getTime();
 
-  // El cuarto: `en_revision` sin fecha límite, el que dejó `registrarRevision`
-  // al apagar un plazo consumido en turno ajeno. Es un estado que solo se
+  // El cuarto: `en_revision` sin fecha límite, el que deja `registrarRevision`
+  // cuando el cliente se retracta y saca el mes de `con_cambios`, donde el
+  // plazo se apagó (siempre, le quedaran días o no). Es un estado que solo se
   // alcanza por ahí: quien pone un lote `en_revision` es esta función, y siempre
   // con fecha.
   const sinPlazo = lote.estado === 'en_revision' && lote.limiteRevision === null;
 
   // Y el quinto, la otra mitad de ese mismo apagón: `aprobada` sin fecha
-  // límite. Es el mes que quedó aprobado al salir de `con_cambios` con el plazo
-  // ya consumido esperando al operador —lo saque de ahí el cliente
+  // límite. Es el mes que quedó aprobado al salir de `con_cambios` —donde el
+  // plazo se apaga siempre— sin un reparto de por medio, lo saque de ahí el cliente
   // retractándose (`registrarRevision`) o el operador borrando la pieza devuelta
-  // (`refrescarLote`)—. Vale lo mismo que el cuarto: ningún reparto pone un
+  // (`refrescarLote`). Vale lo mismo que el cuarto: ningún reparto pone un
   // `aprobada` sin fecha, así que a este estado solo se llega por ese apagón.
   // El matiz que cambia el efecto es que aquí el mes NO vuelve a `en_revision`
   // (el porqué, más abajo, donde escribe).

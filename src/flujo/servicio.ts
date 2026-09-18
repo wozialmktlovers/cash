@@ -59,13 +59,19 @@ function paraReglas(f: FilaEtapa): EtapaCliente {
 
 /**
  * `planContratacion`: pura. Devuelve las 4 etapas con su `contratada`/`interna`
- * a partir de la selección. Si se contratan `pilares` o `manual_campana` sin
+ * a partir de la selección. Si se contrata cualquier etapa que dependa de la
+ * investigación —`pilares`, `desarrollo_mensual` o `manual_campana`— sin
  * `investigacion`, esta última queda interna (no se muestra al cliente ni
  * cuenta en su avance) — spec §3, Contratación.
+ *
+ * Las tres dependen de ella por igual (`dependenciasCumplidas`,
+ * ./reglas.ts). Dejar fuera la etapa 3 atascaba a un cliente que contrata
+ * solo «Desarrollo mensual»: la investigación quedaba ni contratada ni
+ * interna, así que no se podía generar, y sin ella no se podía abrir el mes.
  */
 export function planContratacion(seleccion: Etapa[]): { etapa: Etapa; contratada: boolean; interna: boolean }[] {
   const set = new Set(seleccion);
-  const necesitaInvestigacion = set.has('pilares') || set.has('manual_campana');
+  const necesitaInvestigacion = set.has('pilares') || set.has('desarrollo_mensual') || set.has('manual_campana');
   return ETAPAS.map((etapa) => {
     const contratada = set.has(etapa);
     if (etapa === 'investigacion' && !contratada && necesitaInvestigacion) {
