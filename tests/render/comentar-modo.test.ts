@@ -280,10 +280,10 @@ describe('SCRIPT_FLUJO · modo Comentar (fake-dom)', () => {
 
     const marcador = tarjeta.children.find((c) => c.className === 'marcador-comentario');
     expect(marcador).toBeTruthy();
-    expect(marcador!.textContent).toBe('2');
+    expect(marcador!.textContent).toBe('2 comentarios');
   });
 
-  it('Comentarios abre el panel lateral y pinta la lista, con «Ir» que lleva a la ancla', async () => {
+  it('Comentarios abre el panel lateral y pinta la lista, con «Ver en el documento» que lleva a la ancla', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       json: () => Promise.resolve({
         ok: true,

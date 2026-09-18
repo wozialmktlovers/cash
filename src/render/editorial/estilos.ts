@@ -332,11 +332,77 @@ html.modo-comentar [data-ancla]:hover{outline:2px dashed var(--azul);outline-off
    marca con esta clase solo a los que de verdad tienen uno. */
 .tiene-marcador-comentario{position:relative;}
 
-.marcador-comentario{position:absolute;top:-8px;right:-8px;min-width:22px;height:22px;padding:0 6px;border-radius:var(--r-pill);
-  background:var(--rosa);color:var(--sobre-acento);font:var(--t-small);font-weight:700;display:flex;align-items:center;justify-content:center;
-  box-shadow:var(--sombra);pointer-events:none;z-index:5;}
+/* El marcador dice cuántos comentarios abiertos hay («2 comentarios») y es
+   un botón: abre el panel en el hilo de ese bloque. La píldora mide 28 px de
+   alto para no tapar el contenido; su ::after amplía el área táctil a 44 px. */
+.marcador-comentario{position:absolute;top:-14px;right:14px;z-index:6;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;
+  border:0;border-radius:var(--r-pill);background:var(--rosa);color:var(--sobre-acento);font:var(--t-small);font-weight:700;line-height:1;
+  white-space:nowrap;box-shadow:var(--sombra);cursor:pointer;}
+.marcador-comentario::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor;}
+.marcador-comentario::after{content:"";position:absolute;inset:-8px -4px;}
+.marcador-comentario:hover{background:var(--tinta);color:var(--fondo);}
+.marcador-comentario:focus-visible{border-radius:var(--r-pill);}
+/* El anuncio del manual recorta lo que se sale (overflow:hidden), y las
+   secciones alternas también (su clip-path corta arriba y abajo): ahí el
+   marcador va por dentro. */
+.anuncio > .marcador-comentario{top:12px;}
+.seccion-comentada > .marcador-comentario{top:20px;right:0;}
 
-.ancla-resaltada{outline:3px solid var(--rosa);outline-offset:4px;border-radius:4px;transition:outline-color .3s ease;}
+/* El bloque comentado se ve de un vistazo mientras su comentario siga
+   abierto: fondo tintado y una franja de acento a la izquierda. Las dos van
+   en sombras (un halo de 8 px y, debajo, el mismo halo corrido 4 px a la
+   izquierda) para no tocar el tamaño ni el borde propio del bloque — hay
+   tarjetas con su propio border-left de color en línea. */
+.bloque-comentado{background-color:var(--rosa-s);border-radius:var(--r-sm);
+  box-shadow:0 0 0 8px var(--rosa-s),-4px 0 0 8px var(--rosa);}
+.tarjeta.bloque-comentado,.anuncio.bloque-comentado{border-radius:var(--r);box-shadow:0 0 0 8px var(--rosa-s),-4px 0 0 8px var(--rosa),var(--sombra);}
+/* Una sección entera no se tiñe (las alternas ya usan la sombra de 100vmax
+   para su banda gris): se tiñe su cabeza y un filete de acento baja por su
+   borde izquierdo, a todo lo alto. */
+.seccion-comentada > .seccion-cabeza,.seccion-comentada > .wrap > .shead,.seccion-comentada > .portada-texto{
+  background-color:var(--rosa-s);border-radius:var(--r-sm);box-shadow:0 0 0 12px var(--rosa-s),-4px 0 0 12px var(--rosa);}
+.seccion-comentada::before{content:"";position:absolute;left:-12px;top:0;bottom:0;width:3px;border-radius:var(--r-pill);background:var(--rosa);opacity:.45;pointer-events:none;}
+
+.ancla-resaltada{outline:3px solid var(--rosa);outline-offset:12px;border-radius:var(--r-sm);transition:outline-color .3s ease;}
+
+/* Aviso resumen arriba del documento (lo llena SCRIPT_FLUJO). */
+.aviso-comentarios{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px;margin-top:24px;padding:12px 12px 12px 22px;
+  border-radius:var(--r);background:var(--rosa-s);border:1px solid color-mix(in srgb,var(--rosa) 35%,transparent);box-shadow:inset 4px 0 0 var(--rosa);}
+.aviso-comentarios-texto{flex:1 1 260px;margin:0;color:var(--tinta);font:var(--t-body);font-weight:600;}
+.aviso-comentarios-controles{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.aviso-comentarios .panel-boton{background:var(--tarjeta);white-space:nowrap;}
+.aviso-comentarios .panel-primario{background:var(--rosa);color:var(--sobre-acento);}
+.aviso-flecha{width:44px;padding:0;}
+.aviso-flecha svg,.navegador-flecha svg{width:18px;height:18px;}
+@media (max-width:640px){
+  .aviso-comentarios{padding:14px 14px 14px 20px;}
+  .aviso-comentarios-controles{width:100%;}
+  .aviso-comentarios-controles{gap:6px;}
+  .aviso-comentarios .panel-boton:not(.aviso-flecha){padding:0 12px;}
+  .aviso-comentarios-controles .panel-primario{flex:1;}
+}
+
+/* El mismo recorrido, fijo abajo a la derecha, cuando el aviso ya no se ve. */
+.navegador-comentarios{position:fixed;right:16px;bottom:16px;z-index:68;display:flex;align-items:center;gap:2px;padding:4px;
+  border-radius:var(--r-pill);background:var(--tinta);color:var(--fondo);box-shadow:var(--sombra);font:var(--t-small);font-weight:600;}
+.navegador-flecha{width:44px;height:44px;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;color:inherit;cursor:pointer;}
+.navegador-flecha:hover{background:color-mix(in srgb,var(--fondo) 16%,transparent);}
+.navegador-posicion{min-width:64px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap;}
+/* Con la barra de edición abajo, el navegador sobra; en modo Comentar en
+   pantallas angostas sube por encima de «Toca un bloque para comentarlo». */
+html.modo-edicion .navegador-comentarios{display:none;}
+@media (max-width:1199px){html.modo-comentar .navegador-comentarios{bottom:80px;}}
+
+/* Punto con el número de comentarios abiertos junto a cada sección del índice. */
+.indice-lateral a .indice-comentarios{margin-left:auto;align-self:center;font-weight:700;}
+/* Tres clases: gana a «.indice-lateral a.activo span», que lo pintaría de rosa sobre rosa. */
+.indice-lateral a .indice-comentarios .indice-comentarios-numero{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--r-pill);
+  background:var(--rosa);color:var(--sobre-acento);font:var(--t-micro);font-weight:700;letter-spacing:0;}
+.solo-lector{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+
+/* Las filas del hilo al que llevó un marcador. */
+.comentario-fila.hilo-actual{border-color:var(--rosa);box-shadow:inset 4px 0 0 var(--rosa);background:var(--rosa-s);}
+.comentario-fila:focus-visible{border-radius:var(--r-sm);}
 
 dialog.dialogo-comentarios{width:min(420px,calc(100vw - 32px));max-height:min(640px,calc(100vh - 64px));border:1px solid var(--linea);border-radius:var(--r);
   padding:24px;display:grid;gap:14px;background:var(--tarjeta);color:var(--texto);box-shadow:var(--sombra);
@@ -374,7 +440,11 @@ dialog.dialogo-comentarios::backdrop{background:transparent;}
 @media print{.aviso-comentar{display:none!important;}}
 .recuadro-comentario-ancla{font:var(--t-small);font-family:monospace;color:var(--suave);word-break:break-all;}
 .recuadro-comentario textarea{width:100%;min-height:90px;padding:10px;border-radius:var(--r-sm);border:1px solid var(--linea);background:var(--fondo);color:var(--texto);font:inherit;resize:vertical;}
-@media print{.dialogo-comentarios,.recuadro-comentario,.marcador-comentario{display:none!important;}}
+@media print{
+  .dialogo-comentarios,.recuadro-comentario,.marcador-comentario,.aviso-comentarios,.navegador-comentarios,.indice-comentarios{display:none!important;}
+  .bloque-comentado,.seccion-comentada > .seccion-cabeza,.seccion-comentada > .wrap > .shead,.seccion-comentada > .portada-texto{background-color:transparent!important;box-shadow:none!important;}
+  .seccion-comentada::before{display:none;}
+}
 `;
 
 export const ESTILOS_EDITORIAL = `${TOKENS_CSS}\n${EDITORIAL}`;

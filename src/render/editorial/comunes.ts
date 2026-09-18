@@ -4,7 +4,7 @@ import { LOGO_WOZIAL_SRC } from '@/render/marca';
 import type { OpcionesBarra } from '@/render/barra-operador';
 import { cabeceraDocumento, bandaVistaPrevia, SCRIPT_CABECERA_BASE, SCRIPT_CABECERA_COMPARTIR } from './cabecera';
 import { SCRIPT_EDITORIAL } from './interaccion';
-import { atributoFlujo, panelComentarios, SCRIPT_FLUJO, type FlujoDatos } from './flujo-cliente';
+import { atributoFlujo, panelComentarios, avisoComentarios, navegadorComentarios, SCRIPT_FLUJO, type FlujoDatos } from './flujo-cliente';
 
 export { escapar };
 
@@ -85,6 +85,7 @@ ${cabeceraDocumento({
     <ol>${o.indice.map(([num, id, nombre]) => `<li><a href="#${id}"><span>${num}</span>${nombre}</a></li>`).join('')}</ol>
   </nav>
   <main>
+${o.flujo?.puedeComentar ? avisoComentarios() : ''}
 ${o.cuerpo}
   </main>
 </div></div>
@@ -92,6 +93,7 @@ ${o.cuerpo}
   <img class="logo" src="${LOGO_WOZIAL_SRC}" alt="Wozial" width="545" height="194">
   <span>Preparado por Wozial · ${escapar(o.fecha)}</span>
 </footer>
+${o.flujo?.puedeComentar ? navegadorComentarios() : ''}
 <script>${SCRIPT_EDITORIAL}</script>
 <script>${SCRIPT_CABECERA_BASE}</script>
 ${o.operador ? `<script>${SCRIPT_CABECERA_COMPARTIR}</script>` : ''}
