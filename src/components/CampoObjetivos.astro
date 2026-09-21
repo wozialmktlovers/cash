@@ -1,0 +1,51 @@
+---
+// «Objetivos y líneas de investigación»: el mismo campo en el alta y en la
+// pestaña Datos de la ficha. Lo que se escribe aquí entra a todos los
+// contextos de la IA como sección prioritaria (`seccionObjetivos` en
+// src/research/contexto.ts). El tope lo valida también la API.
+import { OBJETIVOS_MAX } from '@/lib/clientes';
+
+interface Props { valor?: string | null }
+const { valor } = Astro.props;
+const inicial = valor ?? '';
+---
+
+<div class="campo ancho campo-objetivos">
+  <label for="objetivos">Objetivos y líneas de investigación</label>
+  <textarea
+    id="objetivos"
+    name="objetivos"
+    rows="5"
+    maxlength={OBJETIVOS_MAX}
+    aria-describedby="objetivos-ayuda objetivos-cuenta"
+    placeholder="Quiere abrir sucursal en Monterrey. Investigar la competencia en Querétaro. Enfocarse en público corporativo. No considerar a X como competidor."
+  >{inicial}</textarea>
+  <div class="objetivos-pie">
+    <p class="ayuda" id="objetivos-ayuda">La IA lo usa como guía prioritaria en la investigación, el mapa de pilares, el manual y el contenido del mes.</p>
+    <p class="ayuda cifra objetivos-cuenta" id="objetivos-cuenta" data-max={OBJETIVOS_MAX}>{inicial.length} / {OBJETIVOS_MAX}</p>
+  </div>
+</div>
+
+<style>
+  .campo-objetivos textarea { min-height: 128px; }
+  .objetivos-pie { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; }
+  .objetivos-cuenta { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .objetivos-cuenta.cerca { color: var(--amarillo); }
+  .objetivos-cuenta.lleno { color: var(--rojo); }
+</style>
+
+<script>
+  const campo = document.getElementById('objetivos') as HTMLTextAreaElement | null;
+  const cuenta = document.getElementById('objetivos-cuenta');
+  if (campo && cuenta) {
+    const max = Number(cuenta.dataset.max);
+    const pintar = () => {
+      const n = campo.value.length;
+      cuenta.textContent = `${n} / ${max}`;
+      cuenta.classList.toggle('cerca', n >= max * 0.9 && n < max);
+      cuenta.classList.toggle('lleno', n >= max);
+    };
+    campo.addEventListener('input', pintar);
+    pintar();
+  }
+</script>

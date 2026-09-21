@@ -1,8 +1,10 @@
 import type { Investigacion } from '@/research/schemas';
+import { seccionObjetivos } from '@/research/contexto';
 
 type ClienteCtx = {
   nombre: string; giro: string; producto: string;
   ciudad: string | null; ticket: string | null; notas: string | null;
+  objetivos?: string | null;
 };
 
 /** Nombre legible de cada etapa, para poder declarar los huecos por su nombre. */
@@ -51,7 +53,7 @@ Ciudad: ${c.ciudad ?? 'no declarada'}
 Ticket: ${c.ticket ?? 'no declarado'}
 Notas: ${c.notas ?? 'sin notas'}
 
-## Investigación previa
+${seccionObjetivos(c.objetivos)}## Investigación previa
 ${bloques.length ? bloques.join('\n\n') : 'La investigación no produjo ninguna etapa con datos.'}${aviso}`;
 }
 

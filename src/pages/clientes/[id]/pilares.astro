@@ -33,6 +33,9 @@ const renglones = [
     valor: etapasConDatos > 0 ? `${etapasConDatos} etapa${etapasConDatos === 1 ? '' : 's'} con datos` : 'Sin datos',
     aviso: puede.ok ? undefined : puede.razon,
   },
+  // Mismo renglón que en «Investigar»: los objetivos entran al contexto de
+  // la IA como prioridad (`seccionObjetivos`). Faltar no bloquea.
+  { nombre: 'Objetivos y líneas de investigación', valor: cliente.objetivos ?? 'Sin objetivos', largo: !!cliente.objetivos, aviso: cliente.objetivos ? undefined : 'Sin objetivos: la IA armará el mapa con criterios generales.' },
   { nombre: 'Giro y producto', valor: `${cliente.giro} · ${cliente.producto}`, aviso: undefined },
   { nombre: 'Ciudad', valor: cliente.ciudad ?? 'Sin ciudad', aviso: cliente.ciudad ? undefined : 'Falta la ciudad. El mapa no podrá enfocar temas locales.' },
   { nombre: 'Enlaces', valor: `${enlaces.length}`, aviso: enlaces.length ? undefined : 'No hay enlaces registrados. El mapa no podrá revisar los activos del cliente.' },
@@ -65,7 +68,7 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
             </span>
             <div class="cuerpo">
               <strong>{r.nombre}</strong>
-              <p class="secundario">{r.valor}</p>
+              <p class:list={['secundario', { 'texto-largo': 'largo' in r && r.largo }]}>{r.valor}</p>
               {r.aviso && <p class="ayuda" style="color:var(--amarillo)">{r.aviso}</p>}
             </div>
           </li>
@@ -94,6 +97,8 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
      puede alcanzar el <svg> que pinta Icono.astro. */
   .investigar { display: grid; gap: 18px; }
   .investigar .tarjeta + .tarjeta { margin-top: 0; }
+  /* Los objetivos se muestran tal como se escribieron, con sus saltos de línea. */
+  .texto-largo { white-space: pre-line; overflow-wrap: anywhere; }
   @media (min-width: 900px) {
     .investigar { grid-template-columns: 1fr 340px; align-items: start; }
     .costo { position: sticky; top: 90px; }

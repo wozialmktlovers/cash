@@ -2,6 +2,7 @@
 import { eq, desc, and, ne, gt, isNull, asc, sql } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
+import CampoObjetivos from '@/components/CampoObjetivos.astro';
 import LinksEditor from '@/components/LinksEditor';
 import FilesUploader from '@/components/FilesUploader';
 import LineaEtapas, { type TarjetaEtapaVM, type BotonResuelto } from '@/components/LineaEtapas.astro';
@@ -353,6 +354,7 @@ const historial: ItemHistorial[] = [
         <div class="campo"><label for="ticket">Ticket</label><input id="ticket" name="ticket" value={cliente.ticket ?? ''} /></div>
         <div class="campo ancho"><label for="contacto">Contacto</label><input id="contacto" name="contacto" value={cliente.contacto ?? ''} /></div>
         <div class="campo ancho"><label for="notas">Notas del operador</label><textarea id="notas" name="notas">{cliente.notas ?? ''}</textarea></div>
+        <CampoObjetivos valor={cliente.objetivos} />
       </div>
       {operable && <div class="acciones"><button type="submit" class="btn" id="guardar">Guardar cambios</button></div>}
     </form>

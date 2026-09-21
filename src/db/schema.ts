@@ -76,6 +76,10 @@ export const clients = pgTable('clients', {
   ticket: text('ticket'),
   contacto: text('contacto'),
   notas: text('notas'),
+  // Objetivos del cliente y líneas que la IA debe seguir al investigar y
+  // generar (hasta 2000 caracteres, ver `OBJETIVOS_MAX`). Nulo = sin
+  // indicaciones: los agentes trabajan con criterios generales.
+  objetivos: text('objetivos'),
   // El operador que da de alta al cliente queda asignado; el admin reasigna.
   operadorId: uuid('operador_id').references(() => users.id, { onDelete: 'set null' }),
   // Cuántas piezas al mes lleva este cliente, por formato (diseño §3):

@@ -164,6 +164,14 @@ describe('el tema', () => {
 });
 
 describe('la generación', () => {
+  it('el agente de copy recibe los objetivos del cliente como prioridad', async () => {
+    espia.piezas = [{ pieza, cliente: { ...cliente, objetivos: 'Enfocarse en público corporativo.' } }];
+    expect((await llamar()).status).toBe(200);
+    const { usuario } = pedir.mock.calls[0][0];
+    expect(usuario).toContain('## Objetivos y líneas de investigación (prioridad del cliente)');
+    expect(usuario).toContain('Enfocarse en público corporativo.');
+  });
+
   it('devuelve las tres opciones, el tema y lo que costó', async () => {
     const r = await llamar();
     expect(r.status).toBe(200);

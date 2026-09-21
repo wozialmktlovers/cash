@@ -1,5 +1,6 @@
 ---
 import Base from '@/layouts/Base.astro';
+import CampoObjetivos from '@/components/CampoObjetivos.astro';
 import { NOMBRE_ETAPA } from '@/flujo/reglas';
 ---
 
@@ -44,6 +45,7 @@ import { NOMBRE_ETAPA } from '@/flujo/reglas';
         <label for="notas">Notas del operador</label>
         <textarea id="notas" name="notas" placeholder="Lo que sepas y no esté en los documentos."></textarea>
       </div>
+      <CampoObjetivos />
     </div>
 
     <fieldset class="campo ancho" style="margin-top:18px">

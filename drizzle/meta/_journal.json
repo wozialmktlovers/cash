@@ -92,6 +92,13 @@
       "when": 1789764278451,
       "tag": "0012_contenido_mes_ia",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790018371331,
+      "tag": "0013_objetivos_cliente",
+      "breakpoints": true
     }
   ]
 }

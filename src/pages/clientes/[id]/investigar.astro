@@ -30,6 +30,9 @@ const revision = revisarAntesDeInvestigar({
 const advertencia = (clave: string) => revision.advertencias.find((a) => a.toLowerCase().includes(clave));
 
 const renglones = [
+  // Los objetivos van primero porque mandan sobre todo lo demás en el
+  // contexto de la IA (`seccionObjetivos`). Faltar no bloquea: se avisa.
+  { nombre: 'Objetivos y líneas de investigación', valor: cliente.objetivos ?? 'Sin objetivos', largo: !!cliente.objetivos, aviso: cliente.objetivos ? undefined : 'Sin objetivos: la IA investigará con criterios generales.' },
   { nombre: 'Giro', valor: cliente.giro, aviso: undefined },
   { nombre: 'Producto', valor: cliente.producto, aviso: undefined },
   { nombre: 'Ciudad', valor: cliente.ciudad ?? 'Sin ciudad', aviso: advertencia('ciudad') },
@@ -64,7 +67,7 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
             </span>
             <div class="cuerpo">
               <strong>{r.nombre}</strong>
-              <p class="secundario">{r.valor}</p>
+              <p class:list={['secundario', { 'texto-largo': 'largo' in r && r.largo }]}>{r.valor}</p>
               {r.aviso && <p class="ayuda" style="color:var(--amarillo)">{r.aviso}</p>}
             </div>
           </li>
@@ -93,6 +96,8 @@ const dinero = (n: number) => n.toLocaleString('es-MX', { style: 'currency', cur
      en global.css (.renglon .icono-tinte svg) porque un <style> con scope no
      puede alcanzar el <svg> que pinta Icono.astro. */
   .investigar .tarjeta + .tarjeta { margin-top: 0; }
+  /* Los objetivos se muestran tal como se escribieron, con sus saltos de línea. */
+  .texto-largo { white-space: pre-line; overflow-wrap: anywhere; }
   @media (min-width: 900px) {
     .investigar { grid-template-columns: 1fr 340px; align-items: start; }
     .costo { position: sticky; top: 90px; }

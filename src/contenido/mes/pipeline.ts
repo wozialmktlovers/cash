@@ -64,6 +64,27 @@ export function resumenInvestigacion(datos: unknown): string {
   return partes.length ? partes.join('\n\n') : 'La investigación no tiene síntesis ni audiencia con datos.';
 }
 
+/**
+ * Lo que recibe cada tanda del mes: el contexto del cliente (con sus objetivos,
+ * ver `armarContexto`), la estrategia del mapa y lo útil de la investigación.
+ * Aparte del job para poder probar qué le llega al redactor sin base.
+ */
+export function contextoDelMes(
+  cliente: Parameters<typeof armarContexto>[0],
+  links: Parameters<typeof armarContexto>[1],
+  archivos: Parameters<typeof armarContexto>[2],
+  mapa: MapaPilares | null,
+  investigacion: unknown,
+): string {
+  return `${armarContexto(cliente, links, archivos)}
+
+## Estrategia editorial (mapa de pilares)
+${resumenEstrategia(mapa)}
+
+## Investigación
+${investigacion ? resumenInvestigacion(investigacion) : 'Este cliente no tiene investigación con datos.'}`;
+}
+
 type Deps = {
   correr: typeof correrTanda;
   ahora: () => Date;
@@ -224,13 +245,7 @@ export async function ejecutarContenidoMes(jobId: string, deps: Deps = { correr:
     db.select({ datos: researchResults.datos, version: researchResults.version }).from(researchResults).where(eq(researchResults.clientId, job.clientId)),
   ]);
   const investigacion = investigacionUtil(investigaciones);
-  const contexto = `${armarContexto(cliente, links, archivos)}
-
-## Estrategia editorial (mapa de pilares)
-${resumenEstrategia(mapa)}
-
-## Investigación
-${investigacion ? resumenInvestigacion(investigacion.datos) : 'Este cliente no tiene investigación con datos.'}`;
+  const contexto = contextoDelMes(cliente, links, archivos, mapa, investigacion?.datos);
 
   estado.plan = 'ok';
   const tope = topeMesUsd();
