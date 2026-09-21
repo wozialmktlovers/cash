@@ -1,22 +1,41 @@
 type Tarifa = { entrada: number; salida: number };
 
 /**
- * Dólares por millón de tokens, según la lista de precios vigente al
- * 2026-08-12. Revisar antes de cada despliegue: si estas cifras se
+ * Dólares por millón de tokens. Sonnet 5 a 2/10 se dedujo el 2026-09-21
+ * cuadrando el gasto de la consola de Anthropic (31.39 USD) contra los tokens
+ * registrados: a 3/15 el sistema sobrestimaba cerca de un 50 %. Revisar
+ * contra la consola antes de cada despliegue: si estas cifras se
  * desactualizan, el tope de COST_LIMIT_USD corta investigaciones antes o
  * después de lo debido.
  */
 const TARIFAS: Record<string, Tarifa> = {
   'claude-opus-5':   { entrada: 5,  salida: 25 },
-  'claude-sonnet-5': { entrada: 3,  salida: 15 },
+  'claude-sonnet-5': { entrada: 2,  salida: 10 },
   'claude-opus-4-8': { entrada: 5,  salida: 25 },
   'claude-haiku-4-5': { entrada: 1, salida: 5 },
 };
 
 const POR_DEFECTO: Tarifa = { entrada: 5, salida: 25 };
 
+/** Busca por nombre exacto o por prefijo, para ids con fecha (`claude-haiku-4-5-20251001`). */
+function tarifaDe(modelo: string): Tarifa {
+  if (TARIFAS[modelo]) return TARIFAS[modelo];
+  const clave = Object.keys(TARIFAS).find((k) => modelo.startsWith(`${k}-`));
+  return clave ? TARIFAS[clave] : POR_DEFECTO;
+}
+
+/**
+ * Tokens de entrada «equivalentes» a precio normal, cuando hay caché de
+ * prompts: escribir en caché cuesta 1.25× y leerlo 0.1×. Así `calcularCosto`
+ * y los topes siguen trabajando con un solo número de entrada.
+ */
+export function entradaEquivalente(uso: { input_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number } | undefined): number {
+  if (!uso) return 0;
+  return (uso.input_tokens ?? 0) + 1.25 * (uso.cache_creation_input_tokens ?? 0) + 0.1 * (uso.cache_read_input_tokens ?? 0);
+}
+
 export function calcularCosto(modelo: string, entrada: number, salida: number): number {
-  const t = TARIFAS[modelo] ?? POR_DEFECTO;
+  const t = tarifaDe(modelo);
   const usd = (entrada / 1_000_000) * t.entrada + (salida / 1_000_000) * t.salida;
   return Math.round(usd * 10_000) / 10_000;
 }

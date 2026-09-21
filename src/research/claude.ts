@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { ZodType } from 'zod';
+import { entradaEquivalente } from '@/lib/cost';
 import { rescatarParcial, ajustarAlEsquema } from './normalizar';
 
 let cliente: Anthropic | null = null;
@@ -24,6 +25,9 @@ export function extraerJson(texto: string): unknown {
 
 /** Cuántas veces se reanuda un turno pausado por la búsqueda web antes de rendirse. */
 const MAX_PAUSAS = 6;
+
+/** Consultas web máximas por etapa de búsqueda (variable BUSQUEDAS_MAX; antes 12 fijas). */
+const BUSQUEDAS_MAX = Math.max(1, Math.min(20, Number(process.env.BUSQUEDAS_MAX) || 6));
 
 /**
  * Prefijos exactos de los dos errores que significan «esta respuesta no
@@ -151,7 +155,9 @@ export async function pedirJson<T>(opts: {
   let entrada = 0, salida = 0;
 
   const contabilizar = (r: any): boolean => {
-    const e = r.usage?.input_tokens ?? 0, s = r.usage?.output_tokens ?? 0;
+    // Con caché, `input_tokens` no incluye lo escrito ni lo leído del caché:
+    // se suman a precio equivalente para que el costo y los topes sean reales.
+    const e = Math.round(entradaEquivalente(r.usage)), s = r.usage?.output_tokens ?? 0;
     entrada += e; salida += s;
     return onUso ? onUso(e, s) : true;
   };
@@ -162,21 +168,71 @@ export async function pedirJson<T>(opts: {
   // ("Streaming is required for operations that may take longer than 10
   // minutes"). `finalMessage()` acumula los eventos y devuelve el mismo
   // objeto Message que `create`, con `usage` y `stop_reason` incluidos.
-  const pedir = (cuerpo: Record<string, unknown>) =>
-    api.messages.stream(cuerpo as any).finalMessage() as Promise<any>;
+  let cacheRechazado = false;
+  const sinCache = (cuerpo: Record<string, unknown>) => {
+    const { system, messages, ...resto } = cuerpo as any;
+    const limpio = (b: any) => { const { cache_control, ...r } = b; return r; };
+    return {
+      ...resto,
+      system: Array.isArray(system) ? system.map(limpio) : system,
+      messages: (messages as any[]).map((m) => ({ ...m, content: Array.isArray(m.content) ? m.content.map(limpio) : m.content })),
+    };
+  };
+  const pedir = async (cuerpo: Record<string, unknown>) => {
+    const enviar = (c: Record<string, unknown>) => api.messages.stream(c as any).finalMessage() as Promise<any>;
+    if (cacheRechazado) return enviar(sinCache(cuerpo));
+    try {
+      return await enviar(cuerpo);
+    } catch (e: any) {
+      // Si la API rechaza las marcas de caché, se sigue sin ellas en vez de
+      // perder la etapa: el caché solo abarata, nunca es requisito.
+      if (e?.status === 400 && /cache_control/i.test(String(e?.message ?? ''))) {
+        cacheRechazado = true;
+        console.warn('[pedirJson] la API rechazó cache_control; se sigue sin caché.');
+        return enviar(sinCache(cuerpo));
+      }
+      throw e;
+    }
+  };
 
   // `web_search_20260209` trae filtrado dinámico: el servidor ejecuta código
   // para descartar resultados irrelevantes antes de que ocupen contexto.
   // No se declara `code_execution` aparte: ya va incluido, y un segundo
   // entorno de ejecución confunde al modelo.
+  // Haiku no soporta el filtrado dinámico de la versión 20260209 (pide
+  // «programmatic tool calling»), así que usa la anterior.
+  const versionBusqueda = /haiku/i.test(modelo) ? 'web_search_20250305' : 'web_search_20260209';
   const herramientas = buscarWeb
-    ? { tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 12 }] }
+    ? { tools: [{ type: versionBusqueda, name: 'web_search', max_uses: BUSQUEDAS_MAX }] }
     : {};
+
+  // Caché de prompts, solo en las etapas con búsqueda: ahí el turno se
+  // pausa y cada reanudación vuelve a mandar todo lo leído hasta entonces, y
+  // leerlo del caché cuesta la décima parte. En una sola llamada sin
+  // repetición no conviene (escribir cuesta 1.25×), por eso no se usa en el
+  // resto. Un solo punto de corte al final de la conversación más el sistema
+  // (máximo 4 permitidos), en copias: nunca se marcan los bloques originales,
+  // o los cortes se acumularían en cada reanudación.
+  const conCache = (msgs: any[]): any[] => {
+    if (!buscarWeb || msgs.length === 0) return msgs;
+    const copia = msgs.map((m) => ({ ...m }));
+    const ult = copia[copia.length - 1];
+    if (typeof ult.content === 'string') {
+      ult.content = [{ type: 'text', text: ult.content, cache_control: { type: 'ephemeral' } }];
+    } else if (Array.isArray(ult.content) && ult.content.length) {
+      const bloques = ult.content.map((b: any) => ({ ...b }));
+      const ultimo = bloques[bloques.length - 1];
+      if (ultimo.type !== 'text' || (ultimo.text ?? '').trim()) ultimo.cache_control = { type: 'ephemeral' };
+      ult.content = bloques;
+    }
+    return copia;
+  };
+  const sistemaConCache = buscarWeb ? [{ type: 'text', text: sistema, cache_control: { type: 'ephemeral' } }] : sistema;
 
   /** Un turno completo del modelo, con sus reanudaciones de `pause_turn`. */
   const turno = async (mensajeUsuario: string): Promise<any> => {
     const mensajes: any[] = [{ role: 'user', content: mensajeUsuario }];
-    const cuerpo = () => ({ model: modelo, max_tokens: maxTokens, system: sistema, messages: mensajes, ...herramientas });
+    const cuerpo = () => ({ model: modelo, max_tokens: maxTokens, system: sistemaConCache, messages: conCache(mensajes), ...herramientas });
 
     let res: any = await pedir(cuerpo());
     let hayPresupuesto = contabilizar(res);

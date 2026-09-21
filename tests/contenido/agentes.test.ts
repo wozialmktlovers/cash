@@ -176,11 +176,11 @@ describe('tope de gasto', () => {
 
   it('el freno cuenta con las tarifas del modelo y corta al alcanzar el tope', () => {
     const { gasto, onUso } = frenoDeGasto('claude-sonnet-5', 0.05);
-    // 1M de entrada con Sonnet son 3 USD; 10k son 0.03.
-    expect(onUso(10_000, 0)).toBe(true);
-    expect(gasto.valor).toBeCloseTo(calcularCosto('claude-sonnet-5', 10_000, 0), 6);
-    // Otros 10k pasan de 0.05 y el freno dice que no se siga.
-    expect(onUso(10_000, 0)).toBe(false);
+    // 1M de entrada con Sonnet son 2 USD; 15k son 0.03.
+    expect(onUso(15_000, 0)).toBe(true);
+    expect(gasto.valor).toBeCloseTo(calcularCosto('claude-sonnet-5', 15_000, 0), 6);
+    // Otros 15k pasan de 0.05 y el freno dice que no se siga.
+    expect(onUso(15_000, 0)).toBe(false);
     expect(gasto.valor).toBeCloseTo(0.06, 6);
   });
 

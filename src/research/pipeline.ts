@@ -149,7 +149,9 @@ export async function ejecutarJob(jobId: string): Promise<void> {
   if (!job) return;
 
   const tope = leerTopeUsd(process.env.COST_LIMIT_USD, 15, 'COST_LIMIT_USD');
-  const modeloInv = process.env.MODEL_RESEARCH || 'claude-sonnet-5';
+  // Solo las cuatro etapas con búsqueda web usan MODEL_BUSQUEDA (p. ej. Haiku, la
+  // más barata); el resto sigue con MODEL_RESEARCH.
+  const modeloInv = process.env.MODEL_BUSQUEDA || process.env.MODEL_RESEARCH || 'claude-sonnet-5';
   const modeloSin = process.env.MODEL_SYNTHESIS || 'claude-opus-5';
 
   const [cliente] = await db.select().from(clients).where(eq(clients.id, job.clientId)).limit(1);

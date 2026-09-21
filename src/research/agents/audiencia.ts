@@ -35,7 +35,7 @@ Los elementos de jerga, jergaNegocio y tono son cadenas de texto, no objetos. Lo
 
 export async function correrAudiencia(ctx: string, onUso?: (e: number, s: number) => boolean) {
   return pedirJson<Audiencia>({
-    modelo: process.env.MODEL_RESEARCH || 'claude-sonnet-5',
+    modelo: process.env.MODEL_BUSQUEDA || process.env.MODEL_RESEARCH || 'claude-sonnet-5',
     sistema: SISTEMA,
     usuario: `${ctx}\n\nInvestiga la audiencia y devuelve el JSON con esta forma exacta:\n${FORMA_AUDIENCIA}`,
     forma: FORMA_AUDIENCIA,

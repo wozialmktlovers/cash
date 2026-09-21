@@ -23,7 +23,7 @@ export const FORMA_MERCADO = `{
 
 export async function correrMercado(ctx: string, onUso?: (e: number, s: number) => boolean) {
   return pedirJson<Mercado>({
-    modelo: process.env.MODEL_RESEARCH || 'claude-sonnet-5',
+    modelo: process.env.MODEL_BUSQUEDA || process.env.MODEL_RESEARCH || 'claude-sonnet-5',
     sistema: SISTEMA,
     usuario: `${ctx}\n\nInvestiga el mercado y devuelve el JSON con esta forma exacta:\n${FORMA_MERCADO}`,
     forma: FORMA_MERCADO,

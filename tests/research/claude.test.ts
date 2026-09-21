@@ -117,7 +117,8 @@ describe('pedirJson', () => {
     const cierre = crear.mock.calls[1][0];
     expect(cierre.tool_choice).toEqual({ type: 'none' });
     expect(cierre.messages.at(-1)).toMatchObject({ role: 'user' });
-    expect(cierre.messages.at(-1).content).toMatch(/no busques más/i);
+    const c = cierre.messages.at(-1).content;
+    expect(typeof c === 'string' ? c : c.map((b: { text: string }) => b.text).join('')).toMatch(/no busques más/i);
   });
 
   it('sigue reanudando mientras haya presupuesto', async () => {

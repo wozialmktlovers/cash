@@ -111,9 +111,10 @@ describe('Mar de miel: las tres formas que tiraban la etapa ahora se normalizan'
     crear.mockResolvedValueOnce(respuesta('{"directos":[],"indirectos":[],"referentes":[],"hallazgos":[]}'));
     await correrCompetencia(CTX);
     const cuerpo = crear.mock.calls[0][0];
-    expect(cuerpo.messages[0].content).toContain(FORMA_COMPETENCIA);
+    const texto = (c: unknown) => (typeof c === 'string' ? c : (c as { text: string }[]).map((b) => b.text).join(''));
+    expect(texto(cuerpo.messages[0].content)).toContain(FORMA_COMPETENCIA);
     expect(FORMA_COMPETENCIA).not.toMatch(/duracion|modalidad|aval/);
-    expect(cuerpo.system).toMatch(/no supongas que vende cursos/i);
+    expect(texto(cuerpo.system)).toMatch(/no supongas que vende cursos/i);
   });
 
   it('el render muestra al competidor sin chips vacíos ni «undefined»', async () => {

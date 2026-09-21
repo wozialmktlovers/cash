@@ -39,7 +39,7 @@ Cada valor de texto es una cadena, nunca un arreglo ni un objeto. "seguidores" e
 
 export async function correrCompetencia(ctx: string, onUso?: (e: number, s: number) => boolean) {
   return pedirJson<Competencia>({
-    modelo: process.env.MODEL_RESEARCH || 'claude-sonnet-5',
+    modelo: process.env.MODEL_BUSQUEDA || process.env.MODEL_RESEARCH || 'claude-sonnet-5',
     sistema: SISTEMA,
     usuario: `${ctx}\n\nInvestiga la competencia y devuelve el JSON con esta forma exacta:\n${FORMA_COMPETENCIA}`,
     forma: FORMA_COMPETENCIA,

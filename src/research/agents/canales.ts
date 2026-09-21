@@ -23,7 +23,7 @@ export const FORMA_CANALES = `{
 
 export async function correrCanales(ctx: string, onUso?: (e: number, s: number) => boolean) {
   return pedirJson<Canales>({
-    modelo: process.env.MODEL_RESEARCH || 'claude-sonnet-5',
+    modelo: process.env.MODEL_BUSQUEDA || process.env.MODEL_RESEARCH || 'claude-sonnet-5',
     sistema: SISTEMA,
     usuario: `${ctx}\n\nInvestiga los canales y devuelve el JSON con esta forma exacta:\n${FORMA_CANALES}`,
     forma: FORMA_CANALES,
