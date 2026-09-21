@@ -67,3 +67,15 @@ describe('resumenCliente', () => {
     expect(r).toEqual({ id: 'c1', nombre: 'Yessica Villa', giro: 'Cosmetología', ciudad: null });
   });
 });
+
+describe('validarCliente · borrar opcionales desde la ficha', () => {
+  const minimos = { nombre: 'Cliente', giro: 'Giro', producto: 'Producto' };
+  it('un opcional vacío se guarda como null, para poder borrarlo', () => {
+    const r = validarCliente({ ...minimos, notas: '   ', ciudad: '', ticket: '', contacto: '' });
+    expect(r.ok && r.datos).toMatchObject({ notas: null, ciudad: null, ticket: null, contacto: null });
+  });
+  it('un opcional que no viene no se toca', () => {
+    const r = validarCliente(minimos);
+    expect(r.ok && 'notas' in r.datos && r.datos.notas !== undefined).toBe(false);
+  });
+});

@@ -1,16 +1,20 @@
 import { z } from 'zod';
 
+// Opcionales de Datos: vaciarlo guarda `null` (así se puede borrar desde la
+// ficha, que manda "" en los campos vacíos) y no mandarlo lo deja como estaba.
+// Antes "" se convertía en «no tocar» y el valor viejo nunca se borraba.
 const opcional = z
   .string()
   .trim()
-  .optional()
-  .transform((v) => (v === '' ? undefined : v));
+  .transform((v) => (v === '' ? null : v))
+  .nullable()
+  .optional();
 
 /** Tope de «Objetivos y líneas de investigación». El formulario muestra el mismo. */
 export const OBJETIVOS_MAX = 2000;
 
 /**
- * Objetivos del cliente. A diferencia de los otros opcionales, vaciarlo
+ * Objetivos del cliente. Como los otros opcionales, vaciarlo
  * guarda `null` (se puede borrar desde la ficha) y no mandarlo lo deja como
  * estaba. Los saltos de línea se normalizan antes de contar: un `<textarea>`
  * los envía como CRLF, y sin esto un texto que el contador del navegador da
