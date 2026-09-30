@@ -22,6 +22,18 @@ describe('calcularCosto', () => {
   });
 });
 
+describe('calcularCosto · tarifas de OpenAI', () => {
+  it('gpt-5 cuesta más que gpt-5-mini con el mismo consumo', () => {
+    expect(calcularCosto('gpt-5', 100_000, 10_000))
+      .toBeGreaterThan(calcularCosto('gpt-5-mini', 100_000, 10_000));
+  });
+
+  it('cobra más por salida que por entrada', () => {
+    expect(calcularCosto('gpt-5-mini', 0, 1_000_000))
+      .toBeGreaterThan(calcularCosto('gpt-5-mini', 1_000_000, 0));
+  });
+});
+
 describe('leerTopeUsd', () => {
   it('usa el valor de la variable de entorno cuando es un número positivo', () => {
     expect(leerTopeUsd('20', 10, 'X')).toBe(20);

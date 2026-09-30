@@ -16,7 +16,7 @@ function definicion(nombre: string) {
 }
 
 describe('.env.example', () => {
-  for (const nombre of ['CORREO_SMTP_HOST', 'CORREO_SMTP_PUERTO', 'CORREO_SMTP_USUARIO', 'CORREO_SMTP_PASSWORD', 'CORREO_REMITENTE', 'PUBLIC_BASE_URL', 'CONVERTIR_LECTURAS', 'COST_LIMIT_CONVERSION_USD']) {
+  for (const nombre of ['CORREO_SMTP_HOST', 'CORREO_SMTP_PUERTO', 'CORREO_SMTP_USUARIO', 'CORREO_SMTP_PASSWORD', 'CORREO_REMITENTE', 'PUBLIC_BASE_URL', 'CONVERTIR_LECTURAS', 'COST_LIMIT_CONVERSION_USD', 'OPENAI_API_KEY', 'PROVEEDOR_IA', 'PROVEEDOR_IA_BUSQUEDA', 'MODEL_BUSQUEDA_OPENAI', 'MODEL_SYNTHESIS_OPENAI']) {
     it(`documenta ${nombre} con un comentario encima`, () => {
       const d = definicion(nombre);
       expect(d.i).toBeGreaterThanOrEqual(0);
@@ -25,8 +25,12 @@ describe('.env.example', () => {
   }
 
   it('las llaves secretas quedan vacías', () => {
-    for (const nombre of ['CORREO_SMTP_PASSWORD', 'ANTHROPIC_API_KEY', 'SESSION_SECRET']) {
+    for (const nombre of ['CORREO_SMTP_PASSWORD', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'SESSION_SECRET']) {
       expect(definicion(nombre).valor).toBe('');
     }
+  });
+
+  it('PROVEEDOR_IA sin definir se comporta como "anthropic" (documentado, no vacío)', () => {
+    expect(definicion('PROVEEDOR_IA').valor).toBe('anthropic');
   });
 });
