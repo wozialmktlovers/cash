@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
-import { and, count, eq } from 'drizzle-orm';
-import { db, users, sessions } from '@/db';
+import { and, count, eq, ne } from 'drizzle-orm';
+import { db, users, sessions, etapaResponsables } from '@/db';
+import { PUESTOS, type Puesto } from '@/flujo/reglas';
 import { validarCambioUsuario, validarDatosUsuario, type DatosUsuario } from '@/lib/usuarios';
 import type { Rol } from '@/lib/permisos';
 import { violaRestriccionUnica } from '@/lib/unicidad';
@@ -49,11 +50,14 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     return json({ ok: false, error: 'json-invalido' }, 400);
   }
 
-  const { rol: rolCrudo, activo: activoCrudo, nombre: nombreCrudo, apellido: apellidoCrudo, email: emailCrudo } =
-    (crudo ?? {}) as { rol?: unknown; activo?: unknown; nombre?: unknown; apellido?: unknown; email?: unknown };
+  const { rol: rolCrudo, activo: activoCrudo, nombre: nombreCrudo, apellido: apellidoCrudo, email: emailCrudo, puesto: puestoCrudo } =
+    (crudo ?? {}) as { puesto?: unknown; rol?: unknown; activo?: unknown; nombre?: unknown; apellido?: unknown; email?: unknown };
 
   if (rolCrudo !== undefined && (typeof rolCrudo !== 'string' || !ROLES.includes(rolCrudo as Rol))) {
     return json({ ok: false, error: 'rol-invalido' }, 400);
+  }
+  if (puestoCrudo !== undefined && (typeof puestoCrudo !== 'string' || !(PUESTOS as readonly string[]).includes(puestoCrudo))) {
+    return json({ ok: false, error: 'puesto-invalido' }, 400);
   }
   if (activoCrudo !== undefined && typeof activoCrudo !== 'boolean') {
     return json({ ok: false, error: 'activo-invalido' }, 400);
@@ -73,6 +77,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   if (rolCrudo !== undefined) cambio.rol = rolCrudo as Rol;
   if (activoCrudo !== undefined) cambio.activo = activoCrudo;
   const pideRolOActivo = cambio.rol !== undefined || cambio.activo !== undefined;
+  const pidePuesto = puestoCrudo !== undefined;
 
   const datos: DatosUsuario = {};
   if (nombreCrudo !== undefined) datos.nombre = nombreCrudo as string | null;
@@ -80,7 +85,7 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
   if (emailCrudo !== undefined) datos.email = emailCrudo as string;
   const pideDatos = Object.keys(datos).length > 0;
 
-  if (!pideRolOActivo && !pideDatos) return json({ ok: false, error: 'sin-cambios' }, 400);
+  if (!pideRolOActivo && !pideDatos && !pidePuesto) return json({ ok: false, error: 'sin-cambios' }, 400);
 
   // Las reglas de identidad son puras y no dependen de cómo esté el objetivo,
   // así que se resuelven antes de consultar nada: un nombre larguísimo o un
@@ -111,14 +116,31 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
     if (!validacion.ok) return json({ ok: false, error: validacion.error }, 400);
   }
 
+  // Puesto (rediseño de puestos): obligatorio si el usuario queda como
+  // operador, nulo para admin y cliente (CHECK `users_puesto_por_rol`).
+  let puestoFinal: Puesto | null | undefined;
+  if (pideRolOActivo || pidePuesto) {
+    const [obj] = await db.select({ rol: users.rol, puesto: users.puesto }).from(users).where(eq(users.id, id)).limit(1);
+    if (!obj) return json({ ok: false, error: 'no-existe' }, 404);
+    const rolFinal = cambio.rol ?? obj.rol;
+    if (rolFinal === 'operador') {
+      const elegido = (puestoCrudo as Puesto | undefined) ?? obj.puesto;
+      if (!elegido) return json({ ok: false, error: 'puesto-obligatorio' }, 400);
+      if (elegido !== obj.puesto) puestoFinal = elegido;
+    } else {
+      if (pidePuesto) return json({ ok: false, error: 'puesto-solo-operador' }, 400);
+      if (obj.puesto !== null) puestoFinal = null;
+    }
+  }
+
   // Todo en una sola escritura, traigan los dos grupos de campos o uno solo.
   let filas;
   try {
     filas = await db
       .update(users)
-      .set({ ...cambio, ...datosLimpios })
+      .set({ ...cambio, ...datosLimpios, ...(puestoFinal !== undefined ? { puesto: puestoFinal } : {}) })
       .where(eq(users.id, id))
-      .returning({ id: users.id, email: users.email, nombre: users.nombre, apellido: users.apellido, rol: users.rol, activo: users.activo, clientId: users.clientId });
+      .returning({ id: users.id, email: users.email, nombre: users.nombre, apellido: users.apellido, rol: users.rol, puesto: users.puesto, activo: users.activo, clientId: users.clientId });
   } catch (e) {
     if (!esCorreoOcupado(e)) throw e;
     return json({ ok: false, error: 'correo-ocupado' }, 409);
@@ -126,6 +148,14 @@ export const PATCH: APIRoute = async ({ params, request, locals }) => {
 
   const [actualizado] = filas;
   if (!actualizado) return json({ ok: false, error: 'no-existe' }, 404);
+
+  // Si cambió de puesto (o dejó de ser operador), sus asignaciones a etapas de
+  // otro puesto ya no son válidas: se quitan (el admin reasigna a mano).
+  if (puestoFinal !== undefined) {
+    await db.delete(etapaResponsables).where(puestoFinal === null
+      ? eq(etapaResponsables.usuarioId, id)
+      : and(eq(etapaResponsables.usuarioId, id), ne(etapaResponsables.puesto, puestoFinal)));
+  }
 
   // Al desactivar, se cierran sus sesiones: no basta con que deje de poder
   // iniciar sesión, la que ya tenía abierta también se corta.

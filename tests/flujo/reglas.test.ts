@@ -736,7 +736,7 @@ describe('aplicarAccion', () => {
         dependencias: depsOk,
       });
       expect(r.ok, accion).toBe(false);
-      if (!r.ok) expect(r.razon).toBe('No tienes este cliente asignado');
+      if (!r.ok) expect(r.razon).toBe('No eres responsable de esta etapa');
     }
   });
 

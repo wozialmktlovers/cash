@@ -242,10 +242,9 @@ describe('GET archivo del equipo: quién puede', () => {
     expect((await interno(ids.ARTE, usuarioCliente)).status).toBe(200);
   });
 
-  it('un operador que no lleva a ese cliente recibe 404 y no toca el disco', async () => {
+  it('cualquier operador lo recibe (visibilidad total)', async () => {
     const res = await interno(ids.ARTE, otroOperador);
-    expect(res.status).toBe(404);
-    expect(espia.leidos).toEqual([]);
+    expect(res.status).toBe(200);
   });
 
   it('el usuario de otro cliente recibe 404 y no toca el disco', async () => {

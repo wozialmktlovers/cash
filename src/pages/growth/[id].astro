@@ -4,6 +4,7 @@ import { db, clientLinks, shareLinks } from '@/db';
 import { renderizarManual } from '@/render/growth/manual';
 import { slugificar } from '@/lib/slug';
 import { baseUrlPublica } from '@/lib/base-url';
+import { esResponsableDeEtapa } from '@/flujo/responsables';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { documentoVisible } from '@/lib/visibilidad';
 import { etapaDelDocumento, permisoCompartir, barraDelDocumento } from '@/flujo/servicio';
@@ -42,7 +43,7 @@ let flujo: FlujoDatos | undefined;
 if (operable) {
   const etapa = await etapaDelDocumento(c.id, 'growth', r.id);
   if (etapa) {
-    const esOperadorAsignado = c.operadorId === usuario.id;
+    const esOperadorAsignado = usuario.rol === 'operador' ? await esResponsableDeEtapa(etapa.id, usuario.id) : false;
     // `etapaDelDocumento` cae a la etapa del tipo aunque este documento ya no
     // sea el vigente (B6: se puede editar una versión vieja igual). Comentar
     // es distinto (fix wave, punto 8): un ancla sobre un documento que ya no

@@ -6,7 +6,7 @@ const u = (id: string, overrides: Partial<Usuario> = {}): Usuario => ({
 });
 
 const CTX_VACIO: ContextoDestinatarios = {
-  admins: [], operador: null, autor: null, usuariosCliente: [], etapaVisibleCliente: false,
+  admins: [], operadores: [], autor: null, usuariosCliente: [], etapaVisibleCliente: false,
 };
 
 describe('destinatarios', () => {
@@ -33,24 +33,37 @@ describe('destinatarios', () => {
 
   it('cambios_pedidos: va solo al operador asignado', () => {
     const operador = u('op1');
-    const r = destinatarios('cambios_pedidos', { ...CTX_VACIO, operador, admins: [u('a1', { rol: 'admin' })] });
+    const r = destinatarios('cambios_pedidos', { ...CTX_VACIO, operadores: [operador], admins: [u('a1', { rol: 'admin' })] });
     expect(r).toEqual([operador]);
   });
 
+  it('cambios_pedidos: con dos responsables (contenido y diseño) llega a los dos', () => {
+    const contenido = u('op1');
+    const diseno = u('op2');
+    const r = destinatarios('cambios_pedidos', { ...CTX_VACIO, operadores: [contenido, diseno] });
+    expect(r).toEqual([contenido, diseno]);
+  });
+
+  it('lote_auto_aprobado: a los responsables activos; sin ninguno activo, a los admins', () => {
+    const a = u('op1'); const b = u('op2', { activo: false }); const admin = u('a1', { rol: 'admin' });
+    expect(destinatarios('lote_auto_aprobado', { ...CTX_VACIO, operadores: [a, b], admins: [admin] })).toEqual([a]);
+    expect(destinatarios('lote_auto_aprobado', { ...CTX_VACIO, operadores: [b], admins: [admin] })).toEqual([admin]);
+  });
+
   it('cambios_pedidos: sin operador asignado no avisa a nadie', () => {
-    const r = destinatarios('cambios_pedidos', { ...CTX_VACIO, operador: null });
+    const r = destinatarios('cambios_pedidos', { ...CTX_VACIO, operadores: [] });
     expect(r).toEqual([]);
   });
 
   it('reabierta: va solo al operador asignado', () => {
     const operador = u('op1');
-    const r = destinatarios('reabierta', { ...CTX_VACIO, operador });
+    const r = destinatarios('reabierta', { ...CTX_VACIO, operadores: [operador] });
     expect(r).toEqual([operador]);
   });
 
   it('reabierta: no incluye al actor, aunque el actor sea el propio operador', () => {
     const operador = u('op1');
-    const r = destinatarios('reabierta', { ...CTX_VACIO, operador, actorId: 'op1' });
+    const r = destinatarios('reabierta', { ...CTX_VACIO, operadores: [operador], actorId: 'op1' });
     expect(r).toEqual([]);
   });
 
@@ -58,33 +71,33 @@ describe('destinatarios', () => {
     const operador = u('op1');
     const c1 = u('c1', { rol: 'cliente' });
     const c2 = u('c2', { rol: 'cliente' });
-    const r = destinatarios('aprobada', { ...CTX_VACIO, operador, usuariosCliente: [c1, c2], etapaVisibleCliente: true });
+    const r = destinatarios('aprobada', { ...CTX_VACIO, operadores: [operador], usuariosCliente: [c1, c2], etapaVisibleCliente: true });
     expect(r).toEqual([operador, c1, c2]);
   });
 
   it('aprobada: si la etapa NO es visible al cliente, no avisa a los usuarios del cliente', () => {
     const operador = u('op1');
     const c1 = u('c1', { rol: 'cliente' });
-    const r = destinatarios('aprobada', { ...CTX_VACIO, operador, usuariosCliente: [c1], etapaVisibleCliente: false });
+    const r = destinatarios('aprobada', { ...CTX_VACIO, operadores: [operador], usuariosCliente: [c1], etapaVisibleCliente: false });
     expect(r).toEqual([operador]);
   });
 
   it('comentario_cliente: va al operador asignado y a los admins', () => {
     const operador = u('op1');
     const admin = u('a1', { rol: 'admin' });
-    const r = destinatarios('comentario_cliente', { ...CTX_VACIO, operador, admins: [admin] });
+    const r = destinatarios('comentario_cliente', { ...CTX_VACIO, operadores: [operador], admins: [admin] });
     expect(r).toEqual([operador, admin]);
   });
 
-  it('cliente_reasignado: va solo al operador nuevo', () => {
+  it('responsable_asignado: va solo al nuevo responsable', () => {
     const nuevo = u('op2');
-    const r = destinatarios('cliente_reasignado', { ...CTX_VACIO, operador: nuevo, admins: [u('a1', { rol: 'admin' })] });
+    const r = destinatarios('responsable_asignado', { ...CTX_VACIO, operadores: [nuevo], admins: [u('a1', { rol: 'admin' })] });
     expect(r).toEqual([nuevo]);
   });
 
   it('entregable_generado: va solo al autor (quien lanzó el job)', () => {
     const autor = u('op1');
-    const r = destinatarios('entregable_generado', { ...CTX_VACIO, autor, operador: u('op2') });
+    const r = destinatarios('entregable_generado', { ...CTX_VACIO, autor, operadores: [u('op2')] });
     expect(r).toEqual([autor]);
   });
 
@@ -101,7 +114,7 @@ describe('destinatarios', () => {
 
   it('nunca duplica destinatarios: el mismo usuario en dos roles del contexto sale una sola vez', () => {
     const mismo = u('m1', { rol: 'admin' });
-    const r = destinatarios('comentario_cliente', { ...CTX_VACIO, operador: mismo, admins: [mismo, u('a2', { rol: 'admin' })] });
+    const r = destinatarios('comentario_cliente', { ...CTX_VACIO, operadores: [mismo], admins: [mismo, u('a2', { rol: 'admin' })] });
     expect(r.map((x) => x.id)).toEqual(['m1', 'a2']);
   });
 });
@@ -110,19 +123,19 @@ describe('destinatarios: cliente_respondio (M2 punto 3)', () => {
   it('va al operador asignado, no a los admins ni al cliente', () => {
     const operador = u('op1');
     const r = destinatarios('cliente_respondio', {
-      ...CTX_VACIO, operador, admins: [u('a1', { rol: 'admin' })], usuariosCliente: [u('c1', { rol: 'cliente' })], actorId: 'c1',
+      ...CTX_VACIO, operadores: [operador], admins: [u('a1', { rol: 'admin' })], usuariosCliente: [u('c1', { rol: 'cliente' })], actorId: 'c1',
     });
     expect(r).toEqual([operador]);
   });
 
   it('sin operador asignado (o inactivo) cae a los admins, para que la respuesta no se pierda', () => {
     const admin = u('a1', { rol: 'admin' });
-    expect(destinatarios('cliente_respondio', { ...CTX_VACIO, operador: null, admins: [admin] })).toEqual([admin]);
-    expect(destinatarios('cliente_respondio', { ...CTX_VACIO, operador: u('op1', { activo: false }), admins: [admin] })).toEqual([admin]);
+    expect(destinatarios('cliente_respondio', { ...CTX_VACIO, operadores: [], admins: [admin] })).toEqual([admin]);
+    expect(destinatarios('cliente_respondio', { ...CTX_VACIO, operadores: [u('op1', { activo: false })], admins: [admin] })).toEqual([admin]);
   });
 
   it('nunca avisa a quien respondió', () => {
-    const r = destinatarios('cliente_respondio', { ...CTX_VACIO, operador: u('c1', { rol: 'cliente' }), actorId: 'c1' });
+    const r = destinatarios('cliente_respondio', { ...CTX_VACIO, operadores: [u('c1', { rol: 'cliente' })], actorId: 'c1' });
     expect(r).toEqual([]);
   });
 });
@@ -160,7 +173,7 @@ describe('textoAviso', () => {
   });
 
   it('cada evento produce título y texto no vacíos', () => {
-    const eventos = ['solicitud', 'cambios_pedidos', 'reabierta', 'aprobada', 'comentario_cliente', 'respuesta_cliente', 'cliente_respondio', 'cliente_reasignado', 'entregable_generado', 'job_fallido'] as const;
+    const eventos = ['solicitud', 'cambios_pedidos', 'reabierta', 'aprobada', 'comentario_cliente', 'respuesta_cliente', 'cliente_respondio', 'responsable_asignado', 'entregable_generado', 'job_fallido'] as const;
     for (const evento of eventos) {
       const { titulo, texto } = textoAviso(evento, datos);
       expect(titulo.length).toBeGreaterThan(0);

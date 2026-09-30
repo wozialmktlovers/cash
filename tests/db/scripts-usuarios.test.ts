@@ -87,7 +87,14 @@ describe('crear-usuario: argumentos', () => {
 
   it('el rol solo puede ser admin u operador', () => {
     expect(validarArgumentos(['a@b.mx', '123456789012', 'cliente']).ok).toBe(false);
-    expect(validarArgumentos(['a@b.mx', '123456789012', 'operador'])).toEqual({ ok: true, email: 'a@b.mx', password: '123456789012', rol: 'operador', nombre: null, apellido: null });
+    expect(validarArgumentos(['a@b.mx', '123456789012', 'operador', undefined as never, undefined as never, 'strategist'])).toEqual({ ok: true, email: 'a@b.mx', password: '123456789012', rol: 'operador', nombre: null, apellido: null, puesto: 'strategist' });
+  });
+
+  it('un operador exige puesto válido; admin no lo admite (CHECK users_puesto_por_rol)', () => {
+    expect(validarArgumentos(['a@b.mx', '123456789012', 'operador']).ok).toBe(false);
+    expect(validarArgumentos(['a@b.mx', '123456789012', 'operador', 'A', 'B', 'jefe']).ok).toBe(false);
+    expect(validarArgumentos(['a@b.mx', '123456789012', 'admin', 'A', 'B', 'trafficker']).ok).toBe(false);
+    expect(validarArgumentos(['a@b.mx', '123456789012', 'admin'])).toMatchObject({ ok: true, puesto: null });
   });
 
   it('acepta nombre y apellido opcionales', () => {
@@ -100,6 +107,10 @@ describe('crear-usuario: sentencia', () => {
   it('con rol explícito, el ON CONFLICT que cambia el rol también limpia client_id', () => {
     const s = sentenciaCrearUsuario(true);
     expect(s).toMatch(/DO UPDATE SET[^;]*rol = \$[^;]*client_id = NULL/);
+  });
+
+  it('al cambiar de rol también fija el puesto (nulo para admin)', () => {
+    expect(sentenciaCrearUsuario(true)).toMatch(/DO UPDATE SET[^;]*puesto = \$6/);
   });
 
   it('sin rol explícito solo cambia la contraseña: no promueve a nadie', () => {

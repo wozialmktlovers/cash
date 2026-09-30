@@ -142,8 +142,8 @@ td .chip{margin:1px 0}
 
   <h3>Los tres roles</h3>
   <div class="roles">
-    <div class="rol"><h4>Admin</h4><p>Ve todos los clientes. Es el único que <strong>autoriza</strong>, <strong>pide cambios</strong> y <strong>reabre</strong> etapas. Administra usuarios, asigna operadores y puede eliminar clientes.</p></div>
-    <div class="rol"><h4>Operador</h4><p>Ve solo <strong>sus clientes asignados</strong>. Genera los entregables, los corrige, atiende comentarios, arma el contenido del mes y <strong>solicita autorización</strong> al admin.</p></div>
+    <div class="rol"><h4>Admin</h4><p>Ve todos los clientes. Es el único que <strong>autoriza</strong>, <strong>pide cambios</strong> y <strong>reabre</strong> etapas. Administra usuarios y sus puestos, asigna a los responsables de cada etapa y puede eliminar clientes.</p></div>
+    <div class="rol"><h4>Equipo con puesto</h4><p>Cada persona del equipo tiene un <strong>puesto</strong>: <strong>Strategist</strong> (investigación), <strong>Content Creator</strong> (mapa de pilares), <strong>Contenido</strong> y <strong>Diseño</strong> (desarrollo mensual, los dos a la vez) y <strong>Trafficker</strong> (manual de campaña). <strong>Ve todos los clientes completos</strong>, con sus cuatro etapas, pero solo <strong>actúa</strong> (corrige, atiende comentarios, arma el mes y <strong>solicita autorización</strong>) en las etapas de las que es <strong>responsable</strong>.</p></div>
     <div class="rol"><h4>Cliente</h4><p>Entra a su <strong>portal</strong>. Ve sus entregables ya autorizados, deja observaciones en el manual de campaña y aprueba o pide cambios a cada pieza del mes.</p></div>
   </div>
 
@@ -195,7 +195,7 @@ td .chip{margin:1px 0}
   <p class="sub">Este es el orden normal. Cada paso tiene su detalle más adelante.</p>
   <ol class="pasos">
     <li><strong>Operador o admin</strong> da de alta al cliente con <span class="btn p">Nuevo cliente</span>, sube sus archivos y enlaces, y marca qué etapas se contrataron.</li>
-    <li><strong>Admin</strong> asigna el operador responsable en la ficha (si no lo es ya quien lo creó).</li>
+    <li><strong>Admin</strong> asigna en la ficha al responsable de cada etapa (ver «Asignar responsables por etapa»). Un cliente nuevo nace sin responsables.</li>
     <li><strong>Operador</strong> lanza la <strong>Investigación</strong> y espera a que termine (unos minutos).</li>
     <li><strong>Operador</strong> revisa el documento, lo corrige si hace falta y pulsa <span class="btn p">Solicitar autorización</span>.</li>
     <li><strong>Admin</strong> recibe el aviso, abre el documento y pulsa <span class="btn p">Autorizar</span>, o deja comentarios y pulsa <span class="btn">Pedir cambios</span>.</li>
@@ -262,8 +262,8 @@ td .chip{margin:1px 0}
   <div class="tabla"><table>
     <thead><tr><th>Botón</th><th>Quién</th><th>Desde qué estado</th><th>Queda en</th><th>Condición</th></tr></thead>
     <tbody>
-      <tr><td><span class="btn">Generar</span></td><td>Admin y operador asignado</td><td>No iniciada, En proceso, Con cambios</td><td>En proceso</td><td>Que exista la investigación (para 2, 3 y 4). En revisión o aprobada no se puede: primero hay que reabrir.</td></tr>
-      <tr><td><span class="btn p">Solicitar autorización</span></td><td>Operador asignado</td><td>En proceso, Con cambios</td><td>En revisión</td><td>Que haya documento y <strong>ningún comentario abierto</strong>. Si quedan, el botón sale gris con el motivo.</td></tr>
+      <tr><td><span class="btn">Generar</span></td><td>Admin y responsable de la etapa</td><td>No iniciada, En proceso, Con cambios</td><td>En proceso</td><td>Que exista la investigación (para 2, 3 y 4). En revisión o aprobada no se puede: primero hay que reabrir.</td></tr>
+      <tr><td><span class="btn p">Solicitar autorización</span></td><td>Responsable de la etapa</td><td>En proceso, Con cambios</td><td>En revisión</td><td>Que haya documento y <strong>ningún comentario abierto</strong>. Si quedan, el botón sale gris con el motivo.</td></tr>
       <tr><td><span class="btn p">Autorizar</span></td><td>Solo admin</td><td>En revisión</td><td>Aprobada</td><td>Ninguna.</td></tr>
       <tr><td><span class="btn p">Autorizar</span> directo</td><td>Solo admin</td><td>En proceso, Con cambios</td><td>Aprobada</td><td>Que haya documento y ningún comentario abierto.</td></tr>
       <tr><td><span class="btn">Pedir cambios</span></td><td>Solo admin</td><td>En revisión</td><td>Con cambios</td><td>Al menos un comentario abierto en el documento, o escribir uno en la ventana.</td></tr>
@@ -291,7 +291,7 @@ td .chip{margin:1px 0}
       <ul>
         <li><strong>Ciudad</strong>. Sin ciudad, el foco será nacional.</li>
         <li><strong>Ticket</strong>, que define si el ciclo de compra es largo.</li>
-        <li><strong>Contacto</strong> y <strong>Notas del operador</strong>.</li>
+        <li><strong>Contacto</strong> y <strong>Notas internas</strong>.</li>
       </ul>
     </li>
     <li>En <strong>Etapas contratadas</strong> deja marcadas las que el cliente pagó. Vienen marcadas Investigación, Mapa de pilares y Manual de campaña; Desarrollo mensual viene sin marcar.</li>
@@ -389,17 +389,17 @@ td .chip{margin:1px 0}
   <h3>Reabrir algo ya aprobado</h3>
   <p>En la tarjeta de una etapa <span class="chip c-verde">Aprobada</span> pulsa <span class="btn">Reabrir</span>, escribe el motivo (obligatorio) y confirma. La etapa pasa a <span class="chip c-rosa">Con cambios</span> y el operador recibe el aviso con el motivo.</p>
 
-  <h3>Asignar o cambiar el operador</h3>
-  <p>En la ficha, en <strong>Responsable</strong>, elige el operador en <strong>Operador asignado</strong>. Se guarda al elegirlo y al nuevo responsable le llega «X es ahora tu cliente». Mientras un cliente no tenga operador, ningún operador lo ve.</p>
+  <h3>Asignar responsables por etapa</h3>
+  <p>Antes había un solo operador por cliente; ahora la asignación es <strong>por etapa</strong>. En la ficha, en <strong>Responsables por etapa</strong>, cada etapa trae su selector, con solo las personas activas del puesto que le toca: Investigación → <strong>Strategist</strong>, Mapa de pilares → <strong>Content Creator</strong>, Manual de campaña → <strong>Trafficker</strong> y Desarrollo mensual → dos selectores, <strong>Contenido</strong> y <strong>Diseño</strong>. Se guarda al elegir y al nuevo responsable le llega un aviso. «Sin asignar» es válido; nadie puede quedar en un puesto que no le corresponde. Que un cliente no tenga responsables <strong>no lo oculta</strong>: todo el equipo lo ve siempre.</p>
 
   <h3>Contratar o quitar etapas</h3>
   <p>En la ficha, en el recuadro <strong>Etapas contratadas</strong>, marca o desmarca las casillas y pulsa <span class="btn p">Guardar etapas</span>. Un operador no puede quitar una etapa ya iniciada; un admin sí.</p>
 
   <h3 id="usuarios">Usuarios</h3>
   <ul>
-    <li><strong>Invitar</strong>: en Usuarios pulsa <span class="btn p">Invitar</span>, escribe el correo y elige el rol: <strong>Admin</strong>, <strong>Operador</strong> o <strong>Usuario de cliente</strong> (en este último, elige de qué cliente). Copia el enlace y envíaselo.</li>
+    <li><strong>Invitar</strong>: en Usuarios pulsa <span class="btn p">Invitar</span>, escribe el correo y elige el rol: <strong>Admin</strong>, <strong>Equipo con puesto</strong> (y elige el puesto, obligatorio) o <strong>Usuario de cliente</strong> (en este último, elige de qué cliente). Copia el enlace y envíaselo.</li>
     <li><strong>Editar</strong>: en cada persona pulsa <span class="btn">Editar</span> para cambiar Nombre, Apellido o Correo.</li>
-    <li><strong>Rol</strong>: cámbialo con el selector Admin/Operador.</li>
+    <li><strong>Rol y puesto</strong>: cámbialos con los selectores de la fila (Admin o equipo con puesto; los cinco puestos). Al cambiar de puesto se quitan sus asignaciones de otro puesto. La tabla muestra el puesto de cada quien y cuántas etapas lleva.</li>
     <li><strong>Desactivar</strong>: usa el interruptor. La persona deja de poder entrar sin borrar su historial.</li>
     <li>Nadie puede desactivarse ni quitarse el rol de admin a sí mismo, y el último admin activo no se puede degradar.</li>
   </ul>
@@ -413,12 +413,12 @@ td .chip{margin:1px 0}
   <div class="nota aviso"><b>No hay papelera</b><p>Se borran el cliente, sus documentos, comentarios, enlaces y archivos. No se puede deshacer.</p></div>
 
   <h3>Desempeño</h3>
-  <p>En <strong>Desempeño</strong> eliges el periodo (Este mes, Mes anterior, Últimos 90 días, Todo) y, como admin, un operador. Muestra:</p>
+  <p>En <strong>Desempeño</strong> eliges el periodo (Este mes, Mes anterior, Últimos 90 días, Todo) y, si quieres, una persona responsable. Muestra:</p>
   <ul>
     <li>días promedio para aprobar;</li>
     <li>tiempo de espera en revisión;</li>
     <li>rondas de cambios;</li>
-    <li>costo, por etapa, por operador y por cliente.</li>
+    <li>costo, por etapa, por puesto y persona, y por cliente. «Por puesto y persona» agrupa por puesto y cuenta las etapas que cada quien lleva asignadas.</li>
   </ul>
 </section>
 
@@ -488,7 +488,7 @@ td .chip{margin:1px 0}
     <li>Para cambiarlo usa <span class="btn">Reemplazar</span>; para borrarlo, <span class="btn">Quitar</span> (pide confirmación).</li>
   </ol>
   <ul>
-    <li>Lo pueden subir el admin y el operador asignado. El cliente <strong>ve el arte</strong> en su portal y en el enlace público, pero no puede cambiarlo.</li>
+    <li>Lo puede subir cualquier persona del equipo. El cliente <strong>ve el arte</strong> en su portal y en el enlace público, pero no puede cambiarlo.</li>
     <li>Subir arte <strong>no cambia la autorización</strong> del manual ni crea versión nueva: el cliente lo ve en cuanto se sube.</li>
     <li>El sistema revisa que el archivo sea de verdad una imagen o un video; un archivo disfrazado se rechaza.</li>
     <li>Los botones se ocultan mientras estás en modo Editar o Comentar.</li>
@@ -519,7 +519,7 @@ td .chip{margin:1px 0}
   <ul>
     <li>La etapa <strong>Desarrollo mensual</strong> debe estar marcada en <strong>Etapas contratadas</strong> de la ficha, con <span class="btn p">Guardar etapas</span>.</li>
     <li>Debe existir una investigación con datos. Conviene tener el mapa de pilares: la IA saca de ahí los temas del mes.</li>
-    <li>Define el <strong>Paquete mensual</strong> del cliente en la ficha, pestaña <strong>Datos</strong>: cuántos posts (imagen), carruseles, reels e historias lleva al mes. Lo editan el admin y el operador asignado.</li>
+    <li>Define el <strong>Paquete mensual</strong> del cliente en la ficha, pestaña <strong>Datos</strong>: cuántos posts (imagen), carruseles, reels e historias lleva al mes. Lo edita cualquier persona del equipo.</li>
   </ul>
 
   <h3>Abrir el mes</h3>
@@ -621,16 +621,16 @@ td .chip{margin:1px 0}
     <thead><tr><th>Qué pasó</th><th>Aviso</th><th>Le llega a</th><th>Te lleva a</th></tr></thead>
     <tbody>
       <tr><td>El operador pidió autorización</td><td>«X · Etapa espera tu autorización»</td><td>Todos los admins</td><td>El documento, con Autorizar y Pedir cambios</td></tr>
-      <tr><td>El admin pidió cambios</td><td>«…tiene cambios pedidos»</td><td>Operador asignado</td><td>El documento, en el primer comentario</td></tr>
-      <tr><td>El admin reabrió</td><td>«…se reabrió»</td><td>Operador asignado</td><td>El documento, en el primer comentario</td></tr>
-      <tr><td>El admin autorizó</td><td>«…fue aprobada»</td><td>Operador (y el cliente, si la etapa es visible)</td><td>El documento (el cliente, a su portal)</td></tr>
-      <tr><td>El cliente comentó o devolvió una pieza</td><td>«X comentó en Etapa»</td><td>Operador y admins</td><td>El documento con ese hilo abierto, o la pantalla del mes</td></tr>
-      <tr><td>El cliente respondió un hilo</td><td>«X respondió en Etapa»</td><td>Operador</td><td>El documento con ese hilo abierto</td></tr>
+      <tr><td>El admin pidió cambios</td><td>«…tiene cambios pedidos»</td><td>Responsables de la etapa</td><td>El documento, en el primer comentario</td></tr>
+      <tr><td>El admin reabrió</td><td>«…se reabrió»</td><td>Responsables de la etapa</td><td>El documento, en el primer comentario</td></tr>
+      <tr><td>Te asignaron como responsable de una etapa</td><td>«… ahora eres responsable»</td><td>La persona asignada</td><td>La ficha del cliente</td></tr>
+      <tr><td>El admin autorizó</td><td>«…fue aprobada»</td><td>Responsables de la etapa (y el cliente, si la etapa es visible)</td><td>El documento (el cliente, a su portal)</td></tr>
+      <tr><td>El cliente comentó o devolvió una pieza</td><td>«X comentó en Etapa»</td><td>Responsables de la etapa y admins</td><td>El documento con ese hilo abierto, o la pantalla del mes</td></tr>
+      <tr><td>El cliente respondió un hilo</td><td>«X respondió en Etapa»</td><td>Responsables de la etapa</td><td>El documento con ese hilo abierto</td></tr>
       <tr><td>El equipo respondió al cliente</td><td>«Nueva respuesta en Etapa»</td><td>El cliente</td><td>Su portal</td></tr>
       <tr><td>Terminó de generarse un documento</td><td>«Etapa de X está lista»</td><td>Quien lo lanzó</td><td>El documento</td></tr>
       <tr><td>Falló un trabajo</td><td>«…falló»</td><td>Quien lo lanzó</td><td>La pantalla del trabajo</td></tr>
-      <tr><td>Te asignaron un cliente</td><td>«X es ahora tu cliente»</td><td>El nuevo responsable</td><td>La ficha</td></tr>
-      <tr><td>Un mes se aprobó por vencimiento</td><td>«…se aprobó por vencimiento»</td><td>Operador</td><td>La pantalla del mes</td></tr>
+      <tr><td>Un mes se aprobó por vencimiento</td><td>«…se aprobó por vencimiento»</td><td>Los dos responsables del mes (contenido y diseño)</td><td>La pantalla del mes</td></tr>
     </tbody>
   </table></div>
   <ul>
@@ -643,7 +643,7 @@ td .chip{margin:1px 0}
 
 <section id="tablero">
   <h2>10. Inicio y Pendientes</h2>
-  <p class="sub">Lo primero que ves al entrar. El admin ve todo; el operador solo sus clientes.</p>
+  <p class="sub">Lo primero que ves al entrar. Todo el equipo ve todos los clientes; «Te toca a ti» y los pendientes salen de las etapas que tienes asignadas.</p>
 
   <h3>Las seis cifras de arriba</h3>
   <p>Cada una te lleva a su bloque:</p>
@@ -660,7 +660,7 @@ td .chip{margin:1px 0}
   <p>Lo que espera tu acción, con la misma frase de la tarjeta («Laura Ruiz te pidió autorización hace 3 horas», «Laura (cliente) comentó hace 2 horas») y un botón <span class="btn">Ver</span>. Si está vacío dice «Nada espera por ti».</p>
   <ul>
     <li><strong>Admin</strong>: las etapas en revisión.</li>
-    <li><strong>Operador</strong>: sus etapas con cambios o en proceso, y los comentarios abiertos.</li>
+    <li><strong>Equipo con puesto</strong>: las etapas con cambios o en proceso <strong>de las que eres responsable</strong> (de cualquier cliente), y sus comentarios abiertos.</li>
   </ul>
 
   <h3>Estado de las entregas</h3>
@@ -677,7 +677,7 @@ td .chip{margin:1px 0}
   <ul>
     <li><strong>Avance por cliente</strong>: % de avance, etapa actual, responsable y días sin movimiento. «Atascado» aparece con 7 días o más sin movimiento, y esos clientes van primero.</li>
     <li><strong>Por etapa</strong>: cuántas etapas hay en cada estado.</li>
-    <li><strong>Por operador</strong> (admin) o <strong>Tu trabajo</strong> (operador): clientes, avance, cuántas etapas «Por mover» y aprobadas este mes.</li>
+    <li><strong>Por puesto y persona</strong>: por cada responsable, sus etapas, avance, cuántas están «Por mover» y aprobadas este mes.</li>
     <li><strong>Gastos</strong>: este mes contra el anterior, por tipo de trabajo y por cliente.</li>
     <li><strong>Meses por vencer</strong>: cuenta regresiva de los meses compartidos.</li>
     <li><strong>En curso</strong>: trabajos que están corriendo ahora.</li>
@@ -772,8 +772,8 @@ td .chip{margin:1px 0}
     <p>El correo todavía no está configurado. Copia el enlace de invitación con <span class="btn">Copiar</span> y mándalo por WhatsApp o correo. Los avisos se ven en la campana.</p>
   </details>
 
-  <details><summary>Un operador no ve a un cliente</summary>
-    <p>El operador solo ve los clientes que tiene asignados. Un admin debe elegirlo en la ficha, en <strong>Responsable → Operador asignado</strong>.</p>
+  <details><summary>No puedo actuar sobre una etapa de un cliente</summary>
+    <p>Todo el equipo ve todos los clientes, pero solo actúa en las etapas de las que es responsable. Un admin debe asignarte en la ficha, en <strong>Responsables por etapa</strong>, con el selector de tu puesto.</p>
   </details>
 
   <details><summary>Me bloqueó el acceso</summary>

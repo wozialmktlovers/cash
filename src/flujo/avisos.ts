@@ -10,6 +10,7 @@ import { enviarCorreo } from '@/lib/correo';
 import { enlaceCorreo } from '@/lib/base-url';
 import { nombrePeriodo } from '@/lib/ui/periodo';
 import { NOMBRE_ETAPA, type Rol } from './reglas';
+import { responsablesDeEtapa } from './responsables';
 
 export type Usuario = { id: string; email: string; nombre: string | null; apellido: string | null; rol: Rol; activo: boolean };
 
@@ -21,7 +22,7 @@ export type EventoAviso =
   | 'comentario_cliente'
   | 'respuesta_cliente'
   | 'cliente_respondio'
-  | 'cliente_reasignado'
+  | 'responsable_asignado'
   | 'entregable_generado'
   | 'job_fallido'
   | 'mes_generado'
@@ -29,16 +30,19 @@ export type EventoAviso =
 
 /**
  * Contexto para calcular destinatarios (spec §3, tabla «Eventos»).
- * - `operador` es «el operador al que le toca enterarse»: el asignado para
- *   cambios/reabierta/aprobada/comentario, o el nuevo operador en una
- *   reasignación.
+ * - `operadores` son «los responsables a los que les toca enterarse»: los
+ *   asignados a la ETAPA (rediseño 2026-09-30, puestos y responsables por
+ *   etapa) para cambios/reabierta/aprobada/comentario. Antes era un único
+ *   `operador` —el del cliente—; ahora una etapa de `desarrollo_mensual`
+ *   puede tener dos (contenido y diseño) a la vez, así que el aviso les llega
+ *   a TODOS, no a uno solo.
  * - `autor` es «quien lanzó el job», para entregable generado y job fallido.
  * - `actorId`, si se da, nunca aparece en el resultado: quien causa el
  *   evento no se notifica a sí mismo (p. ej. el admin que aprueba).
  */
 export type ContextoDestinatarios = {
   admins: Usuario[];
-  operador: Usuario | null;
+  operadores: Usuario[];
   autor: Usuario | null;
   usuariosCliente: Usuario[];
   etapaVisibleCliente: boolean;
@@ -51,37 +55,41 @@ function candidatosDe(evento: EventoAviso, ctx: ContextoDestinatarios): (Usuario
       return ctx.admins;
     case 'cambios_pedidos':
     case 'reabierta':
-    case 'cliente_reasignado':
-      return [ctx.operador];
+    case 'responsable_asignado':
+      return ctx.operadores;
     case 'aprobada':
-      return ctx.etapaVisibleCliente ? [ctx.operador, ...ctx.usuariosCliente] : [ctx.operador];
+      return ctx.etapaVisibleCliente ? [...ctx.operadores, ...ctx.usuariosCliente] : ctx.operadores;
     case 'comentario_cliente':
-      return [ctx.operador, ...ctx.admins];
+      return [...ctx.operadores, ...ctx.admins];
     case 'respuesta_cliente':
       // El único destinatario es quien abrió el hilo (el autor del
       // comentario padre): se pasa en `ctx.usuariosCliente` con esa única
       // entrada, igual que `aprobada` reutiliza el mismo campo.
       return ctx.usuariosCliente;
-    case 'cliente_respondio':
+    case 'cliente_respondio': {
       // Fix menores M2, punto 3: cuando el cliente responde en su hilo, se
-      // entera el operador asignado (es quien le contesta). Sin operador, o
-      // con uno desactivado, la respuesta no debe quedar sin que nadie la
-      // vea: cae a los admins.
-      return ctx.operador && ctx.operador.activo ? [ctx.operador] : ctx.admins;
+      // entera cada responsable activo de la etapa (es quien le contesta).
+      // Sin ninguno activo, la respuesta no debe quedar sin que nadie la vea:
+      // cae a los admins.
+      const activos = ctx.operadores.filter((o) => o.activo);
+      return activos.length > 0 ? activos : ctx.admins;
+    }
     case 'entregable_generado':
     case 'job_fallido':
     case 'mes_generado':
       return [ctx.autor];
-    case 'lote_auto_aprobado':
+    case 'lote_auto_aprobado': {
       // C3: el plazo del lote mensual venció y el sistema lo dio por aprobado.
       // Se entera el equipo, no el cliente: al cliente ya se le anunció el
       // plazo y la cuenta regresiva en el propio entregable (diseño §6), y un
       // correo diciéndole que se le pasó el plazo no le da ninguna opción que
       // no tenga ya —puede seguir pidiendo cambios—, pero sí suena a reproche.
-      // Quien necesita enterarse es quien tiene que seguir con el mes. Mismo
-      // reparto que `cliente_respondio`: el operador asignado, y si no hay uno
-      // activo, los admins, para que no se pierda.
-      return ctx.operador && ctx.operador.activo ? [ctx.operador] : ctx.admins;
+      // Quien necesita enterarse es quien tiene que seguir con el mes: los dos
+      // responsables (contenido y diseño) de `desarrollo_mensual`, y si
+      // ninguno está activo, los admins, para que no se pierda.
+      const activos = ctx.operadores.filter((o) => o.activo);
+      return activos.length > 0 ? activos : ctx.admins;
+    }
   }
   // Inalcanzable: EventoAviso es una unión cerrada y todos los casos regresan arriba.
   throw new Error(`Evento de aviso desconocido: ${evento}`);
@@ -177,10 +185,10 @@ export function textoAviso(evento: EventoAviso, datos: DatosAviso): { titulo: st
         titulo: `${cliente} respondió en ${etapa}`,
         texto: `${cliente} respondió en un hilo de observaciones de ${etapa}. Revísalo cuando puedas.`,
       };
-    case 'cliente_reasignado':
+    case 'responsable_asignado':
       return {
-        titulo: `${cliente} es ahora tu cliente`,
-        texto: `Te asignaron ${cliente}. Ya puedes ver su ficha y sus etapas.`,
+        titulo: `${cliente} · ${etapa}: ahora eres responsable`,
+        texto: `Te asignaron como responsable de ${etapa} de ${cliente}.`,
       };
     case 'entregable_generado':
       return {
@@ -235,6 +243,24 @@ export async function usuarioPorId(id: string | null | undefined): Promise<Usuar
   if (!id) return null;
   const [fila] = await db.select(CAMPOS_USUARIO).from(users).where(eq(users.id, id)).limit(1);
   return fila ?? null;
+}
+
+/**
+ * Los responsables de una etapa, como `Usuario[]` (rediseño 2026-09-30):
+ * reemplaza a `usuarioPorId(operadorId)` en todos los avisos que antes
+ * avisaban «al operador del cliente» y ahora avisan a quien de verdad
+ * responde por ESA etapa —que puede ser nadie, uno o, en
+ * `desarrollo_mensual`, dos a la vez—. No filtra por activo: `destinatarios`
+ * ya lo hace, y `cliente_respondio`/`lote_auto_aprobado` necesitan saber
+ * cuántos activos hay para decidir si caen a los admins.
+ */
+export async function responsablesActivosDeEtapa(etapaId: string | null | undefined): Promise<Usuario[]> {
+  if (!etapaId) return [];
+  const responsables = await responsablesDeEtapa(etapaId);
+  // Todo responsable es, por construcción (`asignarResponsable`), un
+  // operador activo en el momento de asignarlo; `activo` puede haber
+  // cambiado desde entonces y es justo lo que `destinatarios` necesita.
+  return responsables.map((r) => ({ id: r.id, email: r.email, nombre: r.nombre, apellido: r.apellido, rol: 'operador' as const, activo: r.activo }));
 }
 
 export type ContextoAviso = ContextoDestinatarios & { datos: DatosAviso };
@@ -313,56 +339,56 @@ export async function avisarJob(o: {
   if (o.detalle) datos.detalle = o.detalle;
   await notificar(
     o.evento,
-    { admins: [], operador: null, autor, usuariosCliente: [], etapaVisibleCliente: false, datos },
+    { admins: [], operadores: [], autor, usuariosCliente: [], etapaVisibleCliente: false, datos },
     o.enlace,
   );
 }
 
-/** Aviso de una transición de etapa: solicitud (admins), cambios pedidos o reabierta (operador), aprobada (operador y, si la etapa es visible, los usuarios del cliente). */
+/** Aviso de una transición de etapa: solicitud (admins), cambios pedidos o reabierta (responsables de la etapa), aprobada (responsables y, si la etapa es visible, los usuarios del cliente). */
 export async function avisarTransicion(o: {
   evento: 'solicitud' | 'cambios_pedidos' | 'reabierta' | 'aprobada';
   actorId: string;
   clientId: string;
-  operadorId: string | null;
+  etapaId: string;
   etapaVisibleCliente: boolean;
   cliente: string;
   etapa: string;
   autor: string;
   enlace: string;
 }): Promise<void> {
-  const [admins, operador, usuariosCliente] = await Promise.all([
+  const [admins, operadores, usuariosCliente] = await Promise.all([
     o.evento === 'solicitud' ? adminsActivos() : Promise.resolve([]),
-    usuarioPorId(o.operadorId),
+    responsablesActivosDeEtapa(o.etapaId),
     o.evento === 'aprobada' && o.etapaVisibleCliente ? usuariosDeCliente(o.clientId) : Promise.resolve([]),
   ]);
   await notificar(
     o.evento,
     {
-      admins, operador, autor: null, usuariosCliente, etapaVisibleCliente: o.etapaVisibleCliente,
+      admins, operadores, autor: null, usuariosCliente, etapaVisibleCliente: o.etapaVisibleCliente,
       actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa, autor: o.autor },
     },
     o.enlace,
   );
 }
 
-/** Aviso de reasignación de cliente: al nuevo operador. */
-export async function avisarReasignacion(o: { actorId: string; nuevoOperadorId: string; cliente: string; enlace: string }): Promise<void> {
-  const operador = await usuarioPorId(o.nuevoOperadorId);
+/** Aviso de que se asignó (o reasignó) un responsable a una etapa: a esa persona. */
+export async function avisarAsignacionResponsable(o: { actorId: string; nuevoResponsableId: string; cliente: string; etapa: string; enlace: string }): Promise<void> {
+  const responsable = await usuarioPorId(o.nuevoResponsableId);
   await notificar(
-    'cliente_reasignado',
-    { admins: [], operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false, actorId: o.actorId, datos: { cliente: o.cliente, etapa: '' } },
+    'responsable_asignado',
+    { admins: [], operadores: responsable ? [responsable] : [], autor: null, usuariosCliente: [], etapaVisibleCliente: false, actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa } },
     o.enlace,
   );
 }
 
-/** Aviso de un comentario del cliente (B7, spec §3): al operador asignado y a los admins, sin incluir a quien comentó (el cliente nunca se avisa a sí mismo). */
+/** Aviso de un comentario del cliente (B7, spec §3): a los responsables de la etapa y a los admins, sin incluir a quien comentó (el cliente nunca se avisa a sí mismo). */
 export async function avisarComentarioCliente(o: {
-  actorId: string; clientId: string; operadorId: string | null; cliente: string; etapa: string; enlace: string;
+  actorId: string; clientId: string; etapaId: string; cliente: string; etapa: string; enlace: string;
 }): Promise<void> {
-  const [admins, operador] = await Promise.all([adminsActivos(), usuarioPorId(o.operadorId)]);
+  const [admins, operadores] = await Promise.all([adminsActivos(), responsablesActivosDeEtapa(o.etapaId)]);
   await notificar(
     'comentario_cliente',
-    { admins, operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false, actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa } },
+    { admins, operadores, autor: null, usuariosCliente: [], etapaVisibleCliente: false, actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa } },
     o.enlace,
   );
 }
@@ -385,7 +411,7 @@ export async function avisarRespuestaCliente(o: {
   await notificar(
     'respuesta_cliente',
     {
-      admins: [], operador: null, autor: null, usuariosCliente: [autorComentario], etapaVisibleCliente: false,
+      admins: [], operadores: [], autor: null, usuariosCliente: [autorComentario], etapaVisibleCliente: false,
       actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa },
     },
     '/portal',
@@ -395,37 +421,38 @@ export async function avisarRespuestaCliente(o: {
 /**
  * Aviso de una respuesta DEL CLIENTE dentro de su propio hilo (fix menores
  * M2, punto 3): antes solo se avisaba en la otra dirección (equipo →
- * cliente) y la respuesta del cliente quedaba sin que nadie se enterara. Va
- * al operador asignado (o a los admins si no hay uno activo). Nada de esto
- * llega al cliente, así que no hay identidades del equipo que ocultar; el
- * enlace es la ficha interna del cliente.
+ * cliente) y la respuesta del cliente quedaba sin que nadie se enterara. Va a
+ * los responsables activos de la etapa (o a los admins si no hay ninguno
+ * activo). Nada de esto llega al cliente, así que no hay identidades del
+ * equipo que ocultar; el enlace es la ficha interna del cliente.
  */
 export async function avisarRespuestaDelCliente(o: {
-  actorId: string; operadorId: string | null; cliente: string; etapa: string; enlace: string;
+  actorId: string; etapaId: string; cliente: string; etapa: string; enlace: string;
 }): Promise<void> {
-  const operador = await usuarioPorId(o.operadorId);
-  const admins = operador && operador.activo ? [] : await adminsActivos();
+  const operadores = await responsablesActivosDeEtapa(o.etapaId);
+  const admins = operadores.some((o2) => o2.activo) ? [] : await adminsActivos();
   await notificar(
     'cliente_respondio',
-    { admins, operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false, actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa } },
+    { admins, operadores, autor: null, usuariosCliente: [], etapaVisibleCliente: false, actorId: o.actorId, datos: { cliente: o.cliente, etapa: o.etapa } },
     o.enlace,
   );
 }
 
 /**
  * Aviso de que un lote mensual se aprobó solo al vencer el plazo (C3, diseño
- * §6): al operador asignado, o a los admins si no hay uno activo. No hay
- * `actorId` porque no hubo actor — es justamente lo que el aviso comunica.
+ * §6): a los responsables activos de `desarrollo_mensual` (contenido y
+ * diseño), o a los admins si ninguno está activo. No hay `actorId` porque no
+ * hubo actor — es justamente lo que el aviso comunica.
  */
 export async function avisarLoteAutoAprobado(o: {
-  operadorId: string | null; cliente: string; periodo: string; enlace: string;
+  etapaId: string; cliente: string; periodo: string; enlace: string;
 }): Promise<void> {
-  const operador = await usuarioPorId(o.operadorId);
-  const admins = operador && operador.activo ? [] : await adminsActivos();
+  const operadores = await responsablesActivosDeEtapa(o.etapaId);
+  const admins = operadores.some((o2) => o2.activo) ? [] : await adminsActivos();
   await notificar(
     'lote_auto_aprobado',
     {
-      admins, operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false,
+      admins, operadores, autor: null, usuariosCliente: [], etapaVisibleCliente: false,
       datos: { cliente: o.cliente, etapa: NOMBRE_ETAPA.desarrollo_mensual, periodo: o.periodo },
     },
     o.enlace,

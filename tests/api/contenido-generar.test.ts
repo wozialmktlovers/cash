@@ -103,10 +103,10 @@ describe('permisos', () => {
     expect(await r.json()).toMatchObject({ ok: true, id: 'job-nuevo', piezas: 3 });
   });
 
-  it('un operador ajeno recibe 404 y no encola nada', async () => {
+  it('cualquier operador puede encolar (visibilidad total)', async () => {
     const r = await llamar(undefined, operadorAjeno);
-    expect(r.status).toBe(404);
-    expect(espia.insertados).toHaveLength(0);
+    expect(r.status).toBe(201);
+    expect(espia.insertados).toHaveLength(1);
   });
 
   it('el usuario cliente recibe 404 y no encola nada', async () => {

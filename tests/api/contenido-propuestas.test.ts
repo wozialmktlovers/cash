@@ -115,10 +115,10 @@ describe('quién puede pedir propuestas', () => {
     expect(pedir).not.toHaveBeenCalled();
   });
 
-  it('el operador de otro cliente tampoco', async () => {
+  it('otro operador también puede (visibilidad total)', async () => {
     const r = await llamar(undefined, { ...operador, id: '00000000-0000-4000-8000-0000000000e9' });
-    expect(r.status).toBe(404);
-    expect(pedir).not.toHaveBeenCalled();
+    expect(r.status).toBe(200);
+    expect(pedir).toHaveBeenCalled();
   });
 });
 

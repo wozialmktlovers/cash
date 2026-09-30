@@ -71,7 +71,7 @@ export async function bootstrapAdmin(opciones = {}) {
       // le daría acceso de admin «atado» a un cliente y viola el CHECK de 0005.
       // `COALESCE(param, columna)`: sin ADMIN_NOMBRE/ADMIN_APELLIDO la fila se
       // queda con el nombre que ya tenía; recuperar el acceso no lo borra.
-      await tx`UPDATE users SET rol = 'admin', activo = true, password_hash = ${h}, client_id = NULL, nombre = COALESCE(${nombre}, nombre), apellido = COALESCE(${apellido}, apellido) WHERE id = ${existente.id}`;
+      await tx`UPDATE users SET rol = 'admin', activo = true, password_hash = ${h}, client_id = NULL, puesto = NULL, nombre = COALESCE(${nombre}, nombre), apellido = COALESCE(${apellido}, apellido) WHERE id = ${existente.id}`;
       console.log(`[admin] acceso de administrador recuperado: ${email} — borra ADMIN_EMAIL y ADMIN_PASSWORD de las variables`);
     });
   } catch (e) {

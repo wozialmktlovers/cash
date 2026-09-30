@@ -146,6 +146,13 @@ vi.mock('@/flujo/avisos', () => {
   };
 });
 
+// `esResponsableDeEtapa` consulta `etapa_responsables` con un innerJoin que esta
+// base simulada no cubre: aquí el operador OPERADOR es responsable de la etapa.
+vi.mock('@/flujo/responsables', () => ({
+  esResponsableDeEtapa: vi.fn(async (_etapaId: string, usuarioId: string) => usuarioId === 'op-1'),
+  responsableUnicoDeEtapa: vi.fn(async () => null),
+}));
+
 const { ejecutarTransicion, crearComentarioCliente, responderComentario } = await import('@/flujo/servicio');
 
 const OPERADOR = { id: 'op-1', rol: 'operador' as const, email: 'op@x.mx', nombre: 'Ana', apellido: 'Paw', clientId: null };

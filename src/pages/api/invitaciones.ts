@@ -6,6 +6,7 @@ import { baseUrlPublica } from '@/lib/base-url';
 import { esUuid } from '@/lib/visibilidad';
 import { enviarCorreo } from '@/lib/correo';
 import type { Rol } from '@/lib/permisos';
+import { PUESTOS, type Puesto } from '@/flujo/reglas';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } });
@@ -23,9 +24,10 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ error: 'json-invalido' }, 400);
   }
 
-  const { email: emailCrudo, rol: rolCrudo, clientId: clientIdCrudo } = (crudo ?? {}) as {
+  const { email: emailCrudo, rol: rolCrudo, clientId: clientIdCrudo, puesto: puestoCrudo } = (crudo ?? {}) as {
     email?: unknown;
     rol?: unknown;
+    puesto?: unknown;
     clientId?: unknown;
   };
 
@@ -35,18 +37,25 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (typeof rolCrudo !== 'string' || !ROLES.includes(rolCrudo as Rol)) return json({ error: 'rol-invalido' }, 400);
   const rol = rolCrudo as Rol;
 
+  // El puesto es obligatorio para un operador y no existe para los demás roles.
+  let puesto: Puesto | null = null;
+  if (rol === 'operador') {
+    if (typeof puestoCrudo !== 'string' || !(PUESTOS as readonly string[]).includes(puestoCrudo)) return json({ error: 'puesto-obligatorio' }, 400);
+    puesto = puestoCrudo as Puesto;
+  }
+
   const clientIdSolicitado = typeof clientIdCrudo === 'string' && clientIdCrudo ? clientIdCrudo : null;
 
   // El cliente se resuelve y valida ANTES de comprobar el permiso, para que
   // `puedeInvitar` reciba el cliente real (o null) y no un id inventado.
-  let cliente: { id: string; operadorId: string | null } | null = null;
+  let cliente: { id: string } | null = null;
   if (rol === 'cliente') {
     if (!clientIdSolicitado) return json({ error: 'cliente-obligatorio' }, 400);
     // Un id con forma inválida haría fallar la columna uuid con un 500.
     if (!esUuid(clientIdSolicitado)) {
       return json({ error: 'cliente-invalido' }, 400);
     }
-    const [c] = await db.select({ id: clients.id, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, clientIdSolicitado)).limit(1);
+    const [c] = await db.select({ id: clients.id }).from(clients).where(eq(clients.id, clientIdSolicitado)).limit(1);
     if (!c) return json({ error: 'cliente-invalido' }, 400);
     cliente = c;
   }
@@ -84,6 +93,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       tokenHash,
       email,
       rol,
+      puesto,
       clientId,
       creadoPor: usuario.id,
       expiraEn: vencimiento(new Date()),
@@ -117,7 +127,7 @@ export const DELETE: APIRoute = async ({ url, locals }) => {
   if (!inv || inv.usadaEn) return json({ ok: false, error: 'no-existe' }, 404);
 
   const [cliente] = inv.rol === 'cliente' && inv.clientId
-    ? await db.select({ id: clients.id, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, inv.clientId)).limit(1)
+    ? await db.select({ id: clients.id }).from(clients).where(eq(clients.id, inv.clientId)).limit(1)
     : [];
   if (!puedeInvitar(locals.usuario, inv.rol, cliente ?? null)) return json({ ok: false, error: 'no-existe' }, 404);
 

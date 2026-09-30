@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   UMBRAL_ATASCADO_DIAS, ultimaActividad, diasSinMovimiento, estaAtascado, textoDias,
-  repartoPorEtapa, comparativoGastos, filasPorOperador, mesesPorVencer, cuentaRegresiva,
+  repartoPorEtapa, comparativoGastos, filasPorResponsable, mesesPorVencer, cuentaRegresiva,
 } from '@/lib/ui/tablero';
 import { periodo, type EtapaM, type Evento, type JobM } from '@/lib/desempeno';
 
@@ -113,47 +113,47 @@ describe('comparativoGastos', () => {
   });
 });
 
-describe('filasPorOperador', () => {
-  const et = (clientId: string, etapa: EtapaM['etapa'], estado: EtapaM['estado'], contratada = true): EtapaM =>
-    ({ id: `${clientId}-${etapa}`, clientId, etapa, estado, contratada, interna: false, operadorId: null });
-  const aprobar = (clientId: string, creadoEn: string): Evento =>
-    ({ etapaId: `${clientId}-investigacion`, clientId, etapa: 'investigacion', accion: 'aprobar', de: 'en_revision', a: 'aprobada', creadoEn: new Date(creadoEn) });
+describe('filasPorResponsable', () => {
+  const et = (clientId: string, etapa: EtapaM['etapa'], estado: EtapaM['estado'], responsableIds: string[], contratada = true): EtapaM =>
+    ({ id: `${clientId}-${etapa}`, clientId, etapa, estado, contratada, interna: false, responsableIds });
+  const aprobar = (clientId: string, etapa: EtapaM['etapa'], creadoEn: string): Evento =>
+    ({ etapaId: `${clientId}-${etapa}`, clientId, etapa, accion: 'aprobar', de: 'en_revision', a: 'aprobada', creadoEn: new Date(creadoEn) });
 
-  const clientes = [
-    { id: 'c1', operadorId: 'ana' }, { id: 'c2', operadorId: 'ana' },
-    { id: 'c3', operadorId: 'beto' }, { id: 'c4', operadorId: null },
-  ];
+  // Ana (strategist) lleva la investigación de c1 y c2; Beto (content creator)
+  // los pilares de c1; Dani (contenido) y Eli (diseño) comparten el mes de c1.
   const etapas = [
-    et('c1', 'investigacion', 'aprobada'), et('c1', 'pilares', 'en_proceso'),
-    et('c2', 'investigacion', 'con_cambios'),
-    et('c3', 'investigacion', 'en_revision'),
-    // c4 no tiene nada contratado: no cuenta en el promedio ni como pendiente.
-    et('c4', 'investigacion', 'en_proceso', false),
+    et('c1', 'investigacion', 'aprobada', ['ana']), et('c1', 'pilares', 'en_proceso', ['beto']),
+    et('c2', 'investigacion', 'con_cambios', ['ana']),
+    et('c1', 'desarrollo_mensual', 'en_proceso', ['dani', 'eli']),
+    et('c3', 'manual_campana', 'en_revision', []),
+    // Sin contratar: no cuenta en el promedio ni como pendiente.
+    et('c4', 'investigacion', 'en_proceso', ['ana'], false),
   ];
-  const nombres = new Map([['ana', 'Ana'], ['beto', 'Beto'], ['caro', 'Caro']]);
+  const nombres = new Map([['ana', 'Ana'], ['beto', 'Beto'], ['caro', 'Caro'], ['dani', 'Dani'], ['eli', 'Eli']]);
+  const puestos = new Map<string, string | null>([['ana', 'Strategist'], ['beto', 'Content Creator'], ['caro', 'Trafficker'], ['dani', 'Contenido'], ['eli', 'Diseño']]);
   const p = periodo('mes', ahora);
 
-  it('reparte clientes, avance, pendientes y aprobadas del mes por operador', () => {
-    const filas = filasPorOperador({
-      clientes, etapas, nombres, p, extras: ['caro'],
-      aprobaciones: [aprobar('c1', '2026-09-05T12:00:00Z'), aprobar('c1', '2026-08-20T12:00:00Z'), aprobar('c3', '2026-09-10T12:00:00Z')],
+  it('reparte etapas, avance, pendientes y aprobadas del mes por persona, con su puesto', () => {
+    const filas = filasPorResponsable({
+      etapas, nombres, puestos, p, extras: ['caro'],
+      aprobaciones: [aprobar('c1', 'investigacion', '2026-09-05T12:00:00Z'), aprobar('c1', 'investigacion', '2026-08-20T12:00:00Z'), aprobar('c2', 'investigacion', '2026-09-10T12:00:00Z')],
     });
-    expect(filas.map((f) => f.nombre)).toEqual(['Ana', 'Beto', 'Caro', 'Sin asignar']);
-    const ana = filas[0];
-    // c1: (100 + 25) / 2 = 62.5; c2: 60 → promedio 61.25
-    expect(ana).toEqual({ clave: 'ana', nombre: 'Ana', clientes: 2, avancePromedio: 61, pendientes: 2, aprobadasMes: 1 });
-    expect(filas[1]).toMatchObject({ clientes: 1, avancePromedio: 50, pendientes: 0, aprobadasMes: 1 });
-    expect(filas[2]).toMatchObject({ clave: 'caro', clientes: 0, avancePromedio: 0, pendientes: 0, aprobadasMes: 0 });
-    expect(filas[3]).toMatchObject({ clave: 'sin_asignar', clientes: 1, avancePromedio: 0, pendientes: 0 });
+    expect(filas.map((f) => f.nombre)).toEqual(['Ana', 'Beto', 'Caro', 'Dani', 'Eli', 'Sin asignar']);
+    // Ana: c1 investigación (100) y c2 investigación (60) → promedio 80; la de c4 no está contratada.
+    expect(filas[0]).toEqual({ clave: 'ana', nombre: 'Ana', puesto: 'Strategist', clientes: 2, etapas: 2, avancePromedio: 80, pendientes: 1, aprobadasMes: 2 });
+    expect(filas[1]).toMatchObject({ clave: 'beto', clientes: 1, etapas: 1, avancePromedio: 25, pendientes: 1, aprobadasMes: 0 });
+    expect(filas[2]).toMatchObject({ clave: 'caro', clientes: 0, etapas: 0, avancePromedio: 0, pendientes: 0 });
+    expect(filas[5]).toMatchObject({ clave: 'sin_asignar', puesto: null, etapas: 1 });
   });
 
-  it('con solo los clientes de un operador sale solo su fila', () => {
-    const filas = filasPorOperador({ clientes: clientes.filter((c) => c.operadorId === 'beto'), etapas, nombres, p, aprobaciones: [] });
-    expect(filas.map((f) => f.clave)).toEqual(['beto']);
+  it('una etapa de desarrollo mensual cuenta completa para sus dos responsables', () => {
+    const filas = filasPorResponsable({ etapas, nombres, puestos, p, aprobaciones: [] });
+    expect(filas.find((f) => f.clave === 'dani')).toMatchObject({ etapas: 1, pendientes: 1 });
+    expect(filas.find((f) => f.clave === 'eli')).toMatchObject({ etapas: 1, pendientes: 1 });
   });
 
-  it('sin clientes ni extras no hay filas', () => {
-    expect(filasPorOperador({ clientes: [], etapas: [], nombres, p, aprobaciones: [] })).toEqual([]);
+  it('sin etapas ni extras no hay filas', () => {
+    expect(filasPorResponsable({ etapas: [], nombres, puestos, p, aprobaciones: [] })).toEqual([]);
   });
 });
 

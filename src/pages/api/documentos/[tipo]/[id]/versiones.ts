@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { and, desc, eq } from 'drizzle-orm';
 import { db, researchResults, growthResults, pilaresResults, documentoVersiones, etapaEventos, clienteEtapas, users } from '@/db';
 import { documentoVisible, type DocumentoTipo } from '@/lib/visibilidad';
+import { esResponsableDeEtapa } from '@/flujo/responsables';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { nombreVisible } from '@/lib/usuarios';
 import { estadoTrasGenerar } from '@/flujo/reglas';
@@ -87,7 +88,7 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   const etapa = await etapaDelDocumento(doc.cliente.id, tipoParam, id);
   if (!etapa) return json({ ok: false, errores: ['El documento no existe'] }, 404);
 
-  const esOperadorAsignado = doc.cliente.operadorId === locals.usuario.id;
+  const esOperadorAsignado = locals.usuario.rol === 'operador' ? await esResponsableDeEtapa(etapa.id, locals.usuario.id) : false;
   if (!puedeEditar(locals.usuario.rol, esOperadorAsignado, etapa.estado)) {
     return json({ ok: false, errores: ['El documento está en revisión; espera la decisión del administrador'] }, 409);
   }

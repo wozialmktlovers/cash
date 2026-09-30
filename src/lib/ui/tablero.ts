@@ -1,6 +1,6 @@
-import { ETAPAS, ESTADOS, etapasParaAvance, type Etapa, type Estado } from '@/flujo/reglas';
+import { ETAPAS, ESTADOS, PESOS, etapasParaAvance, type Etapa, type Estado } from '@/flujo/reglas';
 import {
-  periodo, costo, carga, agruparClientesPorOperador,
+  periodo, costo, filtrarPeriodo, agruparEtapasPorResponsable,
   type JobM, type EtapaM, type Evento, type Periodo,
 } from '@/lib/desempeno';
 
@@ -188,13 +188,19 @@ export function comparativoGastos(jobs: JobM[], ahora: Date, maxClientes = 5): C
   };
 }
 
-// ── Por operador ───────────────────────────────────────────────────────────
+// ── Por responsable (puesto y persona) ─────────────────────────────────────
 
-export type FilaOperador = {
-  /** id del operador, o 'sin_asignar'. */
+export type FilaResponsable = {
+  /** id del usuario, o 'sin_asignar'. */
   clave: string;
   nombre: string;
+  /** Puesto visible («Strategist»…); `null` para «sin asignar» o quien ya no tiene puesto. */
+  puesto: string | null;
+  /** Clientes distintos en cuyas etapas es responsable. */
   clientes: number;
+  /** Etapas que tiene asignadas (contratadas, no internas). */
+  etapas: number;
+  /** Promedio del peso de esas etapas (0-100). */
   avancePromedio: number;
   /** Etapas contratadas en proceso o con cambios: lo que le toca mover. */
   pendientes: number;
@@ -202,49 +208,46 @@ export type FilaOperador = {
 };
 
 /**
- * Una fila por operador con lo que lleva, su avance promedio, lo que tiene por
- * mover y lo que le aprobaron en el periodo `p` (el mes, en el Inicio).
+ * Una fila por persona con lo que lleva a su cargo, agrupable por puesto en
+ * la pantalla. Rediseño de puestos: la unidad ya no es «los clientes de un
+ * operador» sino las ETAPAS donde esa persona está en `etapa_responsables`
+ * (`EtapaM.responsableIds`); una etapa con dos responsables cuenta para ambos.
  *
- * Reusa `agruparClientesPorOperador` y `carga` de src/lib/desempeno.ts, así que
- * el avance y las aprobadas son las mismas cifras de /desempeno.
+ * - «Avance» es el promedio del peso (`PESOS`) de SUS etapas contratadas y no
+ *   internas —no el avance de cada cliente completo, que depende de etapas
+ *   que esa persona no lleva—.
+ * - «Por mover» es el mismo criterio de `contarPendientes`: etapas
+ *   contratadas en proceso o con cambios, sin los comentarios.
+ * - «Aprobadas» son los `aprobar` del periodo sobre sus etapas.
  *
- * «Pendientes» es el mismo criterio con que `contarPendientes`
- * (src/lib/pendientes.ts) cuenta las etapas del operador —contratadas, en
- * proceso o con cambios—, sin los comentarios abiertos: aquí se mide trabajo
- * de etapa por persona, no su bandeja.
- *
- * QUIÉN VE QUÉ lo decide quien llama, y no esta función: le pasa solo los
- * clientes que el usuario puede ver (`condicionClientes`). Un operador recibe
- * solo los suyos y por tanto solo su fila. `extras` son operadores sin ningún
- * cliente que igual conviene enseñar (al admin, para ver quién está libre).
+ * `extras` son personas sin ninguna etapa que igual conviene enseñar (quién
+ * está libre). `puestos` mapea usuario → nombre del puesto.
  */
-export function filasPorOperador(o: {
-  clientes: Array<{ id: string; operadorId: string | null }>;
+export function filasPorResponsable(o: {
   etapas: EtapaM[];
   aprobaciones: Evento[];
   nombres: Map<string, string>;
+  puestos: Map<string, string | null>;
   extras?: string[];
   p: Periodo;
-}): FilaOperador[] {
-  const grupos = agruparClientesPorOperador(o.clientes);
+}): FilaResponsable[] {
+  const grupos = agruparEtapasPorResponsable(o.etapas);
   for (const id of o.extras ?? []) if (!grupos.has(id)) grupos.set(id, []);
+  const aprobadas = filtrarPeriodo(o.aprobaciones, o.p).filter((e) => e.accion === 'aprobar');
 
-  const filas = [...grupos.entries()].map(([clave, ids]) => {
-    const set = new Set(ids);
-    const etapasG = o.etapas.filter((e) => set.has(e.clientId));
-    // El promedio se saca solo entre los clientes con algo contratado, igual
-    // que la cifra «Avance promedio» de arriba del Inicio: `carga` contaría
-    // como 0% a un cliente con filas pero sin nada contratado, y entonces el
-    // operador vería en su fila un número distinto del de la tarjeta.
-    const conContrato = new Set(etapasParaAvance(etapasG).map((e) => e.clientId));
-    const c = carga(etapasG.filter((e) => conContrato.has(e.clientId)), o.aprobaciones.filter((e) => set.has(e.clientId)), o.p);
+  const filas = [...grupos.entries()].map(([clave, etapasG]) => {
+    const visibles = etapasParaAvance(etapasG);
+    const ids = new Set(etapasG.map((e) => e.id));
+    const suma = visibles.reduce((s, e) => s + PESOS[e.estado], 0);
     return {
       clave,
-      nombre: clave === 'sin_asignar' ? 'Sin asignar' : (o.nombres.get(clave) ?? 'Operador'),
-      clientes: set.size,
-      avancePromedio: Math.round(c.avancePromedio),
+      nombre: clave === 'sin_asignar' ? 'Sin asignar' : (o.nombres.get(clave) ?? 'Responsable'),
+      puesto: clave === 'sin_asignar' ? null : (o.puestos.get(clave) ?? null),
+      clientes: new Set(visibles.map((e) => e.clientId)).size,
+      etapas: visibles.length,
+      avancePromedio: visibles.length === 0 ? 0 : Math.round(suma / visibles.length),
       pendientes: etapasG.filter((e) => e.contratada && (e.estado === 'en_proceso' || e.estado === 'con_cambios')).length,
-      aprobadasMes: c.aprobadasEnPeriodo,
+      aprobadasMes: aprobadas.filter((e) => ids.has(e.etapaId)).length,
     };
   });
 

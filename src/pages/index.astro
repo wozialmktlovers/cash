@@ -7,7 +7,8 @@ import {
   db, clients, researchJobs, users, clienteEtapas, etapaEventos, comentarios, contenidoLotes, contenidoPiezas,
   pilaresTemas, pilaresResults,
 } from '@/db';
-import { NOMBRE_ETAPA, ESTADOS, ETIQUETA_ESTADO_ETAPA } from '@/flujo/reglas';
+import { NOMBRE_ETAPA, ESTADOS, ETIQUETA_ESTADO_ETAPA, NOMBRE_PUESTO, PUESTOS } from '@/flujo/reglas';
+import { responsablesDeEtapas } from '@/flujo/responsables';
 import { COLOR_ESTADO, type ColorEstado } from '@/flujo/ui';
 import { plazoOponible } from '@/contenido/reglas';
 import { periodo, type EtapaM, type Evento, type JobM } from '@/lib/desempeno';
@@ -20,7 +21,7 @@ import { nombreVisible } from '@/lib/usuarios';
 import { condicionClientes } from '@/lib/visibilidad';
 import {
   ultimaActividad, diasSinMovimiento, estaAtascado, textoDias, UMBRAL_ATASCADO_DIAS,
-  repartoPorEtapa, comparativoGastos, filasPorOperador, mesesPorVencer, cuentaRegresiva,
+  repartoPorEtapa, comparativoGastos, filasPorResponsable, mesesPorVencer, cuentaRegresiva,
   NOMBRE_TIPO_GASTO,
 } from '@/lib/ui/tablero';
 import { resumirPorCliente, resumenDe } from '@/lib/ui/estado-cliente';
@@ -163,12 +164,10 @@ const [actividadFilas, aprobacionesFilas, personas, lotesFilas] = await Promise.
         ))
     : Promise.resolve([]),
 
-  // Nombres del equipo. Solo el admin necesita los de los demás: el operador
-  // solo ve clientes suyos y su propia fila, y su nombre ya viene en la sesión.
-  esAdmin
-    ? db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email, rol: users.rol, activo: users.activo })
-        .from(users).where(ne(users.rol, 'cliente'))
-    : Promise.resolve([]),
+  // Nombres y puestos del equipo: con visibilidad total todo operador ve a
+  // todos los responsables, no solo su propia fila.
+  db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email, rol: users.rol, activo: users.activo, puesto: users.puesto })
+    .from(users).where(ne(users.rol, 'cliente')),
 
   // Meses que esperan al cliente con el plazo corriendo. Va DESPUÉS de
   // `asegurarLotesAlDia` (arriba del todo), así que lo vencido ya se aprobó y
@@ -190,16 +189,27 @@ const [actividadFilas, aprobacionesFilas, personas, lotesFilas] = await Promise.
 ]);
 
 // ── Avance por cliente: responsable, paso y días sin movimiento ──────────
-const nombres = new Map<string, string>(
-  esAdmin ? personas.map((p) => [p.id, nombreVisible(p)]) : [[usuario.id, nombreVisible(usuario)]],
-);
+const nombres = new Map<string, string>(personas.map((p) => [p.id, nombreVisible(p)]));
+const puestos = new Map<string, string | null>(personas.map((p) => [p.id, p.puesto ? NOMBRE_PUESTO[p.puesto] : null]));
+// Responsables de cada etapa (rediseño de puestos): una sola consulta.
+const todasLasEtapasIds = [...etapasPorCliente.values()].flat();
+const responsablesPorEtapa = await responsablesDeEtapas(todasLasEtapasIds.map((e) => e.id));
+const textoResponsables = (etapaId: string): string | null => {
+  const r = responsablesPorEtapa.get(etapaId) ?? [];
+  return r.length ? r.map((x) => nombres.get(x.id) ?? nombreVisible(x)).join(' y ') : null;
+};
 const ultimaPorCliente = new Map([...actividadFilas].map((f) => [f.client_id, f.ultima]));
 const seguimientoDe = new Map(lista.map((c) => {
   // Sin ninguna huella todavía, el reloj corre desde el alta: un cliente dado
   // de alta hace un mes al que nadie le ha hecho nada sí está atascado.
   const dias = diasSinMovimiento(ultimaActividad([ultimaPorCliente.get(c.id), c.createdAt]), ahora);
   return [c.id, {
-    responsable: c.operadorId ? (nombres.get(c.operadorId) ?? 'Operador') : 'Sin asignar',
+    // Quién lleva el paso en que va el cliente (su etapa actual).
+    responsable: (() => {
+      const paso = avanceDe(c.id).pasoActual;
+      const fila = paso ? (etapasPorCliente.get(c.id) ?? []).find((e) => e.etapa === paso.etapa) : null;
+      return (fila && textoResponsables(fila.id)) || 'Sin asignar';
+    })(),
     dias,
     atascado: estaAtascado(dias, avanceDe(c.id).pasoActual !== null),
   }] as const;
@@ -250,7 +260,7 @@ const entrada = (e: (typeof todasLasEtapas)[number]): EntradaEntrega => {
     etapa: e.etapa,
     situacion: situacionEtapa({
       etapa: e.etapa, estado: e.estado, actualizadoEn: e.actualizadoEn, evento,
-      operador: c?.operadorId ? (nombres.get(c.operadorId) ?? null) : null,
+      operador: textoResponsables(e.id),
       // El renglón no enseña el conteo de comentarios (eso es de la tarjeta).
       comentariosAbiertos: 0,
     }, mirada, ahora),
@@ -304,22 +314,26 @@ const columnasEntregas = [
 // Cuántas se ven de entrada por columna; el resto, detrás de «Ver las N».
 const VISIBLES_POR_COLUMNA = 5;
 
-// ── Por operador ─────────────────────────────────────────────────────────
-// `lista` ya viene recortada por `condicionClientes`: al operador le llegan
-// solo sus clientes y, por tanto, solo su fila. Los operadores activos sin
-// clientes se suman solo para el admin, que es quien reparte el trabajo.
+// ── Por puesto y persona ─────────────────────────────────────────────────
+// Cada etapa cuenta para quien está en `etapa_responsables`. Los operadores
+// activos sin etapas se suman para ver quién está libre.
 const etapasM: EtapaM[] = todasLasEtapas.map((e) => ({
   id: e.id, clientId: e.clientId, etapa: e.etapa, estado: e.estado, contratada: e.contratada, interna: e.interna,
-  operadorId: porId.get(e.clientId)?.operadorId ?? null,
+  responsableIds: (responsablesPorEtapa.get(e.id) ?? []).map((r) => r.id),
 }));
-const filasOperador = filasPorOperador({
-  clientes: lista,
+const filasResponsable = filasPorResponsable({
   etapas: etapasM,
   aprobaciones: aprobacionesFilas as Evento[],
   nombres,
-  extras: esAdmin ? personas.filter((p) => p.rol === 'operador' && p.activo).map((p) => p.id) : [],
+  puestos,
+  extras: personas.filter((p) => p.rol === 'operador' && p.activo).map((p) => p.id),
   p: mesActual,
 });
+// Agrupadas por puesto, en el orden de PUESTOS; «sin asignar» al final.
+const gruposPuesto = [
+  ...PUESTOS.map((pu) => ({ titulo: NOMBRE_PUESTO[pu], filas: filasResponsable.filter((f) => f.puesto === NOMBRE_PUESTO[pu]) })),
+  { titulo: 'Sin asignar', filas: filasResponsable.filter((f) => f.puesto === null) },
+].filter((g) => g.filas.length > 0);
 
 // ── Gastos ───────────────────────────────────────────────────────────────
 // Los jobs ya vienen acotados a los clientes visibles: el operador ve el
@@ -561,33 +575,36 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
 
   <section class="seccion" id="por-operador" aria-labelledby="t-por-operador">
     <div class="seccion-cabeza">
-      <h2 id="t-por-operador">{esAdmin ? 'Por operador' : 'Tu trabajo'}</h2>
-      {filasOperador.length > 0 && <a href="/desempeno">Ver desempeño</a>}
+      <h2 id="t-por-operador">Por puesto y persona</h2>
+      {filasResponsable.length > 0 && <a href="/desempeno">Ver desempeño</a>}
     </div>
-    {filasOperador.length === 0 ? (
+    {filasResponsable.length === 0 ? (
       <div class="tarjeta vacio">
         <Icono nombre="usuarios" />
-        <strong>{esAdmin ? 'Todavía no hay operadores con clientes' : 'Aún no tienes clientes asignados'}</strong>
-        {esAdmin
-          ? 'Cuando des de alta a tu equipo y le asignes clientes, aquí verás la carga de cada quien.'
-          : 'En cuanto te asignen uno, aquí verás tu avance y lo que te aprobaron.'}
+        <strong>Todavía no hay responsables asignados</strong>
+        Cuando el admin asigne responsables a las etapas de cada cliente, aquí verás la carga de cada quien.
       </div>
     ) : (
       <div class="tarjeta">
-        <ul class="lista">
-          {filasOperador.map((f) => (
-            <li class="renglon operador">
-              <div class="cuerpo"><strong>{f.nombre}</strong></div>
-              <dl class="operador-cifras">
-                <div><dt>Clientes</dt><dd class="cifra">{f.clientes}</dd></div>
-                <div><dt>Avance</dt><dd class="cifra">{f.clientes === 0 ? '—' : `${f.avancePromedio}%`}</dd></div>
-                <div><dt>Por mover</dt><dd class="cifra">{f.pendientes}</dd></div>
-                <div><dt>Aprobadas este mes</dt><dd class="cifra">{f.aprobadasMes}</dd></div>
-              </dl>
-            </li>
-          ))}
-        </ul>
-        <p class="secundario nota">«Por mover»: etapas contratadas en proceso o con cambios.</p>
+        {gruposPuesto.map((g) => (
+          <>
+            <h3 class="puesto-titulo">{g.titulo}</h3>
+            <ul class="lista">
+              {g.filas.map((f) => (
+                <li class="renglon operador">
+                  <div class="cuerpo"><strong>{f.nombre}</strong></div>
+                  <dl class="operador-cifras">
+                    <div><dt>Etapas</dt><dd class="cifra">{f.etapas}</dd></div>
+                    <div><dt>Avance</dt><dd class="cifra">{f.etapas === 0 ? '—' : `${f.avancePromedio}%`}</dd></div>
+                    <div><dt>Por mover</dt><dd class="cifra">{f.pendientes}</dd></div>
+                    <div><dt>Aprobadas este mes</dt><dd class="cifra">{f.aprobadasMes}</dd></div>
+                  </dl>
+                </li>
+              ))}
+            </ul>
+          </>
+        ))}
+        <p class="secundario nota">Cada etapa cuenta para quien la tiene asignada. «Por mover»: etapas contratadas en proceso o con cambios.</p>
       </div>
     )}
   </section>
@@ -601,7 +618,7 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
       <div class="tarjeta vacio">
         <Icono nombre="dinero" />
         <strong>Sin gasto este mes ni el anterior</strong>
-        {esAdmin ? 'Aquí aparece' : 'Aquí aparece, de tus clientes,'} lo que cuestan las investigaciones, los mapas de pilares y los manuales.
+        Aquí aparece lo que cuestan las investigaciones, los mapas de pilares y los manuales.
       </div>
     ) : (
       <div class="tarjeta">
@@ -620,7 +637,6 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
               : gastos.diferencia > 0
                 ? `${dinero(gastos.diferencia)} más que el mes anterior.`
                 : `${dinero(-gastos.diferencia)} menos que el mes anterior.`}
-            {!esAdmin && ' Solo tus clientes.'}
           </p>
         </div>
 
@@ -787,6 +803,8 @@ const saludo = usuario.nombre?.trim() || nombreVisible(usuario);
     .operador-cifras { width: 100%; grid-template-columns: repeat(2, 1fr); text-align: left; }
   }
   .nota { margin-top: 12px; }
+  .puesto-titulo { font: var(--t-h3); color: var(--tinta); margin: 18px 0 6px; }
+  .puesto-titulo:first-child { margin-top: 0; }
 
   /* ── Gastos ──────────────────────────────────────────────────────────── */
   .gastos-cabeza { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 32px; }

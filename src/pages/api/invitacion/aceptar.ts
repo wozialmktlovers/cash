@@ -41,10 +41,14 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
         ? await tx.select().from(users).where(eq(users.id, inv!.creadoPor)).limit(1)
         : [];
       const [cliente] = inv!.rol === 'cliente' && inv!.clientId
-        ? await tx.select({ id: clients.id, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, inv!.clientId)).limit(1)
+        ? await tx.select({ id: clients.id }).from(clients).where(eq(clients.id, inv!.clientId)).limit(1)
         : [];
       const vigencia = invitacionVigente(inv!, creador ?? null, cliente ?? null, new Date());
       if (vigencia !== 'valida') throw new RevocadaError();
+      // Una invitación de operador hecha ANTES de los puestos (migración 0015)
+      // no trae puesto y la base lo exige: queda revocada, que el admin vuelva
+      // a invitar eligiendo el puesto.
+      if (inv!.rol === 'operador' && !inv!.puesto) throw new RevocadaError();
 
       // Nunca se actualiza una cuenta existente (ver ruling de seguridad de la
       // tarea): si el correo ya está tomado, se corta y no se toca nada.
@@ -69,6 +73,7 @@ export const POST: APIRoute = async ({ request, cookies, redirect }) => {
           email: inv!.email,
           passwordHash,
           rol: inv!.rol,
+          puesto: inv!.rol === 'operador' ? inv!.puesto : null,
           nombre,
           apellido,
           clientId: inv!.rol === 'cliente' ? inv!.clientId : null,

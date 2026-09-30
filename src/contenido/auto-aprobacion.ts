@@ -63,6 +63,7 @@ import { db, clienteEtapas, clients, contenidoLotes, contenidoPiezas, etapaEvent
 import { loteAutoAprobado } from './reglas';
 import { sincronizarEtapa, transicionarLote } from './servicio';
 import { avisarLoteAutoAprobado } from '@/flujo/avisos';
+import { etapaIdDe } from '@/flujo/responsables';
 import { fechaHora } from '@/lib/ui/fecha';
 import { nombrePeriodo } from '@/lib/ui/periodo';
 
@@ -88,7 +89,6 @@ type Candidato = {
   periodo: string;
   limiteRevision: Date | null;
   cliente: string;
-  operadorId: string | null;
 };
 
 /**
@@ -258,7 +258,6 @@ async function candidatos(ahora: Date, clientId?: string): Promise<Candidato[]> 
       periodo: contenidoLotes.periodo,
       limiteRevision: contenidoLotes.limiteRevision,
       cliente: clients.nombre,
-      operadorId: clients.operadorId,
     })
     .from(contenidoLotes)
     .innerJoin(clients, eq(clients.id, contenidoLotes.clientId))
@@ -285,12 +284,12 @@ export async function autoAprobarVencidos(
   for (const candidato of lista) {
     if (!(await aprobarLoteVencido(candidato, ahora))) continue;
     aprobados++;
-    void avisarLoteAutoAprobado({
-      operadorId: candidato.operadorId,
+    void etapaIdDe(candidato.clientId, 'desarrollo_mensual').then((etapaId) => avisarLoteAutoAprobado({
+      etapaId: etapaId ?? '',
       cliente: candidato.cliente,
       periodo: candidato.periodo,
       enlace: `/clientes/${candidato.clientId}/contenido/${candidato.periodo}`,
-    }).catch((e) => console.error('[mensual] aviso de auto-aprobación:', e));
+    })).catch((e) => console.error('[mensual] aviso de auto-aprobación:', e));
   }
 
   if (aprobados > 0) console.log(`[mensual] lotes auto-aprobados por vencimiento: ${aprobados}`);

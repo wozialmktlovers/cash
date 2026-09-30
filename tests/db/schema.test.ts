@@ -125,3 +125,26 @@ describe('esquema del flujo de trabajo', () => {
     }
   });
 });
+
+describe('puestos y responsables por etapa', () => {
+  it('el enum de puestos tiene los cinco valores', () => {
+    expect(schema.puesto.enumValues).toEqual(['strategist', 'content_creator', 'contenido', 'diseno', 'trafficker']);
+  });
+
+  it('users.puesto e invitaciones.puesto existen; clients.operador_id queda como columna heredada', () => {
+    expect(schema.users.puesto).toBeDefined();
+    expect(schema.invitaciones.puesto).toBeDefined();
+    expect(schema.clients.operadorId).toBeDefined();
+  });
+
+  it('etapa_responsables identifica la etapa, la persona, el puesto y quién asignó', () => {
+    for (const c of ['etapaId', 'usuarioId', 'puesto', 'asignadoEn', 'asignadoPor'] as const) {
+      expect(schema.etapaResponsables[c]).toBeDefined();
+    }
+  });
+
+  it('los enums de puesto de schema.ts y de reglas.ts no se separan', async () => {
+    const { PUESTOS } = await import('@/flujo/reglas');
+    expect([...PUESTOS]).toEqual(schema.puesto.enumValues);
+  });
+});

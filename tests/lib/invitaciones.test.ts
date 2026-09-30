@@ -118,8 +118,8 @@ describe('invitacionVigente', () => {
     expect(invitacionVigente(invValida, u('operador', { id: 'op1', activo: false }), clienteDeOp1, ahora)).toBe('revocada');
   });
 
-  it('revocada si al operador que invitó lo reasignaron del cliente', () => {
-    expect(invitacionVigente(invValida, operador, clienteDeOtro, ahora)).toBe('revocada');
+  it('sigue válida aunque el cliente no sea «del» operador: ya no hay operador por cliente', () => {
+    expect(invitacionVigente(invValida, operador, clienteDeOtro, ahora)).toBe('valida');
   });
 
   it('revocada si el operador ya no puede invitar ese rol (p. ej. alguien le degradó de admin a operador)', () => {
@@ -143,9 +143,9 @@ describe('puedeInvitar', () => {
     expect(puedeInvitar(u('admin'), 'cliente', null)).toBe(true);
   });
 
-  it('operador solo invita cliente de un cliente que tenga asignado', () => {
+  it('operador invita usuarios de cliente de cualquier cliente (visibilidad total)', () => {
     expect(puedeInvitar(u('operador', { id: 'op1' }), 'cliente', cliente)).toBe(true);
-    expect(puedeInvitar(u('operador', { id: 'op2' }), 'cliente', cliente)).toBe(false);
+    expect(puedeInvitar(u('operador', { id: 'op2' }), 'cliente', cliente)).toBe(true);
     expect(puedeInvitar(u('operador', { id: 'op1' }), 'cliente', null)).toBe(false);
   });
 

@@ -149,10 +149,10 @@ describe('POST /api/share · tipo contenido', () => {
     expect(espia.compartidos).toEqual([]);
   });
 
-  it('un operador ajeno al cliente también recibe 404', async () => {
+  it('otro operador también puede compartir el mes (visibilidad total)', async () => {
     const res = await compartir({ resultId: LOTE, tipo: 'contenido' }, usuario('operador', OTRO_OPERADOR));
-    expect(res.status).toBe(404);
-    expect(espia.creados).toEqual([]);
+    expect(res.status).toBe(201);
+    expect(espia.creados).toHaveLength(1);
   });
 
   it('un usuario cliente no comparte nada, ni llegando a la ruta', async () => {

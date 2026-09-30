@@ -41,7 +41,8 @@ export type EtapaM = {
   estado: Estado;
   contratada: boolean;
   interna: boolean;
-  operadorId: string | null;
+  /** Usuarios responsables de ESTA etapa (`etapa_responsables`); vacío = sin asignar. */
+  responsableIds: string[];
 };
 
 export type Periodo = { desde: Date | null; hasta: Date };
@@ -341,8 +342,10 @@ export function carga(
 }
 
 /**
- * Operador al que se atribuye el costo de un job: quien lo corrió si se sabe
- * (`creadoPor`), o si no el operador asignado hoy al cliente. Extraída
+ * Persona a la que se atribuye el costo de un job: quien lo corrió si se sabe
+ * (`creadoPor`); si no, el respaldo que dé `operadorDeCliente` (hoy las
+ * pantallas pasan un mapa vacío: ya no hay un operador por cliente, así que
+ * sin `creadoPor` el costo queda «sin asignar»). Extraída
  * (limpieza M3, punto 1) porque la página repetía este mismo criterio a mano
  * en el desglose operador × etapa (`desempeno.astro`), y las dos copias
  * podían desalinearse con un cambio futuro en una sola.
@@ -417,18 +420,20 @@ export function enPeriodoCerrado(
 }
 
 /**
- * Agrupa ids de cliente por operador ('sin_asignar' si no tiene uno).
- * Extraída de `src/pages/desempeno.astro` (tarea I4, punto 2): la tabla «Por
- * operador» arma sus grupos con esto en vez de reconstruir el Map a mano en
- * el frontmatter de la página.
+ * Agrupa ETAPAS por responsable ('sin_asignar' si no tiene ninguno). Rediseño
+ * de puestos: la carga ya no es «los clientes de un operador» sino las etapas
+ * donde esa persona está en `etapa_responsables`. Una etapa con dos
+ * responsables (desarrollo mensual: contenido y diseño) cuenta para los dos.
  */
-export function agruparClientesPorOperador(clientes: { id: string; operadorId: string | null }[]): Map<string, string[]> {
-  const grupos = new Map<string, string[]>();
-  for (const c of clientes) {
-    const clave = c.operadorId ?? 'sin_asignar';
-    const lista = grupos.get(clave);
-    if (lista) lista.push(c.id);
-    else grupos.set(clave, [c.id]);
+export function agruparEtapasPorResponsable(etapas: EtapaM[]): Map<string, EtapaM[]> {
+  const grupos = new Map<string, EtapaM[]>();
+  for (const e of etapas) {
+    const claves = e.responsableIds.length > 0 ? e.responsableIds : ['sin_asignar'];
+    for (const clave of claves) {
+      const lista = grupos.get(clave);
+      if (lista) lista.push(e);
+      else grupos.set(clave, [e]);
+    }
   }
   return grupos;
 }

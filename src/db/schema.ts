@@ -19,6 +19,15 @@ export const extraccionEstado = pgEnum('extraccion_estado', ['pendiente','ok','f
 export const documentoTipo = pgEnum('documento_tipo', ['research','growth','pilares','contenido']);
 /** Admin crea, modifica, autoriza y asigna; operador crea y modifica; cliente solo ve y comenta lo suyo. */
 export const usuarioRol = pgEnum('usuario_rol', ['admin', 'operador', 'cliente']);
+/**
+ * El puesto de un operador (rediseño de puestos/responsables, 2026-09-30):
+ * reemplaza la palabra genérica «Operador» de cara al usuario en toda la
+ * interfaz. `rol` sigue siendo `'operador'` en la base —es el nivel de
+ * permiso, no se toca—; `puesto` es el dato nuevo que dice QUÉ hace esa
+ * persona. En paralelo al tipo `Puesto` de src/flujo/reglas.ts, igual que
+ * ETAPAS/ESTADOS/ACCIONES ya conviven con sus enums aquí.
+ */
+export const puesto = pgEnum('puesto', ['strategist', 'content_creator', 'contenido', 'diseno', 'trafficker']);
 /** Las cuatro etapas del flujo de trabajo por cliente. */
 export const etapaCliente = pgEnum('etapa_cliente', ['investigacion', 'pilares', 'desarrollo_mensual', 'manual_campana']);
 /** Estado de una etapa dentro del flujo de autorización. */
@@ -46,6 +55,11 @@ export const users = pgTable('users', {
   // Sin .references aquí: clients se declara más abajo en el archivo. La FK
   // se agrega a mano en la migración generada.
   clientId: uuid('client_id'),
+  // Puesto (rediseño 2026-09-30): obligatorio si rol = operador, nulo para
+  // admin y cliente. Decide a qué etapas puede quedar asignado como
+  // responsable (`PUESTOS_POR_ETAPA`, src/flujo/reglas.ts) y es lo que la
+  // interfaz muestra en vez de «Operador» a secas.
+  puesto: puesto('puesto'),
   activo: boolean('activo').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, () => [
@@ -58,6 +72,9 @@ export const users = pgTable('users', {
   // desactiva, no se borra ni cambia de rol — cambiarle el rol le daría acceso
   // interno si alguien lo reactiva). `validarCambioUsuario` impide reactivarlo.
   check('users_client_id_por_rol', sql`(rol <> 'cliente' AND client_id IS NULL) OR (rol = 'cliente' AND (client_id IS NOT NULL OR activo = false))`),
+  // Puesto obligatorio para operador, nulo para los demás — mismo molde que
+  // la regla de `client_id` de arriba (migración 0014).
+  check('users_puesto_por_rol', sql`(rol = 'operador' AND puesto IS NOT NULL) OR (rol <> 'operador' AND puesto IS NULL)`),
 ]);
 
 export const sessions = pgTable('sessions', {
@@ -80,7 +97,11 @@ export const clients = pgTable('clients', {
   // generar (hasta 2000 caracteres, ver `OBJETIVOS_MAX`). Nulo = sin
   // indicaciones: los agentes trabajan con criterios generales.
   objetivos: text('objetivos'),
-  // El operador que da de alta al cliente queda asignado; el admin reasigna.
+  // LEGACY (rediseño 2026-09-30): un solo operador por cliente. Ya no la usa
+  // ninguna lógica activa — la asignación es ahora por ETAPA, en
+  // `etapa_responsables` — se deja la columna sin migrar los datos (el admin
+  // reasigna a mano después de desplegar; ver migración 0014) para no
+  // adivinar una asignación por etapa a partir de un dato que nunca la tuvo.
   operadorId: uuid('operador_id').references(() => users.id, { onDelete: 'set null' }),
   // Cuántas piezas al mes lleva este cliente, por formato (diseño §3):
   // `{ post: 8, carrusel: 4, reel: 4, historia: 6 }`. Las claves son los
@@ -200,6 +221,9 @@ export const invitaciones = pgTable('invitaciones', {
   tokenHash: text('token_hash').notNull().unique(),
   email: text('email').notNull(),
   rol: usuarioRol('rol').notNull(),
+  // Puesto con el que entrará quien acepte una invitación de rol operador
+  // (obligatorio en ese caso, nulo para admin y cliente; migración 0015).
+  puesto: puesto('puesto'),
   clientId: uuid('client_id').references(() => clients.id, { onDelete: 'cascade' }),
   creadoPor: uuid('creado_por').references(() => users.id, { onDelete: 'set null' }),
   expiraEn: timestamp('expira_en', { withTimezone: true }).notNull(),
@@ -446,4 +470,43 @@ export const growthArtes = pgTable('growth_artes', {
   check('growth_artes_tipo', sql`tipo IN ('archivo', 'enlace')`),
   check('growth_artes_forma', sql`(tipo = 'archivo' AND ruta IS NOT NULL AND mime IS NOT NULL AND url IS NULL) OR (tipo = 'enlace' AND url IS NOT NULL AND ruta IS NULL)`),
   check('growth_artes_posicion', sql`creativo >= 0 AND orden >= 0`),
+]);
+
+/**
+ * Quién es responsable de una etapa de un cliente (rediseño 2026-09-30,
+ * puestos y asignación por etapa). Reemplaza la idea de UN operador por
+ * CLIENTE (`clients.operador_id`, ahora heredada y sin uso) por asignación
+ * por ETAPA: cada fila de `cliente_etapas` tiene sus propios responsables,
+ * elegidos entre los usuarios cuyo `puesto` corresponde a esa etapa
+ * (`PUESTOS_POR_ETAPA`, src/flujo/reglas.ts):
+ * - investigacion → strategist
+ * - pilares → content_creator
+ * - desarrollo_mensual → contenido Y diseño (dos responsables a la vez)
+ * - manual_campana → trafficker
+ *
+ * `puesto` se copia aquí (y no se relee de `users.puesto` en cada consulta)
+ * porque es el puesto CON EL QUE se asignó: si el puesto de la persona
+ * cambia después, esta fila sigue contando la asignación tal como se hizo, y
+ * es lo que permite el candado de «un responsable por puesto y etapa» de
+ * abajo sin tener que volver a `users` para validarlo en cada lectura.
+ *
+ * Dos candados, no uno: `etapa_responsables_etapa_usuario` impide que un
+ * mismo usuario quede asignado dos veces a la misma etapa (pedido explícito
+ * del dueño); `etapa_responsables_etapa_puesto` impide que un puesto tenga
+ * más de un responsable por etapa — así cada uno de los selectores de la
+ * ficha (Strategist, Content Creator, Contenido, Diseño, Trafficker) es una
+ * sola persona o «Sin asignar», nunca una lista. `asignadoPor` queda NULL si
+ * quien asignó se borra después; la fila de la asignación no desaparece con
+ * la cuenta de quien la hizo.
+ */
+export const etapaResponsables = pgTable('etapa_responsables', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  etapaId: uuid('etapa_id').notNull().references(() => clienteEtapas.id, { onDelete: 'cascade' }),
+  usuarioId: uuid('usuario_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  puesto: puesto('puesto').notNull(),
+  asignadoEn: timestamp('asignado_en', { withTimezone: true }).notNull().defaultNow(),
+  asignadoPor: uuid('asignado_por').references(() => users.id, { onDelete: 'set null' }),
+}, (t) => [
+  unique('etapa_responsables_etapa_usuario').on(t.etapaId, t.usuarioId),
+  unique('etapa_responsables_etapa_puesto').on(t.etapaId, t.puesto),
 ]);

@@ -119,6 +119,8 @@ vi.mock('@/db', async (importarReal) => {
   return { ...real, db: ejecutor };
 });
 
+vi.mock('@/flujo/responsables', () => ({ etapaIdDe: vi.fn(async () => 'etapa-mensual') }));
+
 vi.mock('@/flujo/avisos', () => ({
   avisarLoteAutoAprobado: async (o: Record<string, unknown>) => { espia.avisos.push(o); },
 }));

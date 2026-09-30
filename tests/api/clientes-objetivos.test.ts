@@ -70,7 +70,9 @@ describe('alta con objetivos', () => {
   it('los guarda recortados', async () => {
     const r = await pedir('POST', { ...DATOS, objetivos: `  ${OBJETIVOS}\n ` });
     expect(r.status).toBe(201);
-    expect(espia.inserts[0]).toMatchObject({ objetivos: OBJETIVOS, operadorId: OPERADOR });
+    expect(espia.inserts[0]).toMatchObject({ objetivos: OBJETIVOS });
+    // Sin operador por cliente: la asignación es por etapa.
+    expect(espia.inserts[0]).not.toHaveProperty('operadorId');
   });
 
   it('vacío se guarda como null', async () => {
@@ -109,10 +111,10 @@ describe('edición con objetivos', () => {
     expect(espia.sets).toHaveLength(0);
   });
 
-  it('mismo permiso que el resto de Datos: un operador ajeno recibe 404 y no escribe', async () => {
-    const ajeno = { ...operador, id: '00000000-0000-4000-8000-0000000000e9' };
-    const r = await pedir('PATCH', { ...DATOS, objetivos: OBJETIVOS }, ajeno);
-    expect(r.status).toBe(404);
-    expect(espia.sets).toHaveLength(0);
+  it('mismo permiso que el resto de Datos: cualquier operador edita (visibilidad total); el cliente no', async () => {
+    const otro = { ...operador, id: '00000000-0000-4000-8000-0000000000e9' };
+    const r = await pedir('PATCH', { ...DATOS, objetivos: OBJETIVOS }, otro);
+    expect(r.status).toBe(200);
+    expect(espia.sets).toHaveLength(1);
   });
 });

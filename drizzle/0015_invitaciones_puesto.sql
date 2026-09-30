@@ -1,0 +1,1 @@
+ALTER TABLE "invitaciones" ADD COLUMN "puesto" "puesto";

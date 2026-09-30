@@ -118,6 +118,8 @@ vi.mock('@/flujo/servicio', () => ({
   rechazoPorLimite: async () => espia.limite,
 }));
 
+vi.mock('@/flujo/responsables', () => ({ etapaIdDe: vi.fn(async () => 'etapa-mensual') }));
+
 vi.mock('@/flujo/avisos', () => ({
   avisarComentarioCliente: async (o: Record<string, unknown>) => { espia.avisos.push(o); },
 }));
@@ -283,11 +285,11 @@ describe('POST /api/contenido/piezas/[id]/revision · solicitar cambios', () => 
     expect(String(espia.comentarios[0].texto)).toContain(CAMBIOS.nota);
   });
 
-  it('avisa al operador del cliente, con el enlace a la pantalla del mes', async () => {
+  it('avisa a los responsables de la etapa del mes, con el enlace a la pantalla del mes', async () => {
     await revisar(CAMBIOS);
     expect(espia.avisos).toHaveLength(1);
     expect(espia.avisos[0]).toMatchObject({
-      actorId: USUARIO_CLIENTE, clientId: CLIENTE, operadorId: OPERADOR, cliente: 'Olam Dental',
+      actorId: USUARIO_CLIENTE, clientId: CLIENTE, etapaId: 'etapa-mensual', cliente: 'Olam Dental',
       enlace: `/clientes/${CLIENTE}/contenido/2026-09`,
     });
   });

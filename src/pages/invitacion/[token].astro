@@ -23,7 +23,7 @@ if (estado === 'valida') {
     ? await db.select().from(users).where(eq(users.id, inv!.creadoPor)).limit(1)
     : [];
   const [cliente] = inv!.rol === 'cliente' && inv!.clientId
-    ? await db.select({ id: clients.id, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, inv!.clientId)).limit(1)
+    ? await db.select({ id: clients.id }).from(clients).where(eq(clients.id, inv!.clientId)).limit(1)
     : [];
   estado = invitacionVigente(inv!, creador ?? null, cliente ?? null, ahora);
 }

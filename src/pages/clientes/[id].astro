@@ -15,7 +15,8 @@ import { clienteVisible } from '@/lib/visibilidad';
 import { itemsPerdida } from '@/lib/borrado';
 import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
 import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults, clienteEtapas, etapaEventos, users, invitaciones, contenidoPiezas } from '@/db';
-import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, tipoDocumentoDe, type Etapa } from '@/flujo/reglas';
+import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, NOMBRE_PUESTO, PUESTOS_POR_ETAPA, ETAPAS, tipoDocumentoDe, type Etapa } from '@/flujo/reglas';
+import { responsablesDeEtapas } from '@/flujo/responsables';
 import { botonesEtapa, marcaEtapa } from '@/flujo/ui';
 import { etapasDelCliente, comentariosAbiertosPorEtapa, enlaceDocumento, eventosDeEntrada, observacionesClientePorEtapa } from '@/flujo/servicio';
 import { situacionEtapa, avisoCliente, ordenBotones } from '@/flujo/situacion';
@@ -45,19 +46,14 @@ const esAdmin = usuario.rol === 'admin';
 // lanza: el porqué completo está en `src/contenido/auto-aprobacion.ts`.
 await asegurarLotesAlDia(cliente.id);
 
-// ── Responsable ────────────────────────────────────
-const [responsable] = cliente.operadorId
-  ? await db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email }).from(users).where(eq(users.id, cliente.operadorId)).limit(1)
-  : [];
-// Las listas de personas se ordenan en memoria con `ordenUsuarios` (apellido,
-// nombre, y al final quien aún no tenga ninguno), no por una sola columna.
-const operadoresActivos = esAdmin
-  ? (await db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email }).from(users).where(and(ne(users.rol, 'cliente'), eq(users.activo, true)))).sort(ordenUsuarios)
-  : [];
-// El responsable guardado puede ya no estar entre los operadores activos (lo
-// desactivaron, o nunca hubo uno asignado): el <select> no debe insinuar que
-// hay alguien al mando cuando no es cierto.
-const operadorAsignadoValido = !!cliente.operadorId && operadoresActivos.some((o) => o.id === cliente.operadorId);
+// ── Responsables por etapa (rediseño de puestos) ───
+// Cada etapa tiene sus propios responsables, elegidos entre los operadores
+// activos cuyo puesto le corresponde (`PUESTOS_POR_ETAPA`). Solo el admin
+// asigna; el resto los ve. Las listas de personas se ordenan en memoria con
+// `ordenUsuarios` (apellido, nombre, y al final quien aún no tenga ninguno).
+const operadoresActivos = (await db
+  .select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email, puesto: users.puesto })
+  .from(users).where(and(eq(users.rol, 'operador'), eq(users.activo, true)))).sort(ordenUsuarios);
 
 // ── Usuarios del cliente ───────────────────────────
 const usuariosCliente = operable
@@ -99,7 +95,15 @@ const fechaHora = fechaHoraMx;
 const etapasCliente = await etapasDelCliente(cliente.id);
 const hayInvestigacionConDatos = !!investigacionUtil(resultados);
 const comentariosAbiertosPorEtapaId = await comentariosAbiertosPorEtapa(etapasCliente);
-const esOperadorAsignado = cliente.operadorId === usuario.id;
+const responsablesPorEtapa = await responsablesDeEtapas(etapasCliente.map((e) => e.id));
+// Responsables por etapa: «ser responsable» se decide etapa por etapa, no por
+// cliente (`esOperadorAsignado` de las reglas es ahora «estoy en
+// `etapa_responsables` de ESTA etapa»).
+const esResponsableDe = (etapaId: string) => (responsablesPorEtapa.get(etapaId) ?? []).some((r) => r.id === usuario.id && r.activo);
+const nombresResponsables = (etapaId: string): string | null => {
+  const r = responsablesPorEtapa.get(etapaId) ?? [];
+  return r.length ? r.map((x) => nombreVisible(x)).join(' y ') : null;
+};
 
 const RUTA_GENERAR: Partial<Record<Etapa, string>> = {
   investigacion: `/clientes/${cliente.id}/investigar`,
@@ -127,7 +131,6 @@ const [eventoPorEtapa, observacionesPorEtapa, [{ n: piezasConCambios }]] = await
         .where(and(eq(contenidoPiezas.loteId, loteDelMes.id), eq(contenidoPiezas.estadoCliente, 'cambios')))
     : Promise.resolve([{ n: 0 }]),
 ]);
-const nombreResponsable = responsable ? nombreVisible(responsable) : null;
 // El cliente nunca llega a la ficha, pero el tipo de `usuario.rol` lo admite:
 // se le da la mirada del operador, que es la que no autoriza nada.
 const mirada = { rol: esAdmin ? 'admin' as const : 'operador' as const, usuarioId: usuario.id };
@@ -136,14 +139,14 @@ const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
   const comentariosAbiertos = comentariosAbiertosPorEtapaId.get(fila.id) ?? 0;
 
   const botones = botonesEtapa({
-    etapa: fila, rol: usuario.rol, esOperadorAsignado, comentariosAbiertos, hayInvestigacionConDatos, etapasCliente,
+    etapa: fila, rol: usuario.rol, esOperadorAsignado: esResponsableDe(fila.id), comentariosAbiertos, hayInvestigacionConDatos, etapasCliente,
   });
 
   // Traduce cada botón «permitido» del motor de reglas a lo que la interfaz
   // necesita para pintarlo (enlace de Generar/Ver documento según la etapa).
   const situacion = situacionEtapa({
     etapa: fila.etapa, estado: fila.estado, actualizadoEn: fila.actualizadoEn,
-    evento: eventoPorEtapa.get(fila.id) ?? null, operador: nombreResponsable, comentariosAbiertos,
+    evento: eventoPorEtapa.get(fila.id) ?? null, operador: nombresResponsables(fila.id), comentariosAbiertos,
   }, mirada, ahoraFicha);
 
   // Cuando la etapa espera la autorización de quien mira, el enlace al
@@ -266,25 +269,42 @@ const historial: ItemHistorial[] = [
   </div>
 
   <div class="rejilla" style="margin-top:20px">
-    <section class="tarjeta">
-      <h2>Responsable</h2>
-      {esAdmin ? (
-        <div class="campo" style="margin-top:12px">
-          <label for="responsable-select">Operador asignado</label>
-          <select id="responsable-select">
-            {!operadorAsignadoValido && (
-              <option value="" disabled selected>
-                {responsable ? `${nombreVisible(responsable)} (inactivo)` : 'Sin asignar'}
-              </option>
-            )}
-            {operadoresActivos.map((o) => (
-              <option value={o.id} selected={o.id === cliente.operadorId}>{nombreVisible(o)}</option>
-            ))}
-          </select>
-        </div>
-      ) : (
-        <p class="secundario" style="margin-top:12px">{responsable ? nombreVisible(responsable) : 'Sin responsable asignado'}</p>
-      )}
+    <section class="tarjeta" id="responsables">
+      <h2>Responsables por etapa</h2>
+      <p class="sub">Cada etapa la lleva quien tenga el puesto que le corresponde. Ver un cliente es para todos; actuar sobre una etapa, solo de sus responsables.</p>
+      <ul class="lista responsables-lista">
+        {etapasCliente.map((fila) => (
+          <li class="renglon-responsable">
+            <strong class="resp-etapa">{NOMBRE_ETAPA[fila.etapa]}</strong>
+            <div class="resp-puestos">
+              {PUESTOS_POR_ETAPA[fila.etapa].map((pu) => {
+                const actual = (responsablesPorEtapa.get(fila.id) ?? []).find((r) => r.puesto === pu) ?? null;
+                const candidatos = operadoresActivos.filter((o) => o.puesto === pu);
+                const actualValido = !!actual && candidatos.some((o) => o.id === actual.id);
+                const idCampo = `resp-${fila.id}-${pu}`;
+                return (
+                  <div class="campo">
+                    <label for={idCampo}>{NOMBRE_PUESTO[pu]}</label>
+                    {esAdmin ? (
+                      <select id={idCampo} class="responsable-select" data-etapa={fila.id} data-puesto={pu}>
+                        <option value="" selected={!actual}>Sin asignar</option>
+                        {actual && !actualValido && (
+                          <option value={actual.id} selected disabled>{nombreVisible(actual)} (inactivo)</option>
+                        )}
+                        {candidatos.map((o) => (
+                          <option value={o.id} selected={actual?.id === o.id}>{nombreVisible(o)}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p class="secundario">{actual ? nombreVisible(actual) : 'Sin asignar'}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </li>
+        ))}
+      </ul>
     </section>
 
     {operable && (
@@ -353,7 +373,7 @@ const historial: ItemHistorial[] = [
         <div class="campo"><label for="ciudad">Ciudad</label><input id="ciudad" name="ciudad" value={cliente.ciudad ?? ''} /></div>
         <div class="campo"><label for="ticket">Ticket</label><input id="ticket" name="ticket" value={cliente.ticket ?? ''} /></div>
         <div class="campo ancho"><label for="contacto">Contacto</label><input id="contacto" name="contacto" value={cliente.contacto ?? ''} /></div>
-        <div class="campo ancho"><label for="notas">Notas del operador</label><textarea id="notas" name="notas">{cliente.notas ?? ''}</textarea></div>
+        <div class="campo ancho"><label for="notas">Notas internas</label><textarea id="notas" name="notas">{cliente.notas ?? ''}</textarea></div>
         <CampoObjetivos valor={cliente.objetivos} />
       </div>
       {operable && <div class="acciones"><button type="submit" class="btn" id="guardar">Guardar cambios</button></div>}
@@ -668,31 +688,34 @@ const historial: ItemHistorial[] = [
     });
   }
 
-  // ── Responsable. Solo se renderiza el select para el admin.
-  const responsableSelect = document.getElementById('responsable-select') as HTMLSelectElement | null;
-  if (responsableSelect) {
-    let previo = responsableSelect.value;
-    responsableSelect.addEventListener('change', async () => {
-      responsableSelect.disabled = true;
+  // ── Responsables por etapa. Solo se renderizan los selects para el admin.
+  const MENSAJES_RESPONSABLE: Record<string, string> = {
+    'asignacion-invalida': 'Esa persona no tiene el puesto que pide esta etapa.',
+    prohibido: 'Solo un admin puede asignar responsables.',
+  };
+  for (const sel of document.querySelectorAll<HTMLSelectElement>('.responsable-select')) {
+    let previo = sel.value;
+    sel.addEventListener('change', async () => {
+      sel.disabled = true;
       try {
-        const res = await fetch(`/api/clientes/${clientId}/operador`, {
-          method: 'PATCH',
+        const res = await fetch(`/api/clientes/${clientId}/responsables`, {
+          method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ operadorId: responsableSelect.value }),
+          body: JSON.stringify({ etapaId: sel.dataset.etapa, puesto: sel.dataset.puesto, usuarioId: sel.value || null }),
         });
         const json = await res.json();
         if (json.ok) {
-          toast('Responsable actualizado');
-          previo = responsableSelect.value;
+          toast(sel.value ? 'Responsable asignado' : 'Responsable quitado');
+          previo = sel.value;
         } else {
-          toast('No se pudo actualizar el responsable.', 'error');
-          responsableSelect.value = previo;
+          toast(MENSAJES_RESPONSABLE[json.error] ?? 'No se pudo actualizar el responsable.', 'error');
+          sel.value = previo;
         }
       } catch {
         toast('No se pudo contactar al servidor.', 'error');
-        responsableSelect.value = previo;
+        sel.value = previo;
       }
-      responsableSelect.disabled = false;
+      sel.disabled = false;
     });
   }
 
@@ -787,6 +810,15 @@ const historial: ItemHistorial[] = [
   .ficha-titulo { flex: 1; min-width: 0; }
   .ficha-titulo h1 { overflow-wrap: anywhere; }
   .tarjeta-cabeza-flex { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  /* Responsables por etapa: una fila por etapa; sus selectores (uno por puesto,
+     dos en el desarrollo mensual) van en rejilla y se apilan en celular. */
+  .responsables-lista { margin-top: 12px; display: grid; gap: 14px; }
+  .renglon-responsable { display: grid; gap: 6px; padding-bottom: 14px; border-bottom: 1px solid var(--linea); }
+  .renglon-responsable:last-child { border-bottom: 0; padding-bottom: 0; }
+  .resp-etapa { color: var(--tinta); font: var(--t-small); font-weight: 600; }
+  .resp-puestos { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .resp-puestos .campo { margin: 0; min-width: 0; }
+  .resp-puestos select { width: 100%; max-width: 100%; }
   .subtitulo-invitaciones { margin: 18px 0 0; font-size: 0.9rem; }
 
   /* Paquete mensual: debajo de los datos, separado por una línea. Cuatro

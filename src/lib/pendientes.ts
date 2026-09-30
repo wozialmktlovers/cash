@@ -1,9 +1,8 @@
 import { and, asc, desc, eq, isNull, ne, sql, type SQL } from 'drizzle-orm';
-import { db, clienteEtapas, clients, users, comentarios } from '@/db';
+import { db, clienteEtapas, clients, users, comentarios, etapaResponsables } from '@/db';
 import { comentariosAbiertosPorEtapa, eventosDeEntrada } from '@/flujo/servicio';
 import type { EventoEntrada } from '@/flujo/situacion';
 import type { Etapa, TipoDocumento } from '@/flujo/reglas';
-import { condicionClientes } from './visibilidad';
 import { nombreVisible } from './usuarios';
 import type { UsuarioSesion } from './permisos';
 
@@ -116,23 +115,20 @@ export async function contarPendientes(usuario: UsuarioSesion): Promise<number> 
   }
 
   if (usuario.rol === 'operador') {
-    // `cond` filtra por `clients.operadorId`, sin alias: las dos subconsultas
-    // de abajo se apoyan en eso, cada una con su propio JOIN a `clients` sin
-    // renombrarla, para que la condición siga apuntando a la tabla correcta
-    // en ambas. Un SELECT escalar (sin FROM propio, solo las dos subconsultas
-    // sumadas) — `db.execute`, no `db.select().from(...)`, porque no hay una
-    // sola tabla que encabece la consulta.
-    const cond = condicionClientes(usuario);
+    // Rediseño de puestos: lo que le toca a un operador ya no son «sus
+    // clientes» sino las ETAPAS donde él está en `etapa_responsables`, de
+    // cualquier cliente. Un SELECT escalar con dos subconsultas sumadas —
+    // `db.execute`, porque no hay una sola tabla que encabece la consulta.
     const [{ n }] = await db.execute<{ n: number }>(sql`
       SELECT
         (SELECT count(*)::int FROM ${clienteEtapas}
-           INNER JOIN ${clients} ON ${clients.id} = ${clienteEtapas.clientId}
-          WHERE ${clienteEtapas.estado} IN ('con_cambios', 'en_proceso') AND ${clienteEtapas.contratada} = true AND (${cond}))
+           INNER JOIN ${etapaResponsables} ON ${etapaResponsables.etapaId} = ${clienteEtapas.id}
+          WHERE ${clienteEtapas.estado} IN ('con_cambios', 'en_proceso') AND ${clienteEtapas.contratada} = true AND ${etapaResponsables.usuarioId} = ${usuario.id})
         +
         (SELECT count(*)::int FROM ${comentarios}
            INNER JOIN ${clienteEtapas} ON ${clienteEtapas.id} = ${comentarios.etapaId}
-           INNER JOIN ${clients} ON ${clients.id} = ${clienteEtapas.clientId}
-          WHERE ${comentarios.estado} = 'abierto' AND ${comentarios.respuestaDe} IS NULL AND ${clienteEtapas.contratada} = true AND (${cond}))
+           INNER JOIN ${etapaResponsables} ON ${etapaResponsables.etapaId} = ${clienteEtapas.id}
+          WHERE ${comentarios.estado} = 'abierto' AND ${comentarios.respuestaDe} IS NULL AND ${clienteEtapas.contratada} = true AND ${etapaResponsables.usuarioId} = ${usuario.id})
         AS n
     `);
     return n;
@@ -302,7 +298,10 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
       })
       .from(clienteEtapas)
       .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
-      .leftJoin(users, eq(users.id, clients.operadorId))
+      // Responsable de ESA etapa (las tres que pasan por autorización tienen
+      // un solo puesto, así que como mucho una fila).
+      .leftJoin(etapaResponsables, eq(etapaResponsables.etapaId, clienteEtapas.id))
+      .leftJoin(users, eq(users.id, etapaResponsables.usuarioId))
       // La misma condición que cuenta `contarPendientes`; `contratada` ya va
       // dentro de ella.
       .where(esperaAutorizacionDelAdmin())
@@ -318,12 +317,14 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
       evento: null,
     }));
   } else if (usuario.rol === 'operador') {
-    const cond = condicionClientes(usuario);
+    // Solo las etapas donde ÉL es responsable (`etapa_responsables`).
+    const cond = eq(etapaResponsables.usuarioId, usuario.id);
 
     const conCambios = await db
       .select(CAMPOS_ETAPA)
       .from(clienteEtapas)
       .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+      .innerJoin(etapaResponsables, eq(etapaResponsables.etapaId, clienteEtapas.id))
       .where(and(eq(clienteEtapas.estado, 'con_cambios'), contratada, cond))
       .orderBy(asc(clienteEtapas.actualizadoEn));
 
@@ -331,6 +332,7 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
       .select(CAMPOS_ETAPA)
       .from(clienteEtapas)
       .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+      .innerJoin(etapaResponsables, eq(etapaResponsables.etapaId, clienteEtapas.id))
       .where(and(eq(clienteEtapas.estado, 'en_proceso'), contratada, cond))
       .orderBy(asc(clienteEtapas.actualizadoEn));
 
@@ -353,6 +355,7 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
         .select(CAMPOS_ETAPA)
         .from(clienteEtapas)
         .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+        .innerJoin(etapaResponsables, eq(etapaResponsables.etapaId, clienteEtapas.id))
         .where(and(esperaAlCliente(), cond))
         .orderBy(asc(clienteEtapas.actualizadoEn));
       todasEsperandoCliente = esperando.map((fila) => ({
@@ -372,6 +375,7 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
       .from(comentarios)
       .innerJoin(clienteEtapas, eq(clienteEtapas.id, comentarios.etapaId))
       .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+      .innerJoin(etapaResponsables, eq(etapaResponsables.etapaId, clienteEtapas.id))
       // Solo para el nombre de quien comentó: un `leftJoin` a una fila por
       // comentario no cambia cuántos hay, y el `count` de abajo no lo lleva.
       .leftJoin(users, eq(users.id, comentarios.autorId))
@@ -390,6 +394,7 @@ export async function listarPendientes(usuario: UsuarioSesion, opciones: Opcione
       .from(comentarios)
       .innerJoin(clienteEtapas, eq(clienteEtapas.id, comentarios.etapaId))
       .innerJoin(clients, eq(clients.id, clienteEtapas.clientId))
+      .innerJoin(etapaResponsables, eq(etapaResponsables.etapaId, clienteEtapas.id))
       .where(condicionComentarios);
     totalComentarios = totalN;
   }

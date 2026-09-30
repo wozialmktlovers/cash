@@ -12,18 +12,18 @@ import type { ArteGrowth } from './artes-reglas';
 export type ManualConCliente = {
   growthId: string;
   datos: unknown;
-  cliente: { id: string; operadorId: string | null };
+  cliente: { id: string };
 };
 
 export async function manualConCliente(growthId: string): Promise<ManualConCliente | null> {
   const [fila] = await db
-    .select({ growthId: growthResults.id, datos: growthResults.datos, clienteId: clients.id, operadorId: clients.operadorId })
+    .select({ growthId: growthResults.id, datos: growthResults.datos, clienteId: clients.id })
     .from(growthResults)
     .innerJoin(clients, eq(clients.id, growthResults.clientId))
     .where(eq(growthResults.id, growthId))
     .limit(1);
   if (!fila) return null;
-  return { growthId: fila.growthId, datos: fila.datos, cliente: { id: fila.clienteId, operadorId: fila.operadorId } };
+  return { growthId: fila.growthId, datos: fila.datos, cliente: { id: fila.clienteId } };
 }
 
 const COLUMNAS_VISTA = {
@@ -107,8 +107,8 @@ export async function quitarArte(growthId: string, arteId: string): Promise<{ ru
 }
 
 /** El cliente de un manual por su id, para el permiso del portal. */
-export async function cliente(clientId: string): Promise<{ id: string; operadorId: string | null } | null> {
-  const [c] = await db.select({ id: clients.id, operadorId: clients.operadorId }).from(clients)
+export async function cliente(clientId: string): Promise<{ id: string } | null> {
+  const [c] = await db.select({ id: clients.id }).from(clients)
     .where(eq(clients.id, clientId)).limit(1);
   return c ?? null;
 }

@@ -25,11 +25,8 @@ describe('condicionClientes', () => {
     expect(condicionClientes(u('admin'))).toBeUndefined();
   });
 
-  it('operador filtra por su id', () => {
-    const cond = condicionClientes(u('operador', { id: 'op1' }));
-    expect(cond).toBeDefined();
-    const { params } = new PgDialect().sqlToQuery(cond!);
-    expect(params).toContain('op1');
+  it('operador sin condición: visibilidad total', () => {
+    expect(condicionClientes(u('operador', { id: 'op1' }))).toBeUndefined();
   });
 
   it('cliente filtra por su clientId', () => {

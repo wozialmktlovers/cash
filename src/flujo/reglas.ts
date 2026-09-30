@@ -12,6 +12,39 @@ export type Accion = (typeof ACCIONES)[number];
 export type Rol = 'admin' | 'operador' | 'cliente';
 export type TipoDocumento = 'research' | 'pilares' | 'growth';
 
+/**
+ * Los cinco puestos de un operador (rediseño 2026-09-30, puestos y
+ * responsables por etapa). En paralelo al enum `puesto` de
+ * src/db/schema.ts, como ETAPAS/ESTADOS/ACCIONES ya conviven con sus enums.
+ */
+export const PUESTOS = ['strategist', 'content_creator', 'contenido', 'diseno', 'trafficker'] as const;
+export type Puesto = (typeof PUESTOS)[number];
+
+/** Nombre visible del puesto. Se usa SIEMPRE en vez de la palabra «Operador» a secas. */
+export const NOMBRE_PUESTO: Record<Puesto, string> = {
+  strategist: 'Strategist',
+  content_creator: 'Content Creator',
+  contenido: 'Contenido',
+  diseno: 'Diseño',
+  trafficker: 'Trafficker',
+};
+
+/**
+ * Qué puesto(s) responden de cada etapa (spec del rediseño): investigación la
+ * lleva un strategist, el mapa de pilares un content creator, el manual de
+ * campaña un trafficker, y el desarrollo mensual necesita DOS responsables a
+ * la vez —contenido (copy) y diseño (arte)—, cada uno independiente del otro.
+ * Es la lista de la que sale el selector de cada ficha y la que valida
+ * `asignarResponsable` (src/flujo/responsables.ts): nadie puede quedar
+ * asignado a un puesto que no le corresponde a la etapa.
+ */
+export const PUESTOS_POR_ETAPA: Record<Etapa, Puesto[]> = {
+  investigacion: ['strategist'],
+  pilares: ['content_creator'],
+  desarrollo_mensual: ['contenido', 'diseno'],
+  manual_campana: ['trafficker'],
+};
+
 /** Peso de cada estado para el % de avance del cliente. */
 export const PESOS: Record<Estado, number> = {
   no_iniciada: 0,
@@ -331,8 +364,9 @@ export function aplicarAccion(o: {
   // El cliente nunca actúa aquí: sus comentarios pasan por estadoTrasComentarioCliente.
   if (rol === 'cliente') return { ok: false, razon: 'No tienes permiso para esta acción.' };
 
-  // Un operador solo puede actuar sobre los clientes que tiene asignados.
-  if (rol === 'operador' && !esOperadorAsignado) return { ok: false, razon: 'No tienes este cliente asignado' };
+  // Un operador solo puede actuar sobre las etapas de las que es responsable
+  // (`etapa_responsables`, rediseño de puestos): ver todo no es poder actuar.
+  if (rol === 'operador' && !esOperadorAsignado) return { ok: false, razon: 'No eres responsable de esta etapa' };
 
   switch (accion) {
     case 'iniciar': {

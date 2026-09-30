@@ -39,7 +39,7 @@ export function estadoInvitacion(inv: { expiraEn: Date; usadaEn: Date | null } |
 export function invitacionVigente(
   inv: { expiraEn: Date; usadaEn: Date | null; rol: Rol } | null,
   creador: UsuarioSesion | null,
-  cliente: { id: string; operadorId: string | null } | null,
+  cliente: { id: string } | null,
   ahora: Date,
 ): InvitacionEstado {
   const estado = estadoInvitacion(inv, ahora);
@@ -111,9 +111,13 @@ export function validarAceptacion(o: { nombre: string; apellido: string; passwor
   return errores.length ? { ok: false, errores } : { ok: true };
 }
 
-/** Admin invita cualquier rol; operador solo `cliente` de un cliente que tenga asignado. */
-export function puedeInvitar(u: UsuarioSesion, rol: Rol, cliente: { id: string; operadorId: string | null } | null): boolean {
+/**
+ * Admin invita cualquier rol; operador solo `cliente`, de cualquier cliente
+ * (visibilidad total, rediseño 2026-09-30: ya no hace falta tenerlo
+ * «asignado» — esa idea era por cliente y ahora la asignación es por etapa).
+ */
+export function puedeInvitar(u: UsuarioSesion, rol: Rol, cliente: { id: string } | null): boolean {
   if (u.rol === 'admin') return true;
-  if (u.rol === 'operador') return rol === 'cliente' && !!cliente && cliente.operadorId === u.id;
+  if (u.rol === 'operador') return rol === 'cliente' && !!cliente;
   return false;
 }

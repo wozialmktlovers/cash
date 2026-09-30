@@ -83,6 +83,8 @@ vi.mock('@/db', () => ({
   researchJobs: mockDb.TABLAS.researchJobs,
   clients: mockDb.TABLAS.clients,
   users: mockDb.TABLAS.users,
+  etapaResponsables: {},
+  clienteEtapas: {},
   notificaciones: mockDb.TABLAS.notificaciones,
   db: mockDb.db,
 }));

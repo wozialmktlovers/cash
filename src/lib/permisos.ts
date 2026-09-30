@@ -59,14 +59,36 @@ export function rutaPermitida(rol: Rol, ruta: string): 'ok' | 'redirigir-portal'
   return ruta.startsWith('/api/') ? 'prohibido' : 'redirigir-portal';
 }
 
-export function puedeVerCliente(u: UsuarioSesion, c: { id: string; operadorId: string | null }): boolean {
+/**
+ * Visibilidad total (rediseño 2026-09-30, puestos y responsables por etapa):
+ * cualquier operador activo, de cualquier puesto, ve CUALQUIER cliente
+ * completo —las 4 etapas, no solo las suyas—, ya no solo los que tenía
+ * asignados por `clients.operador_id` (columna heredada, sin uso). Ver no es
+ * lo mismo que poder actuar: quién puede mover una etapa lo decide
+ * `esResponsableDeEtapa` (src/flujo/responsables.ts) contra
+ * `etapa_responsables`, no esta función.
+ */
+export function puedeVerCliente(u: UsuarioSesion, c: { id: string }): boolean {
   if (!u.activo) return false;
   if (u.rol === 'admin') return true;
-  if (u.rol === 'operador') return c.operadorId === u.id;
+  if (u.rol === 'operador') return true;
   return u.clientId === c.id;
 }
 
-export function puedeOperarCliente(u: UsuarioSesion, c: { id: string; operadorId: string | null }): boolean {
+/**
+ * DECISIÓN DEL DUEÑO, AISLADA AQUÍ A PROPÓSITO (rediseño de puestos): «operar»
+ * un cliente a nivel de ficha —editar sus datos y paquete, subir archivos,
+ * lanzar generaciones, invitar a sus usuarios— lo puede hacer cualquier
+ * operador activo, igual que verlo. Lo que sigue atado a la asignación son las
+ * acciones del FLUJO de cada etapa (solicitar autorización, comentar, editar
+ * el documento, cambiar estado de comentarios), que se deciden con
+ * `esResponsableDeEtapa` (src/flujo/responsables.ts).
+ *
+ * Si el dueño prefiere que editar/generar también quede atado a los
+ * responsables, el cambio es solo este cuerpo: exigir aquí que el operador esté
+ * en `etapa_responsables` de alguna etapa del cliente (o pasar la etapa).
+ */
+export function puedeOperarCliente(u: UsuarioSesion, c: { id: string }): boolean {
   return u.rol !== 'cliente' && puedeVerCliente(u, c);
 }
 

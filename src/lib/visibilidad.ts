@@ -19,13 +19,19 @@ export function esUuid(id: string): boolean {
 
 /**
  * Condición SQL para filtrar la tabla `clients` según el rol de `u`.
- * `undefined` para admin (sin filtro); el resto siempre trae una condición
- * definida, aunque el usuario no tenga cliente asignado (ese caso no
- * devuelve nunca filas, en vez de tronar).
+ * `undefined` para admin y para operador (sin filtro): visibilidad total
+ * (rediseño 2026-09-30) — cualquier operador ve cualquier cliente completo, ya
+ * no solo los que tenía asignados por `clients.operador_id`. El cliente
+ * siempre trae una condición definida, aunque no tenga `clientId` (ese caso
+ * no devuelve nunca filas, en vez de tronar).
+ *
+ * Quién ve todo no es lo mismo que qué le «toca a él»: el filtro por
+ * responsable de etapa (antes «sus clientes») vive aparte, en
+ * `src/lib/pendientes.ts`, que ahora se une contra `etapa_responsables` en
+ * vez de usar esta función.
  */
 export function condicionClientes(u: UsuarioSesion) {
-  if (u.rol === 'admin') return undefined;
-  if (u.rol === 'operador') return eq(clients.operadorId, u.id);
+  if (u.rol === 'admin' || u.rol === 'operador') return undefined;
   return eq(clients.id, u.clientId ?? '');
 }
 

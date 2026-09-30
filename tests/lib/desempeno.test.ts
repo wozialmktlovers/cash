@@ -10,7 +10,7 @@ import {
   carga,
   costo,
   enPeriodoCerrado,
-  agruparClientesPorOperador,
+  agruparEtapasPorResponsable,
   desglosePorEtapa,
   type Evento,
   type ComentarioM,
@@ -444,20 +444,24 @@ describe('enPeriodoCerrado', () => {
   });
 });
 
-describe('agruparClientesPorOperador', () => {
-  it('agrupa ids de cliente por operador, "sin_asignar" para los que no tienen', () => {
-    const clientes = [
-      { id: 'c1', operadorId: 'op1' },
-      { id: 'c2', operadorId: 'op1' },
-      { id: 'c3', operadorId: null },
-    ];
-    const r = agruparClientesPorOperador(clientes);
-    expect(r.get('op1')).toEqual(['c1', 'c2']);
-    expect(r.get('sin_asignar')).toEqual(['c3']);
+describe('agruparEtapasPorResponsable', () => {
+  const et = (id: string, responsableIds: string[]) =>
+    ({ id, clientId: 'c', etapa: 'investigacion', estado: 'en_proceso', contratada: true, interna: false, responsableIds }) as never;
+
+  it('agrupa etapas por responsable; «sin_asignar» para las que no tienen', () => {
+    const r = agruparEtapasPorResponsable([et('e1', ['op1']), et('e2', ['op1']), et('e3', [])]);
+    expect(r.get('op1')!.map((e) => e.id)).toEqual(['e1', 'e2']);
+    expect(r.get('sin_asignar')!.map((e) => e.id)).toEqual(['e3']);
   });
 
-  it('sin clientes, Map vacío', () => {
-    expect(agruparClientesPorOperador([]).size).toBe(0);
+  it('una etapa con dos responsables (contenido y diseño) cuenta para los dos', () => {
+    const r = agruparEtapasPorResponsable([et('mes', ['contenido1', 'diseno1'])]);
+    expect(r.get('contenido1')!.map((e) => e.id)).toEqual(['mes']);
+    expect(r.get('diseno1')!.map((e) => e.id)).toEqual(['mes']);
+  });
+
+  it('sin etapas, Map vacío', () => {
+    expect(agruparEtapasPorResponsable([]).size).toBe(0);
   });
 });
 

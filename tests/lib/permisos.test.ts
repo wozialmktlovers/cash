@@ -92,10 +92,16 @@ describe('visibilidad', () => {
     expect(puedeVerCliente(u('admin'), cliente)).toBe(true);
     expect(puedeOperarCliente(u('admin'), cliente)).toBe(true);
   });
-  it('operador solo lo asignado', () => {
+  it('operador: visibilidad total, de cualquier puesto, sin importar el cliente', () => {
+    // `operadorId` es la columna heredada: ya no decide nada.
     expect(puedeVerCliente(u('operador', { id: 'op1' }), cliente)).toBe(true);
-    expect(puedeVerCliente(u('operador', { id: 'op2' }), cliente)).toBe(false);
-    expect(puedeOperarCliente(u('operador', { id: 'op1' }), cliente)).toBe(true);
+    expect(puedeVerCliente(u('operador', { id: 'op2' }), cliente)).toBe(true);
+    expect(puedeVerCliente(u('operador', { id: 'op2' }), { id: 'otro' })).toBe(true);
+    expect(puedeOperarCliente(u('operador', { id: 'op2' }), cliente)).toBe(true);
+  });
+  it('un operador inactivo no ve nada', () => {
+    expect(puedeVerCliente(u('operador', { id: 'op1', activo: false }), cliente)).toBe(false);
+    expect(puedeOperarCliente(u('operador', { id: 'op1', activo: false }), cliente)).toBe(false);
   });
   it('cliente ve su empresa pero nunca opera', () => {
     expect(puedeVerCliente(u('cliente', { clientId: 'c1' }), cliente)).toBe(true);

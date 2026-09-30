@@ -12,13 +12,13 @@ const { enviarCorreo, insertar } = vi.hoisted(() => ({
 vi.mock('@/lib/correo', () => ({ enviarCorreo }));
 vi.mock('@/db', () => ({
   db: { insert: () => ({ values: insertar }) },
-  notificaciones: {}, users: {},
+  notificaciones: {}, users: {}, etapaResponsables: {}, clienteEtapas: {}, clients: {},
 }));
 
 import { notificar } from '@/flujo/avisos';
 
 const operador = { id: 'op1', email: 'op@x.mx', nombre: 'Op', apellido: null, rol: 'operador' as const, activo: true };
-const ctx = { admins: [], operador, autor: null, usuariosCliente: [], etapaVisibleCliente: false, datos: { cliente: 'Ana', etapa: 'Investigación' } };
+const ctx = { admins: [], operadores: [operador], autor: null, usuariosCliente: [], etapaVisibleCliente: false, datos: { cliente: 'Ana', etapa: 'Investigación' } };
 
 const entorno = { ...process.env };
 beforeEach(() => { enviarCorreo.mockClear(); insertar.mockClear(); });

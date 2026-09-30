@@ -5,10 +5,11 @@ import Icono from '@/components/Icono.astro';
 import { db, clients, clienteEtapas, etapaEventos, comentarios, researchJobs, users } from '@/db';
 import { condicionClientes, esUuid } from '@/lib/visibilidad';
 import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
-import { ETAPAS, NOMBRE_ETAPA, avanceCliente, type Etapa, type Estado } from '@/flujo/reglas';
+import { ETAPAS, NOMBRE_ETAPA, NOMBRE_PUESTO, PUESTOS, PESOS, etapasParaAvance, avanceCliente, type Etapa, type Estado } from '@/flujo/reglas';
+import { clientesDeResponsable, responsablesDeEtapas } from '@/flujo/responsables';
 import {
   periodo, resumenEstadistico, tiemposPorEtapa, calidad, carga, costo, operadorDeJob,
-  enPeriodoCerrado, agruparClientesPorOperador, desglosePorEtapa,
+  enPeriodoCerrado, agruparEtapasPorResponsable, desglosePorEtapa, filtrarPeriodo,
   type Evento, type ComentarioM, type JobM, type EtapaM, type Periodo,
 } from '@/lib/desempeno';
 import { graficaBarras, type FilaGrafica } from '@/render/investigacion/graficas';
@@ -38,19 +39,20 @@ const PERIODOS: { clave: ClavePeriodo; texto: string }[] = [
 ];
 
 // ── Alcance (clientes visibles) ─────────────────────────────────────────
-// Solo el admin puede acotar por operador; para el operador, `?operador=`
-// se ignora (condicionClientes ya lo deja viendo solo lo suyo).
-const operadorParam = esAdmin ? (Astro.url.searchParams.get('operador') ?? '') : '';
+// Cualquier usuario interno puede acotar por responsable (`?responsable=`):
+// los clientes donde esa persona lleva al menos una etapa.
+const operadorParam = Astro.url.searchParams.get('responsable') ?? '';
 const operadorFiltro = esUuid(operadorParam) ? operadorParam : '';
-const cond = operadorFiltro ? eq(clients.operadorId, operadorFiltro) : condicionClientes(usuario);
+const cond = operadorFiltro ? clientesDeResponsable(operadorFiltro) : condicionClientes(usuario);
 
 const lista = await db.select().from(clients).where(cond).orderBy(asc(clients.nombre));
 const ids = lista.map((c) => c.id);
-const operadorDeCliente = new Map(lista.map((c) => [c.id, c.operadorId]));
+// Ya no hay un operador por cliente: el costo sin `creadoPor` queda «sin asignar».
+const operadorDeCliente = new Map<string, string | null>();
 
 function enlacePeriodo(clave: ClavePeriodo): string {
   const params = new URLSearchParams({ periodo: clave });
-  if (operadorFiltro) params.set('operador', operadorFiltro);
+  if (operadorFiltro) params.set('responsable', operadorFiltro);
   return `/desempeno?${params.toString()}`;
 }
 
@@ -60,13 +62,10 @@ function enlacePeriodo(clave: ClavePeriodo): string {
 // aquí solo confundiría el filtro.
 // El orden es de personas, no de una columna: se hace en memoria con
 // `ordenUsuarios` (apellido, nombre, y al final quien aún no tenga ninguno).
-const operadoresSelect = esAdmin
-  ? (await db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email })
-      .from(users).where(and(ne(users.rol, 'cliente'), eq(users.activo, true)))).sort(ordenUsuarios)
-  : [];
-const nombreOperador = new Map<string, string>(
-  esAdmin ? operadoresSelect.map((o) => [o.id, nombreVisible(o)]) : [[usuario.id, nombreVisible(usuario)]],
-);
+const operadoresSelect = (await db.select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email, puesto: users.puesto })
+  .from(users).where(and(eq(users.rol, 'operador'), eq(users.activo, true)))).sort(ordenUsuarios);
+const nombreOperador = new Map<string, string>(operadoresSelect.map((o) => [o.id, nombreVisible(o)]));
+const puestoOperador = new Map<string, string | null>(operadoresSelect.map((o) => [o.id, o.puesto ? NOMBRE_PUESTO[o.puesto] : null]));
 
 // ── Consulta (una sola vez por tabla, nunca por cliente) ────────────────
 const etapasFilas = ids.length
@@ -78,7 +77,8 @@ const etapasFilas = ids.length
       .from(clienteEtapas)
       .where(inArray(clienteEtapas.clientId, ids))
   : [];
-const etapas: EtapaM[] = etapasFilas.map((e) => ({ ...e, operadorId: operadorDeCliente.get(e.clientId) ?? null }));
+const responsablesPorEtapa = await responsablesDeEtapas(etapasFilas.map((e) => e.id));
+const etapas: EtapaM[] = etapasFilas.map((e) => ({ ...e, responsableIds: (responsablesPorEtapa.get(e.id) ?? []).map((r) => r.id) }));
 
 const eventosFilas = ids.length
   ? await db
@@ -188,47 +188,47 @@ const filasCosto: FilaGrafica[] = (['research', 'pilares', 'growth', 'contenido'
 // decimales), que no coincidía ni con costo_usd ni con las tarjetas de arriba.
 const graficaCostoHtml = costoRes.total > 0 ? graficaBarras(filasCosto, 'Costo por tipo', dinero) : '';
 
-// ── Tabla «Por operador» y desglose operador × etapa (admin) ─────────────
-// Agrupación por operador movida a la librería (tarea I4, punto 2):
-// `agruparClientesPorOperador` es la misma función pura que usa su propia
-// prueba en tests/lib/desempeno.test.ts, en vez de reconstruir el Map aquí.
+// ── Tabla «Por puesto y persona» y desglose persona × etapa ──────────────
+// Rediseño de puestos: cada etapa cuenta para quien está en
+// `etapa_responsables` (las de desarrollo mensual, para sus dos
+// responsables). Se agrupa por puesto y, dentro, por persona.
 const ORDEN_ETAPA = new Map(ETAPAS.map((e, i) => [e, i]));
-const clientIdDeEtapaId = new Map(etapas.map((e) => [e.id, e.clientId]));
 
-const gruposOperador = agruparClientesPorOperador(lista);
+const gruposResponsable = agruparEtapasPorResponsable(etapas);
+for (const o of operadoresSelect) if (!gruposResponsable.has(o.id)) gruposResponsable.set(o.id, []);
 
-const filasPorOperador = [...gruposOperador.entries()]
-  .map(([clave, clientIds]) => {
-    const idsSet = new Set(clientIds);
-    const nombre = clave === 'sin_asignar' ? 'Sin asignar' : (nombreOperador.get(clave) ?? 'Operador');
-    const etapasG = etapas.filter((e) => idsSet.has(e.clientId));
-    const eventosG = eventos.filter((e) => idsSet.has(e.clientId));
-    const comentariosG = comentariosM.filter((c) => idsSet.has(clientIdDeEtapaId.get(c.etapaId) ?? ''));
-    const cargaG = carga(etapasG, eventosG, periodoActual);
+const filasPorResponsable = [...gruposResponsable.entries()]
+  .map(([clave, etapasG]) => {
+    const idsEtapa = new Set(etapasG.map((e) => e.id));
+    const eventosG = eventos.filter((e) => idsEtapa.has(e.etapaId));
+    const comentariosG = comentariosM.filter((c) => idsEtapa.has(c.etapaId));
+    const visibles = etapasParaAvance(etapasG);
     const { eventos: eventosGCerrados, comentarios: comentariosGCerrados } = enPeriodoCerrado(eventosG, comentariosG, periodoActual, esTodo);
     const diasG = resumenEstadistico(Object.values(tiemposPorEtapa(eventosGCerrados).duracion).flat()).promedio;
     const rondasG = resumenEstadistico(calidad(eventosGCerrados, comentariosGCerrados).rondasPorEtapaAprobada).promedio;
-    // clientes: el tamaño real del grupo, no el conteo de carga() (distinto de
-    // los clientId presentes en etapasG; deberían coincidir siempre que cada
-    // cliente tenga sus 4 filas de cliente_etapas, pero idsSet.size es la
-    // fuente de verdad — es la misma lista que arma la fila de cada operador).
-    return { clave, nombre, ...cargaG, clientes: idsSet.size, dias: diasG, rondas: rondasG, costo: costoRes.porOperador.get(clave) ?? 0 };
-  })
-  .sort((a, b) => (a.nombre === 'Sin asignar' ? 1 : b.nombre === 'Sin asignar' ? -1 : a.nombre.localeCompare(b.nombre, 'es')));
+    return {
+      clave,
+      nombre: clave === 'sin_asignar' ? 'Sin asignar' : (nombreOperador.get(clave) ?? 'Responsable'),
+      puesto: clave === 'sin_asignar' ? 'Sin asignar' : (puestoOperador.get(clave) ?? 'Sin puesto'),
+      clientes: new Set(etapasG.map((e) => e.clientId)).size,
+      etapasActivas: visibles.filter((e) => e.estado === 'en_proceso' || e.estado === 'en_revision' || e.estado === 'con_cambios').length,
+      avancePromedio: visibles.length === 0 ? 0 : Math.round(visibles.reduce((s, e) => s + PESOS[e.estado], 0) / visibles.length),
+      dias: diasG, rondas: rondasG,
+      costo: costoRes.porOperador.get(clave) ?? 0,
+      eventosGCerrados,
+    };
+  });
+const ordenPuesto = (p: string) => p === 'Sin asignar' ? 999 : p === 'Sin puesto' ? 998 : PUESTOS.findIndex((x) => NOMBRE_PUESTO[x] === p);
+filasPorResponsable.sort((a, b) => ordenPuesto(a.puesto) - ordenPuesto(b.puesto) || a.nombre.localeCompare(b.nombre, 'es'));
 
-// Desglose operador × etapa (tarea I4, punto 2): días (mediana), rondas
-// (promedio) y costo por etapa, para cada operador. El costo usa la misma
-// atribución por creado_por que costoRes.porOperador arriba (con el
-// operador del cliente como respaldo) — no la lista de clientes asignados
-// hoy — para no mostrar dos definiciones distintas de "costo por operador"
-// en la misma página; días y rondas sí usan la asignación actual (mismo
-// criterio que el resto de esta tabla).
-const filasDesgloseOperador = filasPorOperador.map((f) => {
-  const idsSet = new Set(gruposOperador.get(f.clave) ?? []);
+// Desglose persona × etapa: días (mediana), rondas (promedio) y costo por
+// etapa. El costo usa la atribución por `creado_por` (la misma de la tabla
+// de arriba); días y rondas, las etapas que lleva hoy.
+const filasDesgloseOperador = filasPorResponsable.map((f) => {
   const operadorIdReal = f.clave === 'sin_asignar' ? null : f.clave;
-  const eventosGCerrados = eventosCerrados.filter((e) => idsSet.has(e.clientId));
   const jobsAtribuidos = jobs.filter((j) => operadorDeJob(j, operadorDeCliente) === operadorIdReal);
-  return { nombre: f.nombre, porEtapa: desglosePorEtapa(eventosGCerrados, jobsAtribuidos) };
+  const idsEtapa = new Set((gruposResponsable.get(f.clave) ?? []).map((e) => e.id));
+  return { nombre: f.nombre, puesto: f.puesto, porEtapa: desglosePorEtapa(eventosCerrados.filter((e) => idsEtapa.has(e.etapaId)), jobsAtribuidos) };
 });
 
 // ── Tabla «Por cliente» ──────────────────────────────────────────────────
@@ -257,7 +257,13 @@ const filasPorCliente = lista.map((c) => ({
   nombre: c.nombre,
   avance: avanceCliente(etapasPorCliente.get(c.id) ?? []),
   etapaActual: etapaActualDe(etapasPorCliente.get(c.id) ?? []),
-  operador: c.operadorId ? (nombreOperador.get(c.operadorId) ?? 'Operador') : 'Sin asignar',
+  // Quién lleva la etapa en que va el cliente.
+  operador: (() => {
+    const visibles = (etapasPorCliente.get(c.id) ?? []).filter((e) => e.contratada && !e.interna)
+      .sort((a, b) => (ORDEN_ETAPA.get(a.etapa) ?? 0) - (ORDEN_ETAPA.get(b.etapa) ?? 0));
+    const actual = visibles.find((e) => e.estado !== 'aprobada');
+    return actual && actual.responsableIds.length ? actual.responsableIds.map((id) => nombreOperador.get(id) ?? 'Responsable').join(' y ') : 'Sin asignar';
+  })(),
   costo: costoRes.porCliente.get(c.id) ?? 0,
 }));
 
@@ -287,7 +293,7 @@ function textoRondas(n: number | null): string {
   <div class="encabezado">
     <div>
       <h1>Desempeño</h1>
-      <p class="sub">Tiempos, calidad, carga y costo por operador y por cliente.</p>
+      <p class="sub">Tiempos, calidad, carga y costo por puesto, persona y cliente.</p>
     </div>
   </div>
 
@@ -299,14 +305,14 @@ function textoRondas(n: number | null): string {
     ))}
   </nav>
 
-  {esAdmin && operadoresSelect.length > 0 && (
+  {operadoresSelect.length > 0 && (
     <form method="GET" id="operador-form" class="campo" style="max-width:280px;margin-bottom:22px;display:flex;flex-direction:row;align-items:flex-end;gap:10px">
       <div style="flex:1;min-width:0">
-        <label for="operador-filtro">Operador</label>
+        <label for="operador-filtro">Responsable</label>
         <input type="hidden" name="periodo" value={claveActiva} />
-        <select id="operador-filtro" name="operador">
+        <select id="operador-filtro" name="responsable">
           <option value="">Todos</option>
-          {operadoresSelect.map((o) => <option value={o.id} selected={o.id === operadorFiltro}>{nombreVisible(o)}</option>)}
+          {operadoresSelect.map((o) => <option value={o.id} selected={o.id === operadorFiltro}>{nombreVisible(o)}{o.puesto ? ` · ${NOMBRE_PUESTO[o.puesto]}` : ''}</option>)}
         </select>
       </div>
       {/* El cambio de select se manda solo por JS (abajo); este botón es el
@@ -321,7 +327,7 @@ function textoRondas(n: number | null): string {
     <div class="tarjeta vacio">
       <Icono nombre="clientes" />
       <strong>Todavía no hay clientes</strong>
-      {operadorFiltro ? 'Ese operador no tiene clientes asignados.' : 'En cuanto haya clientes dados de alta, aparecen aquí.'}
+      {operadorFiltro ? 'Esa persona no es responsable de ninguna etapa.' : 'En cuanto haya clientes dados de alta, aparecen aquí.'}
     </div>
   ) : sinActividad ? (
     <div class="tarjeta vacio">
@@ -382,18 +388,19 @@ function textoRondas(n: number | null): string {
         </section>
       </section>
 
-      {esAdmin && (
+      {(
         <section class="seccion">
-          <h2>Por operador</h2>
+          <h2>Por puesto y persona</h2>
           <section class="tarjeta">
             <div class="tabla-envoltura">
               <table>
                 <thead>
-                  <tr><th>Operador</th><th>Clientes</th><th>Etapas activas</th><th>Avance</th><th>Días a aprobar</th><th>Rondas</th><th>Costo</th></tr>
+                  <tr><th>Puesto</th><th>Persona</th><th>Clientes</th><th>Etapas activas</th><th>Avance</th><th>Días a aprobar</th><th>Rondas</th><th>Costo</th></tr>
                 </thead>
                 <tbody>
-                  {filasPorOperador.map((f) => (
+                  {filasPorResponsable.map((f) => (
                     <tr>
+                      <td>{f.puesto}</td>
                       <td>{f.nombre}</td>
                       <td>{f.clientes}</td>
                       <td>{f.etapasActivas}</td>
@@ -410,20 +417,22 @@ function textoRondas(n: number | null): string {
         </section>
 
         <section class="seccion">
-          <h2>Operador × etapa</h2>
+          <h2>Persona × etapa</h2>
           <p class="secundario" style="margin-bottom:10px">Días hasta aprobar (mediana), rondas de cambios (promedio) y costo del periodo, por etapa.</p>
           <section class="tarjeta">
             <div class="tabla-envoltura">
               <table>
                 <thead>
                   <tr>
-                    <th>Operador</th>
+                    <th>Puesto</th>
+                    <th>Persona</th>
                     {ETAPAS.map((et) => <th>{NOMBRE_ETAPA[et]}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {filasDesgloseOperador.map((f) => (
                     <tr>
+                      <td>{f.puesto}</td>
                       <td>{f.nombre}</td>
                       {ETAPAS.map((et) => (
                         <td class="celda-etapa">
@@ -447,7 +456,7 @@ function textoRondas(n: number | null): string {
           <div class="tabla-envoltura">
             <table>
               <thead>
-                <tr><th>Cliente</th><th>Avance</th><th>Etapa actual</th><th>Operador</th><th>Costo</th></tr>
+                <tr><th>Cliente</th><th>Avance</th><th>Etapa actual</th><th>Responsable</th><th>Costo</th></tr>
               </thead>
               <tbody>
                 {filasPorCliente.map((f) => (

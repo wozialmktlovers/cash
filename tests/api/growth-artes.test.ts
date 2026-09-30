@@ -184,8 +184,8 @@ describe('subir arte: quién puede', () => {
     }
   });
 
-  it('el operador ajeno y los clientes reciben 404 y no se guarda nada', async () => {
-    for (const u of [operadorAjeno, clienteDuenio, clienteAjeno, { ...admin, activo: false }]) {
+  it('los clientes y una cuenta desactivada reciben 404 y no se guarda nada (el operador de otro equipo sí puede: visibilidad total)', async () => {
+    for (const u of [clienteDuenio, clienteAjeno, { ...admin, activo: false }]) {
       const r = await subir(u, { creativo: '0', orden: '0', archivo: archivo(PNG) });
       expect(r.status, u.email).toBe(404);
     }
@@ -266,11 +266,11 @@ describe('subir arte: qué se acepta', () => {
 });
 
 describe('quitar arte', () => {
-  it('el operador asignado quita y se borra el archivo; el ajeno recibe 404', async () => {
-    const ajeno = await QUITAR({ params: { id: ids.MANUAL, arteId: ids.ARTE }, locals: { usuario: operadorAjeno } } as never);
-    expect(ajeno.status).toBe(404);
+  it('cualquier operador quita el arte y se borra el archivo (visibilidad total); el cliente no', async () => {
+    const cli = await QUITAR({ params: { id: ids.MANUAL, arteId: ids.ARTE }, locals: { usuario: clienteDuenio } } as never);
+    expect(cli.status).toBe(404);
     expect(base.artes.some((a) => a.id === ids.ARTE)).toBe(true);
-    const r = await QUITAR({ params: { id: ids.MANUAL, arteId: ids.ARTE }, locals: { usuario: operador } } as never);
+    const r = await QUITAR({ params: { id: ids.MANUAL, arteId: ids.ARTE }, locals: { usuario: operadorAjeno } } as never);
     expect(r.status).toBe(200);
     expect(base.borrados).toEqual([`${ids.CLIENTE}/pieza.png`]);
   });
@@ -292,8 +292,10 @@ describe('ver el arte: equipo', () => {
     }
   });
 
-  it('operador ajeno y clientes: 404 sin tocar el disco', async () => {
-    for (const u of [operadorAjeno, clienteDuenio, clienteAjeno]) expect((await equipo(u)).status).toBe(404);
+  it('los clientes: 404 sin tocar el disco (un operador de otro equipo sí lo ve)', async () => {
+    expect((await equipo(operadorAjeno)).status).toBe(200);
+    base.leidos.length = 0;
+    for (const u of [clienteDuenio, clienteAjeno]) expect((await equipo(u)).status).toBe(404);
     expect(base.leidos).toEqual([]);
   });
 
@@ -324,7 +326,7 @@ describe('ver el arte: portal del cliente', () => {
     expect((await portal(admin)).status).toBe(404);
     expect((await portal(admin, ids.ARTE, ids.ETAPA, `?cliente=${ids.CLIENTE}`)).status).toBe(200);
     expect((await portal(operador, ids.ARTE, ids.ETAPA, `?cliente=${ids.CLIENTE}`)).status).toBe(200);
-    expect((await portal(operadorAjeno, ids.ARTE, ids.ETAPA, `?cliente=${ids.CLIENTE}`)).status).toBe(404);
+    expect((await portal(operadorAjeno, ids.ARTE, ids.ETAPA, `?cliente=${ids.CLIENTE}`)).status).toBe(200); // visibilidad total
   });
 
   it('sin versión autorizada, o si la etapa es interna, no hay arte', async () => {

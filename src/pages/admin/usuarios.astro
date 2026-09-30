@@ -1,8 +1,9 @@
 ---
-import { and, asc, eq, gt, inArray, isNull, ne } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
 import Base from '@/layouts/Base.astro';
 import Icono from '@/components/Icono.astro';
-import { db, users, clients, invitaciones } from '@/db';
+import { db, users, clients, invitaciones, etapaResponsables } from '@/db';
+import { PUESTOS, NOMBRE_PUESTO } from '@/flujo/reglas';
 import { fechaCorta } from '@/lib/ui/fecha';
 import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
 
@@ -15,22 +16,17 @@ const usuario = Astro.locals.usuario;
 // una colación aparte, y la consulta ya trae la lista entera.
 const equipo = (
   await db
-    .select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email, rol: users.rol, activo: users.activo })
+    .select({ id: users.id, nombre: users.nombre, apellido: users.apellido, email: users.email, rol: users.rol, puesto: users.puesto, activo: users.activo })
     .from(users)
     .where(ne(users.rol, 'cliente'))
 ).sort(ordenUsuarios);
 
-const equipoIds = equipo.map((u) => u.id);
-const clientesAsignados = equipoIds.length
-  ? await db.select({ id: clients.id, nombre: clients.nombre, operadorId: clients.operadorId }).from(clients).where(inArray(clients.operadorId, equipoIds))
-  : [];
-const clientesPorOperador = new Map<string, { id: string; nombre: string }[]>();
-for (const c of clientesAsignados) {
-  if (!c.operadorId) continue;
-  const lista = clientesPorOperador.get(c.operadorId) ?? [];
-  lista.push({ id: c.id, nombre: c.nombre });
-  clientesPorOperador.set(c.operadorId, lista);
-}
+// Cuántas etapas (de cualquier cliente) lleva cada quien como responsable.
+const conteoEtapas = await db
+  .select({ usuarioId: etapaResponsables.usuarioId, n: sql<number>`count(*)::int` })
+  .from(etapaResponsables)
+  .groupBy(etapaResponsables.usuarioId);
+const etapasPorUsuario = new Map(conteoEtapas.map((c) => [c.usuarioId, c.n]));
 
 // Usuarios de clientes.
 const usuariosCliente = (
@@ -47,12 +43,16 @@ const nombrePorCliente = new Map(nombresCliente.map((c) => [c.id, c.nombre]));
 // Todos los clientes, para el select de «Invitar» cuando el rol es cliente.
 const clientesTodos = await db.select({ id: clients.id, nombre: clients.nombre }).from(clients).orderBy(asc(clients.nombre));
 
-const ETIQUETA_ROL: Record<'admin' | 'operador', string> = { admin: 'Admin', operador: 'Operador' };
+// «Operador» es el nivel de permiso interno; de cara al usuario se muestra el
+// puesto (Strategist, Content Creator…), nunca la palabra a secas.
+const ETIQUETA_ROL: Record<'admin' | 'operador', string> = { admin: 'Admin', operador: 'Con puesto' };
+const etiquetaEquipo = (rol: string, puesto: keyof typeof NOMBRE_PUESTO | null) =>
+  rol === 'admin' ? 'Admin' : puesto ? NOMBRE_PUESTO[puesto] : 'Sin puesto';
 
 // Invitaciones de equipo pendientes (M2 punto 4): sin usar, sin vencer y sin
 // cliente (las de usuarios de cliente se revocan desde la ficha de cada uno).
 const invitacionesEquipo = await db
-  .select({ id: invitaciones.id, email: invitaciones.email, rol: invitaciones.rol, expiraEn: invitaciones.expiraEn })
+  .select({ id: invitaciones.id, email: invitaciones.email, rol: invitaciones.rol, puesto: invitaciones.puesto, expiraEn: invitaciones.expiraEn })
   .from(invitaciones)
   .where(and(isNull(invitaciones.clientId), ne(invitaciones.rol, 'cliente'), isNull(invitaciones.usadaEn), gt(invitaciones.expiraEn, new Date())))
   .orderBy(asc(invitaciones.expiraEn));
@@ -69,17 +69,17 @@ const invitacionesEquipo = await db
 
   <section class="tarjeta">
     <h2>Equipo</h2>
-    <p class="sub" style="margin-bottom:18px">Admin y operador. El rol y el acceso se cambian aquí.</p>
+    <p class="sub" style="margin-bottom:18px">Admin y equipo con puesto. El puesto y el acceso se cambian aquí.</p>
     {equipo.length === 0 ? (
       <div class="vacio">
         <Icono nombre="usuarios" />
         <strong>Sin usuarios internos todavía</strong>
-        Invita al primer admin u operador.
+        Invita al primer admin o a alguien del equipo.
       </div>
     ) : (
       <ul class="lista" id="lista-equipo">
         {equipo.map((u) => {
-          const clientesDe = clientesPorOperador.get(u.id) ?? [];
+          const nEtapas = etapasPorUsuario.get(u.id) ?? 0;
           const esUnoMismo = u.id === usuario.id;
           return (
             <li class="renglon renglon-usuario" data-usuario-id={u.id} data-nombre={u.nombre ?? ''} data-apellido={u.apellido ?? ''} data-email={u.email}>
@@ -89,16 +89,20 @@ const invitacionesEquipo = await db
                     reemplace sin pisar el resto de la línea. */}
                 <p class="secundario"><span data-correo>{u.email}</span></p>
                 <p class="secundario">
-                  {clientesDe.length === 0 ? 'Sin clientes asignados' : `${clientesDe.length} ${clientesDe.length === 1 ? 'cliente asignado' : 'clientes asignados'}`}
+                  <span data-puesto-texto>{etiquetaEquipo(u.rol, u.puesto)}</span>{u.rol === 'operador' && ` · ${nEtapas === 0 ? 'Sin etapas asignadas' : `${nEtapas} ${nEtapas === 1 ? 'etapa asignada' : 'etapas asignadas'}`}`}
                 </p>
-                {!u.activo && clientesDe.length > 0 && (
-                  <p class="secundario aviso-inline"><Icono nombre="alerta" />Inactivo con clientes asignados: reasígnalos desde su ficha.</p>
+                {!u.activo && nEtapas > 0 && (
+                  <p class="secundario aviso-inline"><Icono nombre="alerta" />Inactivo con etapas asignadas: reasígnalas desde la ficha de cada cliente.</p>
                 )}
               </div>
               <select class="rol-select" data-id={u.id} disabled={esUnoMismo} aria-label={`Rol de ${nombreVisible(u)}`}>
                 {(Object.keys(ETIQUETA_ROL) as Array<'admin' | 'operador'>).map((r) => (
                   <option value={r} selected={u.rol === r}>{ETIQUETA_ROL[r]}</option>
                 ))}
+              </select>
+              <select class="puesto-select" data-id={u.id} hidden={u.rol !== 'operador'} aria-label={`Puesto de ${nombreVisible(u)}`}>
+                <option value="" disabled selected={!u.puesto}>Elige puesto…</option>
+                {PUESTOS.map((p) => <option value={p} selected={u.puesto === p}>{NOMBRE_PUESTO[p]}</option>)}
               </select>
               <button type="button" class="btn fantasma chico" data-editar={u.id} aria-label={`Editar a ${nombreVisible(u)}`}>Editar</button>
               <label class="switch" title={esUnoMismo ? 'No puedes desactivarte a ti mismo' : u.activo ? 'Activo' : 'Inactivo'}>
@@ -121,7 +125,7 @@ const invitacionesEquipo = await db
           <li class="renglon" data-invitacion-id={inv.id}>
             <div class="cuerpo">
               <strong>{inv.email}</strong>
-              <p class="secundario">{inv.rol === 'admin' || inv.rol === 'operador' ? ETIQUETA_ROL[inv.rol] : inv.rol} · vence {fechaCorta(inv.expiraEn)}</p>
+              <p class="secundario">{inv.rol === 'admin' ? 'Admin' : inv.puesto ? NOMBRE_PUESTO[inv.puesto] : 'Sin puesto (vuelve a invitar)'} · vence {fechaCorta(inv.expiraEn)}</p>
             </div>
             <button type="button" class="btn fantasma chico" data-revocar-invitacion={inv.id} aria-label={`Revocar la invitación de ${inv.email}`}>Revocar</button>
           </li>
@@ -174,8 +178,15 @@ const invitacionesEquipo = await db
           <label for="inv-rol">Rol</label>
           <select id="inv-rol" name="rol" required>
             <option value="admin">Admin</option>
-            <option value="operador">Operador</option>
+            <option value="operador">Equipo con puesto</option>
             <option value="cliente">Usuario de cliente</option>
+          </select>
+        </div>
+        <div class="campo" id="inv-puesto-campo" hidden>
+          <label for="inv-puesto">Puesto</label>
+          <select id="inv-puesto" name="puesto">
+            <option value="">Selecciona…</option>
+            {PUESTOS.map((p) => <option value={p}>{NOMBRE_PUESTO[p]}</option>)}
           </select>
         </div>
         <div class="campo" id="inv-cliente-campo" hidden>
@@ -250,7 +261,12 @@ const invitacionesEquipo = await db
   const errorAviso = document.getElementById('inv-error') as HTMLElement;
   const enviar = document.getElementById('inv-enviar') as HTMLButtonElement;
 
+  const puestoCampo = document.getElementById('inv-puesto-campo') as HTMLElement;
+  const puestoSelect = document.getElementById('inv-puesto') as HTMLSelectElement;
   function actualizarClienteCampo() {
+    const esOperador = rolSelect.value === 'operador';
+    puestoCampo.hidden = !esOperador;
+    puestoSelect.required = esOperador;
     const esCliente = rolSelect.value === 'cliente';
     clienteCampo.hidden = !esCliente;
     clienteSelect.required = esCliente;
@@ -272,6 +288,7 @@ const invitacionesEquipo = await db
   const MENSAJES_ERROR: Record<string, string> = {
     'correo-invalido': 'El correo no es válido.',
     'rol-invalido': 'El rol no es válido.',
+    'puesto-obligatorio': 'Elige el puesto.',
     'cliente-obligatorio': 'Elige un cliente.',
     'cliente-invalido': 'Ese cliente no existe.',
     prohibido: 'No tienes permiso para invitar con ese rol o cliente.',
@@ -287,6 +304,7 @@ const invitacionesEquipo = await db
       const datos = Object.fromEntries(new FormData(forma).entries()) as Record<string, string>;
       const cuerpo: Record<string, unknown> = { email: datos.email, rol: datos.rol };
       if (datos.rol === 'cliente') cuerpo.clientId = datos.clientId;
+      if (datos.rol === 'operador') cuerpo.puesto = datos.puesto;
 
       const res = await fetch('/api/invitaciones', {
         method: 'POST',
@@ -381,6 +399,8 @@ const invitacionesEquipo = await db
     // correo con cuenta, y ninguna pantalla reasigna el cliente de un usuario.
     'cliente-sin-cliente': 'No se puede reactivar: esta cuenta ya no pertenece a ningún cliente. Para darle acceso a esa persona, invítala con otro correo desde la ficha del cliente.',
     'no-existe': 'Ese usuario ya no existe.',
+    'puesto-obligatorio': 'Elige el puesto de esta persona.',
+    'puesto-invalido': 'Ese puesto no es válido.',
     'sin-conexion': 'No se pudo contactar al servidor.',
     // Los del diálogo de edición. `correo-ocupado` llega con un 409 desde la
     // restricción única de la base.
@@ -390,21 +410,62 @@ const invitacionesEquipo = await db
     'apellido-largo': 'El apellido es demasiado largo (máximo 60 caracteres).',
   };
 
+  const NOMBRES_PUESTO: Record<string, string> = { strategist: 'Strategist', content_creator: 'Content Creator', contenido: 'Contenido', diseno: 'Diseño', trafficker: 'Trafficker' };
+
+  function pintarPuesto(li: HTMLElement | null, rol: string, puesto: string) {
+    const t = li?.querySelector('[data-puesto-texto]');
+    if (t) t.textContent = rol === 'admin' ? 'Admin' : (NOMBRES_PUESTO[puesto] ?? 'Sin puesto');
+  }
+
   document.querySelectorAll<HTMLSelectElement>('.rol-select').forEach((select) => {
-    const anterior = select.value;
-    let previo = anterior;
+    let previo = select.value;
+    const li = select.closest('li');
+    const puestoSel = li?.querySelector<HTMLSelectElement>('.puesto-select') ?? null;
     select.addEventListener('change', async () => {
       const id = select.dataset.id!;
+      if (select.value === 'operador') {
+        // Un operador necesita puesto: se muestra el selector y el cambio de
+        // rol se manda junto con el puesto, cuando se elige.
+        if (puestoSel) { puestoSel.hidden = false; if (!puestoSel.value) { toast('Elige el puesto para terminar el cambio.'); return; } }
+      }
       select.disabled = true;
-      const { ok, error } = await patchUsuario(id, { rol: select.value });
+      const cuerpo: Record<string, unknown> = { rol: select.value };
+      if (select.value === 'operador' && puestoSel) cuerpo.puesto = puestoSel.value;
+      const { ok, error } = await patchUsuario(id, cuerpo);
       if (ok) {
         toast('Rol actualizado');
         previo = select.value;
+        if (puestoSel) puestoSel.hidden = select.value !== 'operador';
+        pintarPuesto(li, select.value, puestoSel?.value ?? '');
       } else {
         toast(MENSAJES_CAMBIO[error ?? ''] ?? 'No se pudo cambiar el rol.', 'error');
         revertirSelect(select, previo);
+        if (puestoSel) puestoSel.hidden = previo !== 'operador';
       }
       select.disabled = false;
+    });
+  });
+
+  document.querySelectorAll<HTMLSelectElement>('.puesto-select').forEach((sel) => {
+    let previo = sel.value;
+    const li = sel.closest('li');
+    const rolSel = li?.querySelector<HTMLSelectElement>('.rol-select') ?? null;
+    sel.addEventListener('change', async () => {
+      const id = sel.dataset.id!;
+      sel.disabled = true;
+      // Si el rol aún no era operador (cambio pendiente de elegir puesto), va junto.
+      const cuerpo: Record<string, unknown> = { puesto: sel.value };
+      if (rolSel && rolSel.value === 'operador') cuerpo.rol = 'operador';
+      const { ok, error } = await patchUsuario(id, cuerpo);
+      if (ok) {
+        toast('Puesto actualizado. Se quitaron sus asignaciones de otro puesto.');
+        previo = sel.value;
+        pintarPuesto(li, 'operador', sel.value);
+      } else {
+        toast(MENSAJES_CAMBIO[error ?? ''] ?? 'No se pudo cambiar el puesto.', 'error');
+        sel.value = previo;
+      }
+      sel.disabled = false;
     });
   });
 
@@ -505,7 +566,8 @@ const invitacionesEquipo = await db
   .encabezado { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
   .renglon-usuario { gap: 16px; }
   .renglon-usuario .cuerpo { display: flex; flex-direction: column; gap: 2px; }
-  .rol-select { width: auto; min-width: 130px; }
+  .rol-select, .puesto-select { width: auto; min-width: 130px; }
+  .puesto-select[hidden] { display: none; }
   .aviso-inline { display: flex; align-items: center; gap: 6px; color: var(--amarillo); }
   .aviso-inline svg { width: 14px; height: 14px; flex-shrink: 0; }
 </style>

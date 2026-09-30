@@ -43,14 +43,14 @@ export const POST: APIRoute = async ({ request, locals }) => {
   if (!etapasR.success) return json({ ok: false, errores: etapasR.error.issues.map((i) => i.message) }, 400);
   const etapasSeleccionadas = etapasR.data ?? ETAPAS_ALTA_DEFECTO;
 
-  // Al alta, el responsable es quien lo da de alta (admin u operador); se
-  // reasigna después desde la ficha del cliente. Todo en una transacción:
+  // Sin responsable al alta (rediseño de puestos): el admin asigna por etapa
+  // desde la ficha del cliente. Todo en una transacción:
   // un cliente sin sus etapas contratadas (o viceversa) no es un estado
   // intermedio válido.
   const creado = await db.transaction(async (tx) => {
     const [c] = await tx
       .insert(clients)
-      .values({ ...r.datos, operadorId: locals.usuario.id })
+      .values(r.datos)
       .returning({ id: clients.id });
     await aplicarPlanContratacion(c.id, etapasSeleccionadas, tx);
     return c;

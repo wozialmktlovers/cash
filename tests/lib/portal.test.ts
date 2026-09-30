@@ -307,9 +307,10 @@ describe('clientePortal', () => {
     expect(r?.vistaPrevia).toBe(true);
   });
 
-  it('operador no ve el cliente de otro operador: null', async () => {
+  it('operador ve también un cliente con otro operador heredado: visibilidad total', async () => {
     mockDb.estado.filasClients = [{ id: CLIENTE_A, operadorId: 'otro-operador', nombre: 'Ana' }];
-    expect(await clientePortal(usr('operador'), new URLSearchParams({ cliente: CLIENTE_A }))).toBeNull();
+    const r = await clientePortal(usr('operador'), new URLSearchParams({ cliente: CLIENTE_A }));
+    expect(r?.vistaPrevia).toBe(true);
   });
 
   it('un ?cliente= que no tiene forma de UUID da null, no un 500', async () => {

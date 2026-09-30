@@ -22,6 +22,7 @@ import { enlaceDocumento, enlaceEtapa } from '@/lib/ui/enlaces';
 import type { EventoEntrada } from './situacion';
 import { barraEtapaDocumento, type BarraEtapa } from './barra-documento';
 import { avisarJob, avisarTransicion, avisarComentarioCliente, avisarRespuestaCliente, avisarRespuestaDelCliente, type EventoAviso } from './avisos';
+import { esResponsableDeEtapa, responsableUnicoDeEtapa } from './responsables';
 
 /**
  * Ruta interna para ver el documento vigente de una etapa (spec §3, Avisos:
@@ -231,7 +232,7 @@ export async function etapaDelDocumento(clientId: string, tipo: TipoDocumento, d
  */
 export async function barraDelDocumento(o: {
   usuario: UsuarioSesion;
-  cliente: { id: string; operadorId: string | null };
+  cliente: { id: string };
   etapa: FilaEtapa;
   esDocumentoVigente: boolean;
 }): Promise<BarraEtapa | null> {
@@ -239,20 +240,22 @@ export async function barraDelDocumento(o: {
   if (usuario.rol === 'cliente' || !o.esDocumentoVigente) return null;
   if (etapa.etapa === 'desarrollo_mensual' || etapa.estado === 'no_iniciada') return null;
 
-  const [etapasCliente, abiertos, eventos, [responsable]] = await Promise.all([
+  // `etapa.etapa` ya descartó `desarrollo_mensual` arriba: las tres que
+  // quedan (investigación, pilares, manual) tienen un solo puesto responsable
+  // (`PUESTOS_POR_ETAPA`), así que como mucho hay UN responsable.
+  const [etapasCliente, abiertos, eventos, responsable, esOperadorAsignado] = await Promise.all([
     etapasDelCliente(cliente.id),
     comentariosAbiertosPorEtapa([etapa]),
     eventosDeEntrada([etapa.id]),
-    cliente.operadorId
-      ? db.select({ nombre: users.nombre, apellido: users.apellido, email: users.email }).from(users).where(eq(users.id, cliente.operadorId)).limit(1)
-      : Promise.resolve([]),
+    responsableUnicoDeEtapa(etapa.id),
+    usuario.rol === 'operador' ? esResponsableDeEtapa(etapa.id, usuario.id) : Promise.resolve(false),
   ]);
 
   return barraEtapaDocumento({
     etapa,
     rol: usuario.rol,
     usuarioId: usuario.id,
-    esOperadorAsignado: cliente.operadorId === usuario.id,
+    esOperadorAsignado,
     esDocumentoVigente: o.esDocumentoVigente,
     comentariosAbiertos: abiertos.get(etapa.id) ?? 0,
     etapasCliente,
@@ -589,7 +592,7 @@ export async function ejecutarTransicion(o: {
   }
 
   const comentarioGeneral = (comentario ?? '').trim();
-  const esOperadorAsignado = cliente.operadorId === usuario.id;
+  const esOperadorAsignado = usuario.rol === 'operador' ? await esResponsableDeEtapa(fila.id, usuario.id) : false;
   // Comentarios abiertos tras la transición (los que contó la regla, más el
   // general que se crea al pedir cambios o reabrir): decide si el aviso
   // lleva al primero de ellos.
@@ -676,7 +679,7 @@ export async function ejecutarTransicion(o: {
         evento,
         actorId: usuario.id,
         clientId: cliente.id,
-        operadorId: cliente.operadorId,
+        etapaId: fila.id,
         etapaVisibleCliente: fila.contratada && !fila.interna,
         cliente: cliente.nombre,
         etapa: NOMBRE_ETAPA[fila.etapa],
@@ -766,7 +769,7 @@ export async function crearComentarioInterno(o: {
   const cliente = await clienteVisible(o.usuario, fila.clientId);
   if (!cliente) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
 
-  const esOperadorAsignado = cliente.operadorId === o.usuario.id;
+  const esOperadorAsignado = o.usuario.rol === 'operador' ? await esResponsableDeEtapa(fila.id, o.usuario.id) : false;
   if (!puedeComentar(o.usuario.rol, esOperadorAsignado, fila.etapa)) {
     return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
   }
@@ -814,7 +817,7 @@ export async function crearComentarioCliente(o: {
   const [version] = await db.select().from(documentoVersiones).where(eq(documentoVersiones.id, fila.versionAprobadaId)).limit(1);
   if (!version) return { ok: false, status: 409, razon: 'Todavía no hay una versión aprobada para comentar' };
 
-  const [clienteFila] = await db.select({ nombre: clients.nombre, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, fila.clientId)).limit(1);
+  const [clienteFila] = await db.select({ nombre: clients.nombre }).from(clients).where(eq(clients.id, fila.clientId)).limit(1);
   if (!clienteFila) return { ok: false, status: 404, razon: RAZON_ETAPA_INEXISTENTE };
 
   // El límite va después de las comprobaciones de visibilidad (una etapa
@@ -849,7 +852,7 @@ export async function crearComentarioCliente(o: {
     void avisarComentarioCliente({
       actorId: usuario.id,
       clientId: fila.clientId,
-      operadorId: clienteFila.operadorId,
+      etapaId: fila.id,
       cliente: clienteFila.nombre,
       etapa: NOMBRE_ETAPA[fila.etapa],
       // Al documento con ese hilo abierto (la ficha si no hay documento).
@@ -920,14 +923,14 @@ export async function responderComentario(o: {
     }).catch((e) => console.error('[avisos] respuesta_cliente:', e));
   }
 
-  // Fix menores M2, punto 3: la respuesta del cliente en su hilo avisa al
-  // operador del cliente (o a los admins, ver `avisarRespuestaDelCliente`).
+  // Fix menores M2, punto 3: la respuesta del cliente en su hilo avisa a los
+  // responsables de la etapa (o a los admins, ver `avisarRespuestaDelCliente`).
   // Al cliente no le llega nada de esto ni se le devuelve quién recibe el aviso.
   if (usuario.rol === 'cliente') {
-    const [clienteFila] = await db.select({ nombre: clients.nombre, operadorId: clients.operadorId }).from(clients).where(eq(clients.id, etapaFila.clientId)).limit(1);
+    const [clienteFila] = await db.select({ nombre: clients.nombre }).from(clients).where(eq(clients.id, etapaFila.clientId)).limit(1);
     void avisarRespuestaDelCliente({
       actorId: usuario.id,
-      operadorId: clienteFila?.operadorId ?? null,
+      etapaId: etapaFila.id,
       cliente: clienteFila?.nombre ?? 'Cliente',
       etapa: NOMBRE_ETAPA[etapaFila.etapa],
       // Al documento con el hilo en el que respondió (su comentario padre).
@@ -967,7 +970,7 @@ export async function cambiarEstadoComentario(o: {
 
   if (fila.respuestaDe !== null) return { ok: false, status: 409, razon: 'Solo se puede cambiar el estado de un comentario principal' };
 
-  const esOperadorAsignado = cliente.operadorId === usuario.id;
+  const esOperadorAsignado = usuario.rol === 'operador' ? await esResponsableDeEtapa(etapaFila.id, usuario.id) : false;
   if (!puedeCambiarEstadoComentario(usuario.rol, esOperadorAsignado, o.estado)) {
     return { ok: false, status: 409, razon: 'No tienes permiso para cambiar el estado de este comentario' };
   }

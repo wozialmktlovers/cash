@@ -14,6 +14,7 @@
 import { and, eq } from 'drizzle-orm';
 import { db, clienteEtapas, comentarios, contenidoLotes, contenidoPiezas } from '@/db';
 import { avisarComentarioCliente } from '@/flujo/avisos';
+import { etapaIdDe } from '@/flujo/responsables';
 import { NOMBRE_ETAPA, type Estado } from '@/flujo/reglas';
 import { rechazoPorLimite } from '@/flujo/servicio';
 import { fechaHora } from '@/lib/ui/fecha';
@@ -401,14 +402,14 @@ export async function registrarRevision(o: {
   }
 
   if (o.decision === 'cambios') {
-    void avisarComentarioCliente({
+    void etapaIdDe(cliente.id, 'desarrollo_mensual').then((etapaId) => avisarComentarioCliente({
       actorId: usuario.id,
       clientId: cliente.id,
-      operadorId: cliente.operadorId,
+      etapaId: etapaId ?? '',
       cliente: cliente.nombre,
       etapa: NOMBRE_ETAPA.desarrollo_mensual,
       enlace: `/clientes/${cliente.id}/contenido/${lote.periodo}`,
-    }).catch((e) => console.error('[mensual] aviso de cambios pedidos por el cliente:', e));
+    })).catch((e) => console.error('[mensual] aviso de cambios pedidos por el cliente:', e));
   }
 
   return {

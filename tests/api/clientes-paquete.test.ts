@@ -77,10 +77,10 @@ describe('PUT /api/clientes/[id]/paquete', () => {
     expect(espia.sets).toHaveLength(0);
   });
 
-  it('un operador ajeno recibe 404 y no escribe', async () => {
+  it('cualquier operador guarda el paquete (visibilidad total)', async () => {
     const r = await llamar({ post: 3 }, { ...operador, id: '00000000-0000-4000-8000-0000000000e9' });
-    expect(r.status).toBe(404);
-    expect(espia.sets).toHaveLength(0);
+    expect(r.status).toBe(200);
+    expect(espia.sets).toHaveLength(1);
   });
 
   it('el usuario cliente recibe 404 y no escribe', async () => {

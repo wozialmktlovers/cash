@@ -203,10 +203,10 @@ describe('POST /api/contenido/lotes/[id]/piezas', () => {
     expect(espia.insertado).toBeUndefined();
   });
 
-  it('un operador ajeno al cliente también recibe 404', async () => {
+  it('otro operador también puede dar de alta piezas (visibilidad total)', async () => {
     const res = await alta(PIEZA_MINIMA, usuario('operador', OTRO_OPERADOR));
-    expect(res.status).toBe(404);
-    expect(espia.insertado).toBeUndefined();
+    expect(res.status).toBe(201);
+    expect(espia.insertado).toBeDefined();
   });
 
   it('un usuario cliente nunca opera, ni llegando a la ruta', async () => {
@@ -313,8 +313,8 @@ describe('PATCH /api/contenido/piezas/[id]', () => {
     espia.pieza = null;
     expect((await editar({ copy: 'x' })).status).toBe(404);
     espia.pieza = filaPieza();
-    expect((await editar({ copy: 'x' }, usuario('operador', OTRO_OPERADOR))).status).toBe(404);
-    expect(espia.actualizado).toBeUndefined();
+    // Otro operador sí puede (visibilidad total); el cliente no.
+    expect((await editar({ copy: 'x' }, usuario('operador', OTRO_OPERADOR))).status).toBe(200);
   });
 
   it('el número que ya tiene otra pieza del lote es 409', async () => {
@@ -364,8 +364,8 @@ describe('DELETE /api/contenido/piezas/[id]', () => {
     espia.pieza = null;
     expect((await borrar()).status).toBe(404);
     espia.pieza = filaPieza();
-    expect((await borrar(usuario('operador', OTRO_OPERADOR))).status).toBe(404);
-    expect(espia.refrescados).toEqual([]);
+    // Otro operador sí puede (visibilidad total).
+    expect((await borrar(usuario('operador', OTRO_OPERADOR))).status).toBe(200);
   });
 
   it('si la fila ya no estaba, 404 y no se toca el lote', async () => {
