@@ -27,8 +27,9 @@ vi.mock('@/db', async (importarReal) => {
 });
 
 import { generarTandas } from '@/contenido/mes/pipeline';
-import { armarRanuras, faltantes, totalDe, type PiezaExistente, type Ranura } from '@/contenido/mes/plan';
-import { catalogoDeTemas, temasUsados } from '@/contenido/mes/temas';
+import { totalDe, type PiezaExistente, type Ranura } from '@/contenido/mes/plan';
+import { catalogoDeTemas } from '@/contenido/mes/temas';
+import { proponerTemas, ranurasAutorizadas } from '@/contenido/mes/propuesta';
 import { decidirGuardado, promptConProporcion, type PiezaGenerada } from '@/contenido/mes/guardado';
 import { marcarTemasEnDesarrollo } from '@/pilares/avance-servicio';
 import type { EntradaTanda } from '@/contenido/mes/agente';
@@ -40,8 +41,8 @@ const mapa = mapaFalso();
 const PAQUETE = { post: 8, carrusel: 4, reel: 4, historia: 6 };
 const PERIODO = '2026-10';
 
-/** Un agente falso: por cada ranura, una pieza con el tema que diga `elegir`. */
-function agenteFalso(elegir: (t: EntradaTanda, r: Ranura) => string | null = (t, r) => t.candidatos.get(r.ref)?.[0]?.id ?? null) {
+/** Un agente falso: por cada ranura, una pieza. `elegir` es lo que el modelo intentaría devolver como tema: se ignora. */
+function agenteFalso(elegir: (t: EntradaTanda, r: Ranura) => string | null = (t, r) => t.temas.get(r.ref)?.id ?? null) {
   return vi.fn(async (t: EntradaTanda) => ({
     datos: { piezas: t.ranuras.map((r) => ({
       ref: r.ref, temaId: elegir(t, r), plataforma: 'ambas' as const, fecha: null,
@@ -54,13 +55,17 @@ function agenteFalso(elegir: (t: EntradaTanda, r: Ranura) => string | null = (t,
 
 function preparar(usadosPrevios: string[] = []) {
   const catalogo = catalogoDeTemas(mapa);
-  const usados = temasUsados(usadosPrevios.map((temaId) => ({ temaId })));
-  const ranuras = armarRanuras({ periodo: PERIODO, aGenerar: faltantes(PAQUETE, []), quedan: [], mix: mapa.estrategia.mix, pilares: [1, 2, 3, 4, 5] });
-  return { catalogo, usados, ranuras, estado: {} as Record<string, string> };
+  const filas = proponerTemas({
+    periodo: PERIODO, paquete: PAQUETE, modo: 'completar', incluirConArte: false, piezasLote: [],
+    temasDelCliente: usadosPrevios.map((temaId, i) => ({ id: `p${i}`, temaId })), catalogo, mix: mapa.estrategia.mix,
+  }).map((f) => ({ ...f, temaId: f.temaId! }));
+  const armadas = ranurasAutorizadas(filas, catalogo);
+  if ('error' in armadas) throw new Error(armadas.error);
+  return { catalogo, ranuras: armadas.ranuras, estado: {} as Record<string, string> };
 }
 
 const base = (p: ReturnType<typeof preparar>, correr: any, hayPresupuesto = () => true) => generarTandas({
-  ranuras: p.ranuras, catalogo: p.catalogo, usados: p.usados, contexto: 'ctx', periodo: PERIODO,
+  ranuras: p.ranuras, catalogo: p.catalogo, contexto: 'ctx', periodo: PERIODO,
   nombresPilares: mapa.estrategia.pilares.map((x) => x.nombre), estado: p.estado, correr, hayPresupuesto,
 });
 
@@ -76,15 +81,22 @@ describe('generarTandas', () => {
     expect(p.estado).toMatchObject({ semana1: 'ok', semana2: 'ok', semana3: 'ok', semana4: 'ok', semana5: 'ok' });
   });
 
-  it('no repite temas: ni de meses anteriores ni entre ranuras, aunque el modelo insista', async () => {
+  it('el agente recibe los temas ya autorizados y no elige: la pieza se guarda con el de su ranura, diga lo que diga el modelo', async () => {
+    const p = preparar();
+    const visto: EntradaTanda[] = [];
+    const falso = agenteFalso(() => 'P5-S3-20');
+    const r = await base(p, vi.fn(async (t: EntradaTanda) => { visto.push(t); return falso(t); }));
+    for (const t of visto) for (const ra of t.ranuras) expect(t.temas.get(ra.ref)?.id).toBe(ra.temaId);
+    for (const g of r.generadas) expect(g.temaId).toBe(g.ranura.temaId);
+    const temas = r.generadas.map((g) => g.temaId);
+    expect(new Set(temas).size).toBe(temas.length);
+  });
+
+  it('la propuesta no repite temas de meses anteriores', () => {
     const previos = catalogoDeTemas(mapa).filter((t) => t.funcion === 'autoridad').slice(0, 40).map((t) => t.id);
     const p = preparar(previos);
-    // El modelo intenta usar siempre un tema de un mes anterior y, si no, el mismo para todo.
-    const r = await base(p, agenteFalso(() => previos[0]));
-    const temas = r.generadas.map((g) => g.temaId);
-    expect(temas.every(Boolean)).toBe(true);
-    expect(new Set(temas).size).toBe(temas.length);
-    for (const t of temas) expect(previos).not.toContain(t);
+    expect(p.ranuras).toHaveLength(22);
+    for (const r of p.ranuras) expect(previos).not.toContain(r.temaId);
   });
 
   it('una tanda que falla no tumba el mes: se guarda lo demás (rescate parcial)', async () => {

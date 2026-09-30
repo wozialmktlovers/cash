@@ -104,7 +104,11 @@ td .chip{margin:1px 0}
 </header>
 
 <aside class="nota clave" style="max-width:1120px;margin:0 auto 28px">
-  <b>Lo nuevo · 18 de septiembre</b>
+  <b>Lo nuevo · 30 de septiembre</b>
+  <ul>
+    <li><strong>Elegir los temas del mes antes de generar:</strong> el desarrollo mensual ahora pide investigación y mapa de pilares, el sistema propone los temas del mapa y tú los aceptas o cambias antes de que la IA escriba (<a href="#generar-mes">ver cómo</a>).</li>
+  </ul>
+  <b>Lo anterior · 18 de septiembre</b>
   <ul>
     <li><strong>Generar el mes con IA:</strong> define el paquete mensual del cliente y la IA arma todas las piezas del mes desde el mapa de pilares (<a href="#generar-mes">ver cómo</a>).</li>
     <li><strong>Arte en el manual de campaña:</strong> cada anuncio tiene «Subir arte»; el cliente lo ve en su portal (<a href="#artes-manual">ver cómo</a>).</li>
@@ -219,18 +223,18 @@ td .chip{margin:1px 0}
 
 <section id="etapas">
   <h2>3. Las 4 etapas y sus estados</h2>
-  <p class="sub">Cada cliente tiene cuatro etapas. Solo la investigación va primero; las otras tres solo necesitan que exista una investigación con datos (no hace falta que esté autorizada).</p>
+  <p class="sub">Cada cliente tiene cuatro etapas. Solo la investigación va primero; el mapa de pilares y el manual de campaña necesitan una investigación con datos, y el desarrollo mensual necesita además el mapa de pilares generado (no hace falta que estén autorizados).</p>
 
   <div class="tabla"><table>
     <thead><tr><th>#</th><th>Etapa</th><th>Qué es</th><th>Qué necesita para generarse</th></tr></thead>
     <tbody>
       <tr><td>1</td><td><strong>Investigación</strong></td><td>Competencia, audiencia, canales, mercado y síntesis del cliente.</td><td>Nada. Solo los datos de la ficha.</td></tr>
       <tr><td>2</td><td><strong>Mapa de pilares</strong></td><td>La estrategia de contenido: cinco pilares y un banco de temas.</td><td>Una investigación con datos.</td></tr>
-      <tr><td>3</td><td><strong>Desarrollo mensual</strong></td><td>El contenido de cada mes: piezas, copy y artes que aprueba el cliente.</td><td>Una investigación con datos y la etapa contratada.</td></tr>
+      <tr><td>3</td><td><strong>Desarrollo mensual</strong></td><td>El contenido de cada mes: piezas, copy y artes que aprueba el cliente.</td><td>Una investigación con datos, el mapa de pilares generado y la etapa contratada.</td></tr>
       <tr><td>4</td><td><strong>Manual de campaña</strong></td><td>Estructura de campaña, anuncios, Google y archivos.</td><td>Una investigación con datos.</td></tr>
     </tbody>
   </table></div>
-  <p>Si falta la investigación verás: «Falta completar la investigación antes de continuar.»</p>
+  <p>Si falta la investigación verás: «Falta completar la investigación antes de continuar.» Si falta el mapa y quieres armar un mes: «Falta generar el mapa de pilares antes de armar el mes.» Los botones de la etapa 3 se quedan deshabilitados con esa razón a la vista.</p>
 
   <h3>Los cinco estados</h3>
   <div class="tabla"><table>
@@ -518,7 +522,8 @@ td .chip{margin:1px 0}
   <h3>Antes de empezar</h3>
   <ul>
     <li>La etapa <strong>Desarrollo mensual</strong> debe estar marcada en <strong>Etapas contratadas</strong> de la ficha, con <span class="btn p">Guardar etapas</span>.</li>
-    <li>Debe existir una investigación con datos. Conviene tener el mapa de pilares: la IA saca de ahí los temas del mes.</li>
+    <li>Deben existir una <strong>investigación con datos</strong> y el <strong>mapa de pilares</strong> generado: sin ellos no se puede abrir el mes, agregar piezas, elegir temas ni generar con IA (un mes ya abierto se sigue pudiendo leer). De ahí salen los temas del mes.</li>
+    <li>Elegir y autorizar los temas lo hacen los <strong>responsables de la etapa</strong> (contenido y diseño) y el admin. Los demás operadores lo ven, pero no lo tocan.</li>
     <li>Define el <strong>Paquete mensual</strong> del cliente en la ficha, pestaña <strong>Datos</strong>: cuántos posts (imagen), carruseles, reels e historias lleva al mes. Lo edita cualquier persona del equipo.</li>
   </ul>
 
@@ -531,22 +536,25 @@ td .chip{margin:1px 0}
   <p>Con las flechas vas al mes anterior o al siguiente, y abajo aparecen los meses que ya tienen lote.</p>
 
   <h3 id="generar-mes">Generar el mes con IA</h3>
+  <p>Son dos pasos: primero se eligen los temas y, solo cuando los autorizas, la IA escribe.</p>
   <ol class="pasos">
-    <li>Con el mes abierto y <span class="chip c-azul">En proceso</span>, pulsa <span class="btn p">Generar el mes con IA</span>. Si el cliente no tiene paquete, el botón te lleva a la ficha para definirlo.</li>
-    <li>Si el mes ya tiene piezas, elige:
+    <li>Con el mes abierto y <span class="chip c-azul">En proceso</span>, si el cliente tiene paquete, pulsa <span class="btn p">Elegir los temas del mes</span>. Si falta la investigación o el mapa, el botón está deshabilitado y dice por qué.</li>
+    <li>Si el mes ya tiene piezas, antes elige:
       <ul>
         <li><strong>Completar lo que falta</strong> del paquete, o</li>
         <li><strong>Reemplazar las piezas sin revisar</strong>. Nunca toca piezas aprobadas por el cliente ni con cambios pedidos; las que ya tienen arte solo se reemplazan si marcas la casilla que lo permite.</li>
       </ul>
     </li>
-    <li>Se lanza un trabajo en segundo plano: puedes cerrar la ventana. Ves el avance por semana en el Inicio («En curso») y te llega el aviso a la campana al terminar.</li>
+    <li><strong>Paso 1 · Elegir los temas.</strong> El sistema toma del mapa de pilares una propuesta (sin IA y sin costo): una fila por pieza con su formato, fecha, pilar y el tema propuesto (código, subcategoría y función). Si te sirve, déjalo. Para cambiarlo pulsa <span class="btn p">Cambiar tema</span> y busca por palabra, código o pilar: puedes elegir cualquier tema del banco, aunque sea de otro pilar. Cada tema dice si está pendiente, en desarrollo, desarrollado o publicado, y si ya se usó en otro mes. No puedes repetir un tema dos veces en el mismo mes. También puedes mover la fecha y el formato; si el formato deja de cuadrar con el paquete, se avisa y tienes que confirmarlo. <span class="btn p">Volver a proponer</span> genera la propuesta completa otra vez. La selección se guarda sola: puedes recargar sin perderla.</li>
+    <li><strong>Paso 2 · Autorizar y generar.</strong> Pulsa <span class="btn p">Autorizar temas y generar contenido</span>. Queda registrado quién autorizó y cuándo, y se lanza el trabajo en segundo plano: puedes cerrar la ventana. Ves el avance por semana en el Inicio («En curso») y, al terminar, el aviso llega a la campana de los dos responsables (contenido y diseño) y de quien autorizó.</li>
     <li>Revisa y ajusta cada pieza, sube los artes y comparte el mes.</li>
   </ol>
-  <div class="nota"><b>Qué decide el sistema y qué escribe la IA</b>
+  <div class="nota"><b>Qué decide el sistema, qué decides tú y qué escribe la IA</b>
     <ul>
-      <li><strong>El sistema</strong> fija la cantidad exacta del paquete, reparte las fechas en días hábiles del mes sin amontonarlas y reparte las piezas por pilar y función según el mix del mapa, empezando por los pilares menos usados. Nunca repite un tema usado en otro mes.</li>
-      <li><strong>La IA</strong> elige el tema entre los candidatos y escribe cada pieza: plataforma, copy, llamado a la acción, hashtags, brief visual, prompt para la imagen de base, guion por escenas (reels) y texto de cada tarjeta (carruseles).</li>
-      <li>Los temas usados quedan «En desarrollo» en el mapa de pilares.</li>
+      <li><strong>El sistema</strong> propone la cantidad exacta del paquete, reparte las fechas en días hábiles del mes sin amontonarlas y reparte las piezas por pilar y función según el mix del mapa, con los temas pendientes primero y sin repetir los de otros meses.</li>
+      <li><strong>Tú</strong> (responsable de contenido o diseño, o admin) aceptas o cambias los temas, las fechas y los formatos, y autorizas.</li>
+      <li><strong>La IA</strong> ya no elige el tema: escribe cada pieza sobre el tema autorizado: plataforma, copy, llamado a la acción, hashtags, brief visual, prompt para la imagen de base, guion por escenas (reels) y texto de cada tarjeta (carruseles).</li>
+      <li>Los temas usados quedan «En desarrollo» en el mapa de pilares (los que ya estaban desarrollados o publicados no bajan de estado).</li>
       <li>Cuesta alrededor de 1 USD por mes (tope 5 USD). Si una semana falla, se guarda el resto y el trabajo dice cuántas piezas faltaron.</li>
     </ul>
   </div>

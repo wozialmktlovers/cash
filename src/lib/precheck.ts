@@ -47,3 +47,32 @@ export function investigacionUtil<T extends { datos: unknown; version: number }>
     .filter((r) => contarEtapasConDatos(r.datos) > 0)
     .sort((a, b) => b.version - a.version)[0];
 }
+
+/**
+ * ¿Este resultado del mapa de pilares sirve para armar un mes? Al menos un
+ * pilar en estado `ok` con al menos un tema. Un mapa cuyos cinco pilares
+ * fallaron también se guarda (queda constancia del intento), pero de ahí no
+ * sale ningún tema: no cuenta como «hay mapa». Es la regla que comparten la
+ * dependencia del desarrollo mensual (`dependenciasCumplidas`), la
+ * generación y la pantalla del mes.
+ */
+export function hayMapaDePilares(datos: unknown): boolean {
+  const pilares = (datos as { pilares?: unknown } | null | undefined)?.pilares;
+  if (!Array.isArray(pilares)) return false;
+  return pilares.some((p) => {
+    if (!p || typeof p !== 'object' || (p as { estado?: unknown }).estado !== 'ok') return false;
+    const subs = (p as { subcategorias?: unknown }).subcategorias;
+    return Array.isArray(subs) && subs.some((s) => Array.isArray((s as { temas?: unknown })?.temas) && (s as { temas: unknown[] }).temas.length > 0);
+  });
+}
+
+/**
+ * Entre las versiones del mapa de un cliente, la más reciente que sí tiene
+ * temas (`hayMapaDePilares`), igual que `investigacionUtil`: si la última
+ * versión falló entera pero la anterior sirve, el mes sale de la anterior.
+ */
+export function mapaUtil<T extends { datos: unknown; version: number }>(resultados: T[]): T | undefined {
+  return resultados
+    .filter((r) => hayMapaDePilares(r.datos))
+    .sort((a, b) => b.version - a.version)[0];
+}

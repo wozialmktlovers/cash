@@ -15,6 +15,8 @@ import { db, clients, clientFiles, clientLinks, contenidoLotes, contenidoPiezas,
 import { puedeOperarCliente } from '@/lib/permisos';
 import { esUuid } from '@/lib/visibilidad';
 import { armarContexto, generarPropuestas, temaDelMapa } from '@/contenido/agentes';
+import { dependenciasDelMes } from '@/flujo/dependencias';
+import { etapasDelCliente } from '@/flujo/servicio';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } });
@@ -42,6 +44,11 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   // El usuario cliente nunca entra aquí: `puedeOperarCliente` lo descarta por
   // rol, y el copy se genera del lado del operador.
   if (!fila || !puedeOperarCliente(locals.usuario, fila.cliente)) return json(NO_EXISTE, 404);
+
+  // Dependencia dura del desarrollo mensual: sin investigación y mapa de
+  // pilares no se generan propuestas (un mes que ya existía se sigue leyendo).
+  const dependencias = await dependenciasDelMes(fila.cliente.id, await etapasDelCliente(fila.cliente.id));
+  if (!dependencias.ok) return json({ ok: false, errores: [dependencias.razon] }, 409);
 
   // El cuerpo es opcional: sin él se usa el tema que la pieza ya tiene
   // guardado. Se acepta uno en el cuerpo para poder pedir propuestas con el

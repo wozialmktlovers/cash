@@ -1,15 +1,18 @@
 // De dónde salen los temas del mes: el mapa de pilares del cliente, con el
 // avance que el equipo lleva en su banco (`pilares_temas`).
 //
-// Las tres reglas del dueño, y dónde vive cada una:
+// Las reglas del dueño para la PROPUESTA de temas del mes (./propuesta.ts), y
+// dónde vive cada una:
 // - **Prefiere los pendientes**: `candidatosPara` los pone primero.
 // - **Respeta el mix y el reparto por pilar**: cada ranura ya trae su función y
 //   su pilar (`armarRanuras`, ./plan.ts), y los candidatos se ordenan por eso.
 // - **No repite temas de meses anteriores**: `temasUsados` junta los temas de
-//   todas las piezas del cliente, y ninguno de ellos llega a ser candidato ni se
-//   acepta aunque el modelo lo escriba (`resolverTema`).
+//   todas las piezas del cliente, y ninguno de ellos se propone. El usuario sí
+//   puede elegir uno a mano (el selector avisa que ya se usó), pero nunca el
+//   mismo dos veces en el mismo mes (`validarSeleccion`).
+//
+// El modelo ya no elige temas: escribe sobre los que el equipo autorizó.
 
-import { todosLosTemas } from '@/pilares/revision';
 import type { EstadoTema, Formato as FormatoTema, Funcion, MapaPilares } from '@/pilares/schemas';
 import type { Formato } from '../reglas';
 import type { Ranura } from './plan';
@@ -17,6 +20,8 @@ import type { Ranura } from './plan';
 export type TemaCatalogo = {
   id: string;
   texto: string;
+  /** Nombre de la subcategoría del pilar a la que pertenece. */
+  subcategoria: string;
   funcion: Funcion;
   formato: FormatoTema;
   pilar: number;
@@ -28,14 +33,17 @@ export function catalogoDeTemas(mapa: MapaPilares | null | undefined, avance: Ma
   const pilares = mapa?.pilares;
   if (!Array.isArray(pilares)) return [];
   const estadoDe = (id: string) => (avance instanceof Map ? avance.get(id) : avance[id]) as EstadoTema | undefined;
-  return todosLosTemas(pilares).map((t) => ({
-    id: t.id,
-    texto: t.texto,
-    funcion: t.funcion,
-    formato: t.formato,
-    pilar: Number(t.id[1]),
-    estado: estadoDe(t.id) ?? 'pendiente',
-  }));
+  return pilares.flatMap((p) => (p.estado === 'ok'
+    ? p.subcategorias.flatMap((s) => s.temas.map((t) => ({
+        id: t.id,
+        texto: t.texto,
+        subcategoria: s.nombre,
+        funcion: t.funcion,
+        formato: t.formato,
+        pilar: Number(t.id[1]),
+        estado: estadoDe(t.id) ?? 'pendiente',
+      })))
+    : []));
 }
 
 /** Los temas que ya tiene alguna pieza del cliente, de cualquier mes. */
@@ -88,34 +96,20 @@ export function candidatosPara(
 }
 
 /**
- * Candidatos para todas las ranuras de una tanda, sin que dos ranuras compartan
- * candidato: así el modelo no puede elegir el mismo tema dos veces sin
- * saltarse las listas. Si el mapa ya no da para tanto, se permite repetir
- * candidato entre ranuras (nunca un tema usado): `resolverTema` desempata.
+ * Un tema para cada ranura, sin repetir ninguno y sin tocar los `usados`: es
+ * la propuesta del sistema para el paso «Elegir los temas del mes». Recorre
+ * las ranuras en orden y a cada una le da su mejor candidato libre
+ * (`candidatosPara`: pendiente, de la función del mix, del pilar que toca y de
+ * formato compatible). `null` en las ranuras a las que ya no les queda tema sin
+ * usar: el equipo tiene que elegir uno a mano.
  */
-export function candidatosDeTanda(ranuras: Ranura[], catalogo: TemaCatalogo[], usados: Set<string>, cuantos = 4): Map<number, TemaCatalogo[]> {
-  const ofrecidos = new Set(usados);
-  const salida = new Map<number, TemaCatalogo[]>();
+export function asignarTemas(ranuras: Pick<Ranura, 'ref' | 'formato' | 'funcion' | 'pilar'>[], catalogo: TemaCatalogo[], usados: Set<string>): Map<number, TemaCatalogo | null> {
+  const ocupados = new Set(usados);
+  const salida = new Map<number, TemaCatalogo | null>();
   for (const r of ranuras) {
-    let lista = candidatosPara(r, catalogo, ofrecidos, cuantos);
-    if (lista.length === 0) lista = candidatosPara(r, catalogo, usados, cuantos);
-    for (const t of lista) ofrecidos.add(t.id);
-    salida.set(r.ref, lista);
+    const tema = candidatosPara(r, catalogo, ocupados, 1)[0] ?? null;
+    if (tema) ocupados.add(tema.id);
+    salida.set(r.ref, tema);
   }
   return salida;
-}
-
-/**
- * El tema con que se queda una pieza. El del modelo si es uno de los
- * candidatos de su ranura y nadie lo ha usado; si no —se inventó un id, eligió
- * uno de otra ranura o repitió—, el mejor candidato libre. `null` solo si el
- * mapa ya no tiene temas sin usar: la pieza se escribe igual, sin tema.
- */
-export function resolverTema(
-  elegido: string | null | undefined,
-  candidatos: TemaCatalogo[],
-  usados: Set<string>,
-): string | null {
-  if (elegido && candidatos.some((c) => c.id === elegido) && !usados.has(elegido)) return elegido;
-  return candidatos.find((c) => !usados.has(c.id))?.id ?? null;
 }

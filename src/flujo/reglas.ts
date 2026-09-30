@@ -182,17 +182,17 @@ export function etapasVisiblesCliente<T extends { contratada: boolean; interna: 
 /**
  * Dependencias para poder trabajar una etapa (diseño 2026-09-16, §1):
  * - investigacion: ninguna, es la fuente de la que sale todo lo demás.
- * - pilares, desarrollo_mensual y manual_campana: solo necesitan una
- *   investigación CON DATOS.
+ * - pilares y manual_campana: solo necesitan una investigación CON DATOS.
+ * - desarrollo_mensual: la investigación con datos Y un mapa de pilares
+ *   generado (con temas). Es dependencia DURA (rediseño 2026-09-30): el mes se
+ *   arma eligiendo temas del banco del mapa y la IA escribe sobre ellos, así
+ *   que sin mapa no hay de dónde elegir. Sin investigación no hay mapa, por
+ *   eso esa razón va primero.
  *
- * `desarrollo_mensual` estaba bloqueada aquí con «Próximamente» porque no
- * tenía nada que abrir. Con el lote mensual (diseño §2) ya lo tiene, así que
- * entra por la misma puerta que las otras dos: sin investigación no hay
- * pilares de los que sacar temas ni criterio para escribir el copy. Lo que
- * NO cambia es la interfaz de la ficha: `botonesEtapa` (src/flujo/ui.ts)
- * sigue devolviendo cero botones para esta etapa y la tarjeta sigue diciendo
- * «Próximamente» hasta que la fase B le dé su pantalla. Aquí se abre la
- * regla; la puerta visible la abre B3.
+ * La regla solo bloquea CREAR y GENERAR (abrir el lote, dar de alta piezas,
+ * proponer temas, generar el mes, pedir propuestas de copy). Un mes que ya
+ * estaba abierto en un cliente sin mapa sigue leyéndose igual: nada aquí
+ * toca lo que ya existe.
  *
  * Antes cada etapa esperaba a la anterior: pilares exigía la investigación
  * `aprobada` y el manual exigía además el mapa de pilares aprobado. Eso
@@ -202,17 +202,25 @@ export function etapasVisiblesCliente<T extends { contratada: boolean; interna: 
  * (`en_revision` no se regenera, `aprobada` hay que reabrirla) — viven en
  * `puedeGenerar`.
  *
- * `_etapas` ya no se consulta: al caer las dos reglas de aprobación no queda
- * nada que mirar en las otras etapas. Se conserva en la firma porque quien
- * llama ya tiene la lista a mano (`puedeGenerar` la necesita para sus propios
- * bloqueos) y porque cualquier dependencia futura volvería a pedirla; quitarla
- * obligaría a tocar las cuatro pantallas para nada.
+ * `_etapas` ya no se consulta: se conserva en la firma porque quien llama ya
+ * tiene la lista a mano y cualquier dependencia futura volvería a pedirla.
  */
-export function dependenciasCumplidas(etapa: Etapa, _etapas: EtapaCliente[], hayInvestigacionConDatos: boolean): { ok: boolean; razon: string } {
+export const RAZON_SIN_INVESTIGACION = 'Falta completar la investigación antes de continuar.';
+export const RAZON_SIN_MAPA = 'Falta generar el mapa de pilares antes de armar el mes.';
+
+export function dependenciasCumplidas(
+  etapa: Etapa,
+  _etapas: EtapaCliente[],
+  hayInvestigacionConDatos: boolean,
+  hayMapaDePilares: boolean,
+): { ok: boolean; razon: string } {
   if (etapa === 'investigacion') return { ok: true, razon: '' };
 
   if (!hayInvestigacionConDatos) {
-    return { ok: false, razon: 'Falta completar la investigación antes de continuar.' };
+    return { ok: false, razon: RAZON_SIN_INVESTIGACION };
+  }
+  if (etapa === 'desarrollo_mensual' && !hayMapaDePilares) {
+    return { ok: false, razon: RAZON_SIN_MAPA };
   }
 
   return { ok: true, razon: '' };
@@ -230,12 +238,17 @@ export function dependenciasCumplidas(etapa: Etapa, _etapas: EtapaCliente[], hay
  * - `en_revision` o `aprobada`: hay que resolver la revisión o reabrir antes
  *   de reemplazar el documento;
  * - `dependenciasCumplidas`: sin una investigación con datos no hay sobre qué
- *   generar (ni el mapa de pilares ni el manual de campaña).
+ *   generar (ni el mapa de pilares ni el manual de campaña), y el mes además
+ *   pide el mapa.
  */
 export function puedeGenerar(
   etapa: Etapa,
   etapas: EtapaCliente[],
   hayInvestigacionConDatos: boolean,
+  // Solo la mira el desarrollo mensual, que no pasa por `POST /api/jobs`
+  // (su trabajo nace en `POST /api/contenido/lotes/[id]/generar`): los tres
+  // documentos que sí pasan por ahí no dependen del mapa.
+  hayMapaDePilares = true,
 ): { ok: boolean; razon: string } {
   const fila = etapas.find((e) => e.etapa === etapa);
   if (!fila || (!fila.contratada && !fila.interna)) {
@@ -249,7 +262,7 @@ export function puedeGenerar(
     return { ok: false, razon: 'Esta etapa ya está aprobada: hay que reabrirla antes de generar de nuevo.' };
   }
 
-  return dependenciasCumplidas(etapa, etapas, hayInvestigacionConDatos);
+  return dependenciasCumplidas(etapa, etapas, hayInvestigacionConDatos, hayMapaDePilares);
 }
 
 /** Lo mínimo de una etapa (o de su versión aprobada) para decidir si un documento se puede compartir. */

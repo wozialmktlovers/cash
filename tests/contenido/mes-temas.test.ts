@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { catalogoDeTemas, candidatosDeTanda, candidatosPara, pilaresPorUso, resolverTema, temasUsados } from '@/contenido/mes/temas';
+import { asignarTemas, catalogoDeTemas, candidatosPara, pilaresPorUso, temasUsados } from '@/contenido/mes/temas';
 import { armarRanuras, faltantes } from '@/contenido/mes/plan';
 import { mapaFalso } from '../fixtures/pilares';
 
@@ -14,6 +14,7 @@ describe('el catálogo de temas', () => {
     expect(cat.find((t) => t.id === 'P1-S1-01')?.estado).toBe('publicado');
     expect(cat.find((t) => t.id === 'P1-S1-02')?.estado).toBe('pendiente');
     expect(cat.find((t) => t.id === 'P3-S2-05')?.pilar).toBe(3);
+    expect(cat.find((t) => t.id === 'P3-S2-05')?.subcategoria).toBe('Subcategoría 3.2');
   });
 
   it('un mapa sin pilares no revienta', () => {
@@ -23,34 +24,28 @@ describe('el catálogo de temas', () => {
 });
 
 describe('no repite temas usados', () => {
-  it('ningún candidato es un tema de otro mes', () => {
+  const ranurasDe = (paquete: Record<string, number>) => armarRanuras({ periodo: '2026-10', aGenerar: faltantes(paquete as never, []), quedan: [], mix: mapa.estrategia.mix, pilares: [1, 2, 3, 4, 5] });
+
+  it('ninguna ranura recibe un tema de otro mes', () => {
     const cat = catalogoDeTemas(mapa);
     const usados = temasUsados(cat.slice(0, 200).map((t) => ({ temaId: t.id })));
-    const ranuras = armarRanuras({ periodo: '2026-10', aGenerar: faltantes({ post: 8, carrusel: 4, reel: 4, historia: 6 }, []), quedan: [], mix: mapa.estrategia.mix, pilares: [1, 2, 3, 4, 5] });
-    const cands = candidatosDeTanda(ranuras, cat, usados);
-    for (const lista of cands.values()) for (const t of lista) expect(usados.has(t.id)).toBe(false);
+    const asignados = asignarTemas(ranurasDe({ post: 8, carrusel: 4, reel: 4, historia: 6 }), cat, usados);
+    for (const t of asignados.values()) expect(usados.has(t!.id)).toBe(false);
   });
 
-  it('dos ranuras de la misma tanda no comparten candidatos', () => {
+  it('dos ranuras no comparten tema, y no se toca el conjunto de usados', () => {
     const cat = catalogoDeTemas(mapa);
-    const ranuras = armarRanuras({ periodo: '2026-10', aGenerar: faltantes({ post: 8 }, []), quedan: [], mix: mapa.estrategia.mix, pilares: [1, 2, 3, 4, 5] });
-    const cands = candidatosDeTanda(ranuras, cat, new Set());
-    const todos = [...cands.values()].flat().map((t) => t.id);
-    expect(new Set(todos).size).toBe(todos.length);
+    const usados = new Set<string>();
+    const asignados = asignarTemas(ranurasDe({ post: 8 }), cat, usados);
+    const ids = [...asignados.values()].map((t) => t!.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(usados.size).toBe(0);
   });
 
-  it('el tema que escribe el modelo solo vale si es candidato de su ranura y está libre', () => {
+  it('sin temas libres, la ranura queda sin tema en vez de repetir', () => {
     const cat = catalogoDeTemas(mapa);
-    const cands = cat.slice(0, 4);
-    const usados = new Set([cands[0].id]);
-    expect(resolverTema(cands[1].id, cands, usados)).toBe(cands[1].id);
-    // Repetido: se cae al primer candidato libre.
-    expect(resolverTema(cands[0].id, cands, usados)).toBe(cands[1].id);
-    // Inventado o de otra ranura: igual.
-    expect(resolverTema('P5-S3-20', cands, usados)).toBe(cands[1].id);
-    expect(resolverTema(null, cands, usados)).toBe(cands[1].id);
-    // Sin candidatos libres: sin tema.
-    expect(resolverTema(null, cands, new Set(cands.map((c) => c.id)))).toBeNull();
+    const asignados = asignarTemas(ranurasDe({ post: 2 }), cat, new Set(cat.map((t) => t.id)));
+    expect([...asignados.values()]).toEqual([null, null]);
   });
 });
 

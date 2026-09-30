@@ -27,7 +27,7 @@ const ranuras: Ranura[] = [
 ];
 const entrada: EntradaTanda = {
   contexto: '## Cliente\nNombre: Negocio de prueba', periodo: '2026-10', nombreMes: 'Octubre 2026', ranuras,
-  candidatos: new Map([[1, [{ id: 'P1-S1-01', texto: 'Tema uno', funcion: 'conexion', formato: 'reel', pilar: 1, estado: 'pendiente' }]]]),
+  temas: new Map([[1, { id: 'P1-S1-01', texto: 'Tema uno', subcategoria: 'Sub uno', funcion: 'conexion', formato: 'reel', pilar: 1, estado: 'pendiente' }]]),
   nombresPilares: ['Uno', 'Dos', 'Tres'], yaEscritas: ['Una entrada anterior'],
 };
 
@@ -44,7 +44,11 @@ describe('correrTanda', () => {
     const usuario = cuerpo.messages[0].content as string;
     expect(usuario).toContain(FORMA_TANDA);
     expect(usuario).toContain('Ranura 1 · reel');
-    expect(usuario).toContain('P1-S1-01');
+    expect(usuario).toContain('Tema autorizado: P1-S1-01 · Tema uno');
+    // El agente no elige: ni se le ofrecen candidatos ni se le pide el tema de vuelta.
+    expect(usuario).not.toMatch(/candidatos/i);
+    expect(usuario).not.toContain('"temaId"');
+    expect(cuerpo.system).toContain('no lo cambies');
     expect(usuario).toContain('Una entrada anterior');
     // Nada presupone un giro educativo.
     expect(cuerpo.system).not.toMatch(/alumn|curso|educativ|clase de/i);
@@ -81,8 +85,8 @@ describe('correrTanda', () => {
 });
 
 describe('armarEntradaTanda', () => {
-  it('una ranura sin candidatos lo dice en vez de callar', () => {
-    const texto = armarEntradaTanda({ ...entrada, candidatos: new Map() });
-    expect(texto).toContain('el mapa ya no tiene temas libres');
+  it('una ranura sin tema lo dice en vez de callar', () => {
+    const texto = armarEntradaTanda({ ...entrada, temas: new Map() });
+    expect(texto).toContain('sin tema: escribe desde la estrategia');
   });
 });

@@ -6,9 +6,10 @@
 // investigación y del mapa), pero en vez de tres opciones de una pieza escribe
 // una pieza terminada por ranura, con todo lo que hace falta para producirla.
 //
-// Lo que NO decide: cuántas piezas, de qué formato ni qué día. Eso llega ya
-// resuelto en las ranuras (./plan.ts). Decide el texto y cuál de los temas
-// candidatos de su ranura usa.
+// Lo que NO decide: cuántas piezas, de qué formato, qué día ni SOBRE QUÉ TEMA.
+// Todo eso llega ya resuelto y autorizado en las ranuras (./plan.ts,
+// ./propuesta.ts): el equipo eligió el tema de cada pieza del banco del mapa de
+// pilares antes de gastar un centavo. Decide solo el texto.
 
 import { pedirJson } from '@/research/claude';
 import type { MapaPilares } from '@/pilares/schemas';
@@ -34,10 +35,10 @@ export const MAX_TOKENS_MES = 32_000;
 
 export const SISTEMA_MES = `Eres redactor de contenidos para Facebook e Instagram en una agencia mexicana. Escribes en español de México, listo para publicarse tal cual.
 
-Recibes el contexto de un cliente, su estrategia editorial y un grupo de ranuras del calendario del mes. Cada ranura ya trae su formato, su fecha, la función del mix que debe cumplir y unos temas candidatos del mapa de pilares. Para cada ranura eliges UNO de sus candidatos y escribes la pieza completa.
+Recibes el contexto de un cliente, su estrategia editorial y un grupo de ranuras del calendario del mes. Cada ranura ya trae su formato, su fecha, la función del mix que debe cumplir y el tema del mapa de pilares que el equipo autorizó para ella. Para cada ranura escribes la pieza completa sobre ESE tema.
 
 Reglas:
-- Elige el tema solo de los candidatos de esa ranura, y copia su id tal cual. No repitas un tema entre ranuras.
+- El tema de cada ranura está decidido: no lo cambies, no lo sustituyas por otro y no mezcles el de una ranura con el de otra. Escribe la pieza sobre la idea que dice el tema.
 - Parte de escenas y verdades humanas reconocibles, en el lenguaje de la audiencia. Evita ideas genéricas, slogans vacíos y frases de agencia como «descubre», «innovador» o «la mejor opción».
 - El gancho es la primera línea del copy, la que se lee antes del «ver más»: ahí va la escena o el conflicto, nunca el nombre de la marca ni un adjetivo.
 - No inventes datos del cliente. Nada de precios, promociones, horarios, premios, cifras ni testimonios que no estén en el contexto. Si te falta un dato para cerrar la idea, escribe la idea sin él.
@@ -78,7 +79,6 @@ export const FORMA_TANDA = `{
   "piezas": [
     {
       "ref": 3,
-      "temaId": "P2-S1-07",
       "plataforma": "ambas",
       "copy": "texto completo listo para publicar, máx. ${LIMITES_PIEZA.copy} caracteres",
       "cta": "un solo llamado a la acción, máx. ${LIMITES_PIEZA.cta}",
@@ -90,7 +90,7 @@ export const FORMA_TANDA = `{
     }
   ]
 }
-Una pieza por ranura, con el mismo "ref" de la ranura. "plataforma" es "facebook", "instagram" o "ambas". De 5 a 10 hashtags. "guion" solo en reels y "tarjetas" solo en carruseles; en los demás formatos van vacíos: [].`;
+Una pieza por ranura, con el mismo "ref" de la ranura; el tema no se devuelve: ya está decidido. "plataforma" es "facebook", "instagram" o "ambas". De 5 a 10 hashtags. "guion" solo en reels y "tarjetas" solo en carruseles; en los demás formatos van vacíos: [].`;
 
 /** Lo que el agente necesita de la estrategia del mapa: el porqué, no los 300 temas. */
 export function resumenEstrategia(mapa: MapaPilares | null): string {
@@ -119,7 +119,8 @@ export type EntradaTanda = {
   periodo: string;
   nombreMes: string;
   ranuras: Ranura[];
-  candidatos: Map<number, TemaCatalogo[]>;
+  /** El tema autorizado de cada ranura, por `ref`. */
+  temas: Map<number, TemaCatalogo>;
   nombresPilares: string[];
   /** La primera línea de lo que ya se escribió este mes, para no repetir entradas. */
   yaEscritas: string[];
@@ -127,14 +128,14 @@ export type EntradaTanda = {
 
 export function armarEntradaTanda(t: EntradaTanda): string {
   const ranuras = t.ranuras.map((r) => {
-    const cands = (t.candidatos.get(r.ref) ?? []).map((c) =>
-      `   - ${c.id} · ${c.texto} (función: ${NOMBRE_FUNCION[c.funcion] ?? c.funcion}; formato sugerido: ${c.formato}${c.estado === 'pendiente' ? '' : `; ya ${c.estado.replace('_', ' ')}`})`,
-    ).join('\n');
+    const c = t.temas.get(r.ref);
+    const tema = c
+      ? `${c.id} · ${c.texto} (${c.subcategoria}; función del tema: ${NOMBRE_FUNCION[c.funcion] ?? c.funcion}; formato sugerido: ${c.formato}${c.estado === 'pendiente' ? '' : `; ya ${c.estado.replace('_', ' ')}`})`
+      : '(sin tema: escribe desde la estrategia)';
     return `Ranura ${r.ref} · ${r.formato} · ${fechaLarga(r.fecha)}
- Función del mix: ${NOMBRE_FUNCION[r.funcion] ?? r.funcion} · pilar sugerido: ${t.nombresPilares[r.pilar - 1] ?? `Pilar ${r.pilar}`}
+ Función del mix: ${NOMBRE_FUNCION[r.funcion] ?? r.funcion} · pilar: ${t.nombresPilares[r.pilar - 1] ?? `Pilar ${r.pilar}`}
  Formato: ${GUIA_FORMATO[r.formato]}
- Temas candidatos:
-${cands || '   (el mapa ya no tiene temas libres: escribe desde la estrategia y deja "temaId": null)'}`;
+ Tema autorizado: ${tema}`;
   }).join('\n\n');
 
   const previas = t.yaEscritas.length

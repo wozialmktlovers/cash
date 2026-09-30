@@ -352,6 +352,13 @@ export const contenidoLotes = pgTable('contenido_lotes', {
   // (ninguno) de ese instante, y como `compartido_en` nace nulo, no hay plazo
   // que pueda correr antes del primer reparto.
   contenidoActualizadoEn: timestamp('contenido_actualizado_en', { withTimezone: true }).notNull().defaultNow(),
+  // La selección de temas del mes (paso «Elegir los temas» antes de generar con
+  // IA): la propuesta del sistema y lo que el equipo le cambió, una fila por
+  // pieza a escribir, y —cuando un responsable la autoriza— quién y cuándo.
+  // Nula hasta que alguien propone. Mientras no esté autorizada es un borrador
+  // que sobrevive a recargar la página; la forma y su lectura tolerante viven
+  // en `src/contenido/mes/propuesta.ts` (`SeleccionTemas`, `leerSeleccion`).
+  temasMes: jsonb('temas_mes'),
   creadoPor: uuid('creado_por').references(() => users.id, { onDelete: 'set null' }),
   creadoEn: timestamp('creado_en', { withTimezone: true }).notNull().defaultNow(),
   actualizadoEn: timestamp('actualizado_en', { withTimezone: true }).notNull().defaultNow(),

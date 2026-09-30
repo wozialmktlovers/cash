@@ -6,6 +6,8 @@ import { marcarContenidoTocado, refrescarLote } from '@/contenido/servicio';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { violaRestriccionUnica } from '@/lib/unicidad';
 import { loteVisible } from '@/lib/visibilidad';
+import { dependenciasDelMes } from '@/flujo/dependencias';
+import { etapasDelCliente } from '@/flujo/servicio';
 
 const json = (cuerpo: unknown, status = 200) =>
   new Response(JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } });
@@ -23,7 +25,9 @@ const RESTRICCION_NUMERO = 'contenido_piezas_lote_id_numero';
  *   igual que en `PATCH /api/pilares/[id]/temas/[temaId]`, el permiso se
  *   resuelve por el cliente del lote y el 404 no delata qué existe;
  * - 400 cuerpo ilegible o campos inválidos;
- * - 409 ya hay una pieza con ese número en el lote;
+ * - 409 ya hay una pieza con ese número en el lote, o al cliente le falta la
+ *   investigación o el mapa de pilares (dependencia dura: crear contenido
+ *   mensual los exige; leer y editar lo que ya hay, no);
  * - 201 creada.
  *
  * **El número es opcional.** Si no viene, se toma el siguiente libre
@@ -40,6 +44,9 @@ export const POST: APIRoute = async ({ params, request, locals }) => {
   if (!visible || !puedeOperarCliente(locals.usuario, visible.cliente)) {
     return json({ ok: false, errores: ['El lote no existe'] }, 404);
   }
+
+  const dependencias = await dependenciasDelMes(visible.cliente.id, await etapasDelCliente(visible.cliente.id));
+  if (!dependencias.ok) return json({ ok: false, errores: [dependencias.razon] }, 409);
 
   let crudo: unknown;
   try {

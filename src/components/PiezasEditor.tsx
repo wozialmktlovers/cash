@@ -34,6 +34,7 @@ import {
 import { faltantes, separarPiezas, tieneArte, totalDe, type Modo } from '@/contenido/mes/reemplazo';
 import { COLOR_ESTADO } from '@/flujo/ui';
 import { toast } from '@/scripts/toast';
+import ElegirTemas, { type SeleccionUI, type TemaBanco } from './ElegirTemas';
 // Solo tipos: `@/contenido/piezas` y `@/contenido/schemas` construyen esquemas
 // de Zod al cargarse, y un `import type` se borra al compilar, así que la
 // forma se comparte sin arrastrar Zod al navegador.
@@ -424,25 +425,33 @@ const listaFormatos = (conteo: Record<Formato, number>) =>
   FORMATOS.filter((f) => conteo[f] > 0).map((f) => plural(conteo[f], f)).join(', ');
 
 /**
- * El botón «Generar el mes con IA» y lo que tiene que preguntar antes.
+ * «Generar el mes con IA», en dos pasos (rediseño 2026-09-30):
  *
- * Solo lanza: la generación corre en segundo plano (job `contenido`) y al
- * aceptarla la pantalla se va a su progreso. Lo que se muestra aquí —cuántas
- * piezas, cuáles se reemplazan— sale de las mismas reglas que aplica el
- * servidor (`src/contenido/mes/reemplazo.ts`), pero el servidor manda: si algo
- * cambió entre tanto, su respuesta es la que se enseña.
+ * 1. **Elegir los temas del mes** (`ElegirTemas`): el sistema propone, sin IA y
+ *    sin costo, qué tema del mapa de pilares va en cada pieza; el equipo los
+ *    acepta o los cambia y los autoriza.
+ * 2. **Generación**: al autorizar se lanza el trabajo en segundo plano (job
+ *    `contenido`) y la pantalla se va a su progreso. La IA escribe sobre los
+ *    temas autorizados y no elige ninguno.
  *
- * Nunca se ofrece borrar una pieza aprobada o con cambios pedidos, y las que
- * ya tienen arte solo se reemplazan marcando la casilla que lo dice.
+ * Aquí se pregunta lo de siempre —completar lo que falta o reemplazar las
+ * piezas sin revisar— con las mismas reglas que aplica el servidor
+ * (`src/contenido/mes/reemplazo.ts`); el servidor manda. Nunca se ofrece borrar
+ * una pieza aprobada o con cambios pedidos, y las que ya tienen arte solo se
+ * reemplazan marcando la casilla que lo dice.
+ *
+ * Sin investigación o sin mapa de pilares se muestra la razón a la vista y el
+ * paso no arranca.
  */
-function GenerarMes({ clientId, loteId, paquete, piezas, hayMapa, trabajo }: {
-  clientId: string; loteId: string; paquete: Paquete; piezas: PiezaUI[]; hayMapa: boolean; trabajo: TrabajoEnCurso | null;
+function GenerarMes({
+  clientId, loteId, periodo, paquete, piezas, bloqueo, trabajo, banco, nombresPilares, inicial, ultima, puedeElegir, razonSinPermiso,
+}: {
+  clientId: string; loteId: string; periodo: string; paquete: Paquete; piezas: PiezaUI[]; bloqueo: string | null; trabajo: TrabajoEnCurso | null;
+  banco: TemaBanco[]; nombresPilares: string[]; inicial: SeleccionUI | null; ultima: { nombre: string; en: string } | null;
+  puedeElegir: boolean; razonSinPermiso: string;
 }) {
-  const [modo, setModo] = useState<Modo>('completar');
-  const [conArte, setConArte] = useState(false);
-  const [confirmando, setConfirmando] = useState(false);
-  const [enviando, setEnviando] = useState(false);
-  const [error, setError] = useState<{ texto: string; enlace?: string } | null>(null);
+  const [modo, setModo] = useState<Modo>(inicial?.modo ?? 'completar');
+  const [conArte, setConArte] = useState(inicial?.incluirConArte ?? false);
 
   const sinPaquete = Object.keys(paquete).length === 0;
   const hayPiezas = piezas.length > 0;
@@ -453,27 +462,10 @@ function GenerarMes({ clientId, loteId, paquete, piezas, hayMapa, trabajo }: {
   const revisadas = piezas.filter((p) => p.estadoCliente !== 'pendiente').length;
   const aGenerar = modo === 'completar' || !hayPiezas ? completar : conReemplazo;
   const total = totalDe(aGenerar);
-
-  async function lanzar() {
-    setError(null);
-    setEnviando(true);
-    const r = await fetch(`/api/contenido/lotes/${loteId}/generar`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(hayPiezas ? { modo, incluirConArte: modo === 'reemplazar' && conArte } : {}),
-    }).then(async (res) => ({ status: res.status, cuerpo: await res.json() }))
-      .catch(() => null);
-    setEnviando(false);
-    setConfirmando(false);
-    if (!r) { setError({ texto: 'No se pudo contactar al servidor.' }); return; }
-    if (r.cuerpo?.ok) {
-      toast('La IA empezó a escribir el mes. Te avisamos en la campana al terminar.');
-      location.href = `/jobs/${r.cuerpo.id}`;
-      return;
-    }
-    if (r.cuerpo?.jobId) { location.href = `/jobs/${r.cuerpo.jobId}`; return; }
-    setError({ texto: (r.cuerpo?.errores ?? ['No se pudo lanzar la generación.']).join(' · '), enlace: r.cuerpo?.enlace });
-  }
+  // Los temas de las piezas que se quedan no se pueden repetir en el mes.
+  const seQuedan = modo === 'completar' || !hayPiezas ? piezas : quedan;
+  const bloqueados: Record<string, number> = {};
+  for (const p of seQuedan) if (p.temaId) bloqueados[p.temaId] = p.numero;
 
   if (trabajo) {
     return (
@@ -495,18 +487,24 @@ function GenerarMes({ clientId, loteId, paquete, piezas, hayMapa, trabajo }: {
     <section className="tarjeta generar-mes">
       <h2>Generar el mes con IA</h2>
       <p className="sub">
-        Escribe el paquete del mes a partir del mapa de pilares: fechas repartidas en días hábiles, copy, llamado a la
-        acción, hashtags, brief visual y prompt de imagen; guion en los reels y tarjetas en los carruseles. Prefiere los
-        temas pendientes, respeta el mix y no repite temas de otros meses. Corre en segundo plano y te avisa al terminar.
+        Dos pasos. Primero eliges los temas del mes: el sistema toma del mapa de pilares una propuesta —pendientes primero,
+        repartida por pilar y por función del mix, sin repetir otros meses— y tú la aceptas o cambias los temas que quieras.
+        Cuando los autorizas, la IA escribe cada pieza sobre su tema: fecha, copy, llamado a la acción, hashtags, brief visual
+        y prompt de imagen; guion en los reels y tarjetas en los carruseles. Corre en segundo plano y te avisa al terminar.
       </p>
 
-      {sinPaquete ? (
+      {bloqueo ? (
+        <>
+          <p className="aviso amarillo" role="status" id={`bloqueo-${loteId}`}>{bloqueo}</p>
+          <div className="acciones">
+            <button type="button" className="btn" disabled aria-describedby={`bloqueo-${loteId}`}>Elegir los temas del mes</button>
+          </div>
+        </>
+      ) : sinPaquete ? (
         <p className="aviso amarillo">
           Para generar el mes hace falta el paquete mensual del cliente: la IA escribe exactamente ese paquete.{' '}
           <a href={`/clientes/${clientId}#paquete`}>Definir el paquete en la ficha</a>.
         </p>
-      ) : !hayMapa ? (
-        <p className="aviso amarillo">Este cliente todavía no tiene mapa de pilares con temas. El mes sale de ahí.</p>
       ) : (
         <>
           {hayPiezas && (
@@ -514,7 +512,7 @@ function GenerarMes({ clientId, loteId, paquete, piezas, hayMapa, trabajo }: {
               <legend>El mes ya tiene {piezas.length} {piezas.length === 1 ? 'pieza' : 'piezas'}. ¿Qué hacemos?</legend>
               <label className="opcion">
                 <input type="radio" name={`modo-${loteId}`} value="completar" checked={modo === 'completar'}
-                  onChange={() => { setModo('completar'); setConfirmando(false); }} />
+                  onChange={() => setModo('completar')} />
                 <span>
                   <strong>Completar lo que falta del paquete</strong>
                   <span className="secundario">
@@ -524,7 +522,7 @@ function GenerarMes({ clientId, loteId, paquete, piezas, hayMapa, trabajo }: {
               </label>
               <label className="opcion">
                 <input type="radio" name={`modo-${loteId}`} value="reemplazar" checked={modo === 'reemplazar'}
-                  onChange={() => { setModo('reemplazar'); setConfirmando(false); }} />
+                  onChange={() => setModo('reemplazar')} />
                 <span>
                   <strong>Reemplazar las piezas sin revisar</strong>
                   <span className="secundario">
@@ -538,7 +536,7 @@ function GenerarMes({ clientId, loteId, paquete, piezas, hayMapa, trabajo }: {
               </label>
               {modo === 'reemplazar' && sinRevisarConArte > 0 && (
                 <label className="opcion con-arte">
-                  <input type="checkbox" checked={conArte} onChange={(e) => { setConArte(e.target.checked); setConfirmando(false); }} />
+                  <input type="checkbox" checked={conArte} onChange={(e) => setConArte(e.target.checked)} />
                   <span>
                     También reemplazar {sinRevisarConArte === 1 ? 'la pieza sin revisar que ya tiene arte' : `las ${sinRevisarConArte} piezas sin revisar que ya tienen arte`}.
                     <span className="secundario"> Sin marcar, esas se quedan con su arte.</span>
@@ -552,30 +550,13 @@ function GenerarMes({ clientId, loteId, paquete, piezas, hayMapa, trabajo }: {
             {total === 0 ? 'Con esta opción no hay piezas que escribir.' : `Se escribirán ${total} ${total === 1 ? 'pieza' : 'piezas'}: ${listaFormatos(aGenerar)}.`}
           </p>
 
-          <div className="acciones">
-            {confirmando ? (
-              <>
-                <span className="secundario">
-                  ¿Reemplazar {reemplazar.length} {reemplazar.length === 1 ? 'pieza' : 'piezas'}? Se borran al terminar de escribir las nuevas.
-                </span>
-                <button type="button" className="btn peligro lleno chico" disabled={enviando} onClick={() => void lanzar()}>
-                  {enviando ? 'Lanzando…' : 'Sí, reemplazar y generar'}
-                </button>
-                <button type="button" className="btn fantasma chico" onClick={() => setConfirmando(false)}>Cancelar</button>
-              </>
-            ) : (
-              <button type="button" className="btn" disabled={enviando || total === 0}
-                onClick={() => (hayPiezas && modo === 'reemplazar' && reemplazar.length > 0 ? setConfirmando(true) : void lanzar())}>
-                {enviando ? 'Lanzando…' : 'Generar el mes con IA'}
-              </button>
-            )}
-          </div>
+          <ElegirTemas
+            loteId={loteId} periodo={periodo} modo={modo} incluirConArte={conArte} hayPiezas={hayPiezas}
+            esperadas={aGenerar} reemplazar={reemplazar.length} bloqueados={bloqueados}
+            banco={banco} nombresPilares={nombresPilares} inicial={inicial} ultima={ultima}
+            puedeElegir={puedeElegir} razonSinPermiso={razonSinPermiso}
+          />
         </>
-      )}
-      {error && (
-        <p className="aviso rosa" role="alert" style={{ marginTop: 14 }}>
-          {error.texto}{error.enlace && <> <a href={error.enlace}>Ir a la ficha</a>.</>}
-        </p>
       )}
     </section>
   );
@@ -614,13 +595,15 @@ const aBorrador = (p: PiezaUI): Borrador => ({
 });
 
 function TarjetaPieza({
-  pieza, clientId, grupos, archivos, operable, abierta, onAbrir, onGuardada, onBorrada, onArchivo,
+  pieza, clientId, grupos, archivos, operable, bloqueo, abierta, onAbrir, onGuardada, onBorrada, onArchivo,
 }: {
   pieza: PiezaUI;
   clientId: string;
   grupos: GrupoTemas[];
   archivos: ArchivoCliente[];
   operable: boolean;
+  /** Razón por la que no se generan propuestas (falta investigación o mapa), o `null`. */
+  bloqueo: string | null;
   abierta: boolean;
   onAbrir: () => void;
   onGuardada: (p: PiezaUI) => void;
@@ -834,7 +817,7 @@ function TarjetaPieza({
               <button type="button" className="btn" onClick={() => void guardar()} disabled={ocupado}>
                 {ocupado ? 'Guardando…' : 'Guardar la pieza'}
               </button>
-              <button type="button" className="btn fantasma" onClick={() => void proponer()} disabled={generando || !borrador.temaId}>
+              <button type="button" className="btn fantasma" onClick={() => void proponer()} disabled={generando || !borrador.temaId || !!bloqueo}>
                 {generando ? 'Pidiendo propuestas…' : 'Pedir propuestas de copy'}
               </button>
               {confirmando ? (
@@ -848,7 +831,8 @@ function TarjetaPieza({
               )}
             </div>
           )}
-          {!borrador.temaId && operable && (
+          {bloqueo && operable && <p className="ayuda" role="status">{bloqueo}</p>}
+          {!borrador.temaId && operable && !bloqueo && (
             <p className="ayuda">Para pedir propuestas hace falta elegir antes un tema del mapa: el copy sale de ahí.</p>
           )}
         </div>
@@ -861,7 +845,8 @@ function TarjetaPieza({
 
 export default function PiezasEditor({
   clientId, loteId, paquete, grupos, operable, estadoLote,
-  piezas: iniciales, archivos: archivosIniciales, trabajo = null, hayMapa = false,
+  piezas: iniciales, archivos: archivosIniciales, trabajo = null, bloqueo = null,
+  periodo, banco = [], nombresPilares = [], seleccion = null, ultimaAutorizacion = null, puedeElegirTemas = false, razonSinPermiso = '',
 }: {
   clientId: string;
   loteId: string;
@@ -874,8 +859,17 @@ export default function PiezasEditor({
   archivos: ArchivoCliente[];
   /** El trabajo en segundo plano del cliente, si hay uno en cola o corriendo. */
   trabajo?: TrabajoEnCurso | null;
-  /** El cliente tiene mapa de pilares con temas: sin él no hay de dónde generar. */
-  hayMapa?: boolean;
+  /** Razón por la que no se puede crear ni generar contenido mensual (falta investigación o mapa de pilares), o `null`. */
+  bloqueo?: string | null;
+  periodo: string;
+  banco?: TemaBanco[];
+  nombresPilares?: string[];
+  /** Borrador de selección guardado (sin autorizar). */
+  seleccion?: SeleccionUI | null;
+  ultimaAutorizacion?: { nombre: string; en: string } | null;
+  /** Responsable de la etapa (contenido o diseño) o admin. */
+  puedeElegirTemas?: boolean;
+  razonSinPermiso?: string;
 }) {
   const [piezas, setPiezas] = useState<PiezaUI[]>(iniciales);
   const [archivos, setArchivos] = useState<ArchivoCliente[]>(archivosIniciales);
@@ -943,7 +937,11 @@ export default function PiezasEditor({
           (admin u operador asignado): generar sobre un mes que el cliente
           está revisando cambiaría lo que tiene delante. */}
       {operable && estadoLote === 'en_proceso' && (
-        <GenerarMes clientId={clientId} loteId={loteId} paquete={paquete} piezas={piezas} hayMapa={hayMapa} trabajo={trabajo} />
+        <GenerarMes
+          clientId={clientId} loteId={loteId} periodo={periodo} paquete={paquete} piezas={piezas} bloqueo={bloqueo} trabajo={trabajo}
+          banco={banco} nombresPilares={nombresPilares} inicial={seleccion} ultima={ultimaAutorizacion}
+          puedeElegir={puedeElegirTemas} razonSinPermiso={razonSinPermiso}
+        />
       )}
 
       <section className="tarjeta">
@@ -966,6 +964,7 @@ export default function PiezasEditor({
                 grupos={grupos}
                 archivos={archivos}
                 operable={operable}
+                bloqueo={bloqueo}
                 abierta={abierta === p.id}
                 onAbrir={() => setAbierta((a) => (a === p.id ? null : p.id))}
                 onGuardada={(nueva) => setPiezas((lista) => lista.map((x) => (x.id === nueva.id ? nueva : x)))}
@@ -985,6 +984,7 @@ export default function PiezasEditor({
         <section className="tarjeta">
           <h2>Agregar una pieza</h2>
           <p className="sub">El número se asigna solo: el siguiente libre del mes.</p>
+          {bloqueo && <p className="aviso amarillo" role="status">{bloqueo}</p>}
           <form onSubmit={agregar}>
             <div className="agregar">
               <div className="campo">
@@ -1003,7 +1003,7 @@ export default function PiezasEditor({
                 <label htmlFor="alta-fecha">Fecha de publicación</label>
                 <input id="alta-fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
               </div>
-              <button type="submit" className="btn" disabled={alta}>{alta ? 'Agregando…' : 'Agregar pieza'}</button>
+              <button type="submit" className="btn" disabled={alta || !!bloqueo}>{alta ? 'Agregando…' : 'Agregar pieza'}</button>
             </div>
           </form>
           {error && <p className="aviso rosa" role="alert" style={{ marginTop: 16 }}>{error}</p>}

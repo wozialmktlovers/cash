@@ -41,6 +41,11 @@ const espia = vi.hoisted(() => ({
   refrescados: [] as string[],
 }));
 
+// Dependencia dura del mes (investigación y mapa): cumplida salvo que la prueba la apague.
+const dep = vi.hoisted(() => ({ valor: { ok: true, razon: '' } }));
+vi.mock('@/flujo/dependencias', () => ({ dependenciasDelMes: async () => dep.valor }));
+vi.mock('@/flujo/servicio', async (importarReal) => ({ ...(await importarReal<typeof import('@/flujo/servicio')>()), etapasDelCliente: async () => [] }));
+
 vi.mock('@/db', async (importarReal) => {
   const real = await importarReal<typeof import('@/db')>();
   const lectura = { from: () => lectura, where: async () => [{ numero: espia.maximoNumero }] };
@@ -195,6 +200,16 @@ describe('POST /api/contenido/lotes/[id]/piezas', () => {
       briefVisual: 'Foto del taller a contraluz.',
     });
     expect((espia.insertado?.arte as unknown[]).length).toBe(2);
+  });
+
+  it('sin investigación o mapa de pilares no se crean piezas: 409 con la razón', async () => {
+    dep.valor = { ok: false, razon: 'Falta generar el mapa de pilares antes de armar el mes.' };
+    try {
+      const res = await alta(PIEZA_MINIMA);
+      expect(res.status).toBe(409);
+      expect((await res.json()).errores[0]).toBe('Falta generar el mapa de pilares antes de armar el mes.');
+      expect(espia.insertado).toBeUndefined();
+    } finally { dep.valor = { ok: true, razon: '' }; }
   });
 
   it('el lote que no se opera responde 404', async () => {

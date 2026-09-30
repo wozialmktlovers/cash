@@ -1,0 +1,1 @@
+ALTER TABLE "contenido_lotes" ADD COLUMN "temas_mes" jsonb;

@@ -27,6 +27,11 @@ import { enlacesDelLote } from '@/contenido/enlaces';
 import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA } from '@/flujo/reglas';
 import { COLOR_ESTADO } from '@/flujo/ui';
 import { etapasDelCliente } from '@/flujo/servicio';
+import { dependenciasDelMes } from '@/flujo/dependencias';
+import { cargarBancoDelMes } from '@/contenido/mes/banco-servicio';
+import { puedeElegirTemas, RAZON_SIN_PERMISO_TEMAS } from '@/contenido/mes/permiso';
+import { leerSeleccion } from '@/contenido/mes/propuesta';
+import type { SeleccionUI, TemaBanco } from '@/components/ElegirTemas';
 import { baseUrlPublica } from '@/lib/base-url';
 import { puedeOperarCliente } from '@/lib/permisos';
 import { slugificar } from '@/lib/slug';
@@ -97,6 +102,12 @@ const etapaMensual = etapas.find((e) => e.etapa === 'desarrollo_mensual');
 // Mismo criterio que `POST /api/contenido/lotes`, para que la pantalla no
 // ofrezca abrir un lote que el servidor va a rechazar con un 409.
 const contratada = !!etapaMensual && (etapaMensual.contratada || etapaMensual.interna);
+
+// Dependencia dura: sin investigación con datos y mapa de pilares no se abre un
+// mes ni se genera nada. Solo bloquea CREAR y GENERAR: un mes ya abierto en un
+// cliente sin mapa se sigue leyendo y editando como siempre.
+const dependencias = await dependenciasDelMes(cliente.id, etapas);
+const bloqueo = dependencias.ok ? null : dependencias.razon;
 
 // El mapa de pilares MÁS RECIENTE: es de donde se eligen los temas de las
 // piezas nuevas. Las versiones anteriores no se ofrecen, pero una pieza
@@ -198,7 +209,21 @@ const [jobActivo] = await db.select().from(researchJobs)
 const trabajo: TrabajoEnCurso | null = jobActivo
   ? { id: jobActivo.id, nombre: nombreTrabajo(jobActivo.tipo), deEsteMes: !!lote && destinoDeJob(jobActivo)?.loteId === lote.id }
   : null;
-const hayMapa = grupos.length > 0;
+
+// Paso «Elegir los temas del mes»: banco del mapa vigente con su avance, meses
+// donde ya se usó cada tema, el borrador guardado en el lote (sobrevive a
+// recargar) y quién puede proponer y autorizar.
+const banco = lote && dependencias.ok ? await cargarBancoDelMes(cliente.id, lote.id) : null;
+const temasBanco: TemaBanco[] = (banco?.catalogo ?? []).map((t) => ({
+  id: t.id, texto: t.texto, subcategoria: t.subcategoria, funcion: t.funcion, formato: t.formato,
+  pilar: t.pilar, estado: t.estado, usadoEn: banco?.usadoEn.get(t.id) ?? null,
+}));
+const guardada = lote ? leerSeleccion(lote.temasMes) : null;
+const borrador: SeleccionUI | null = guardada && !guardada.autorizada
+  ? { modo: guardada.modo, incluirConArte: guardada.incluirConArte, filas: guardada.filas }
+  : null;
+const ultimaAutorizacion = guardada?.autorizada ? { nombre: guardada.autorizada.nombre, en: guardada.autorizada.en } : null;
+const puedeTemas = lote && operable ? await puedeElegirTemas(usuario, cliente.id) : false;
 // El plazo en palabras («2 días hábiles»), en un solo lugar: la pantalla lo
 // repite en el encabezado y en los tres textos del bloque de compartir.
 const diasRevision = cliente.diasRevision ?? DIAS_REVISION_POR_OMISION;
@@ -366,7 +391,14 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
         piezas={piezas}
         archivos={archivos}
         trabajo={trabajo}
-        hayMapa={hayMapa}
+        bloqueo={bloqueo}
+        periodo={mes}
+        banco={temasBanco}
+        nombresPilares={nombresPilares}
+        seleccion={borrador}
+        ultimaAutorizacion={ultimaAutorizacion}
+        puedeElegirTemas={puedeTemas}
+        razonSinPermiso={RAZON_SIN_PERMISO_TEMAS}
       />
     </>
   ) : (
@@ -375,7 +407,10 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
         <Icono nombre="vacio" />
         <strong>{titulo} todavía no tiene lote</strong>
         Abrirlo hereda el paquete del cliente y deja la etapa en proceso. Los meses anteriores no se tocan.
-        <button type="button" class="btn" id="abrir-lote" data-client-id={cliente.id} data-periodo={mes} disabled={!operable || !contratada}>
+        <p class="secundario">Antes de empezar hace falta la investigación y el mapa de pilares del cliente: de ahí salen los temas del mes.</p>
+        {bloqueo && <p class="aviso amarillo" id="razon-lote" role="status">{bloqueo}</p>}
+        <button type="button" class="btn" id="abrir-lote" data-client-id={cliente.id} data-periodo={mes}
+          disabled={!operable || !contratada || !!bloqueo} aria-describedby={bloqueo ? 'razon-lote' : undefined}>
           Abrir el lote de {titulo}
         </button>
       </div>
@@ -452,6 +487,35 @@ const ruta = (p: string) => `/clientes/${cliente.id}/contenido/${p}`;
   .modo-generar .opcion { margin: 0; font-weight: 400; }
   .modo-generar .opcion strong { display: block; color: var(--tinta); }
   .modo-generar .opcion .secundario { display: block; }
+
+  /* Elegir los temas del mes: una fila por pieza. En celular cada fila es una
+     tarjeta apilada; desde tablet el formato y la fecha van lado a lado. */
+  .temas-mes { margin-top: 18px; }
+  .temas-mes h3 { font: var(--t-h3); color: var(--tinta); }
+  .tema-lista { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 12px; }
+  .tema-fila { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--linea); border-radius: var(--r-sm); background: var(--fondo); }
+  .tema-fila-cab { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; color: var(--tinta); }
+  .tema-fila-campos { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 420px) { .tema-fila-campos { grid-template-columns: 1fr; } }
+  .tema-actual { display: grid; gap: 6px; justify-items: start; }
+  .tema-texto { margin: 0; color: var(--tinta); }
+  .tema-id { font-size: 12.5px; padding: 2px 6px; border-radius: 6px; background: var(--gris); color: var(--texto); }
+  .tema-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+  .tema-selector { display: grid; gap: 10px; padding: 12px; border: 1px dashed var(--linea); border-radius: var(--r-sm); background: var(--tarjeta); }
+  .tema-filtros { display: grid; gap: 10px; }
+  @media (min-width: 700px) { .tema-filtros { grid-template-columns: 2fr 1fr auto; align-items: end; } }
+  .tema-opciones { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 360px; overflow-y: auto; }
+  .tema-op {
+    display: grid; gap: 4px; width: 100%; min-height: 44px; text-align: left; padding: 10px 12px; cursor: pointer;
+    border: 1px solid var(--linea); border-radius: var(--r-sm); background: var(--fondo); color: var(--texto); font: var(--t-body);
+  }
+  .tema-op:hover:not(:disabled) { border-color: var(--azul); }
+  .tema-op:focus-visible { outline: none; box-shadow: var(--foco); }
+  .tema-op.actual { border-color: var(--azul); background: var(--azul-s); }
+  .tema-op:disabled { opacity: 0.6; cursor: not-allowed; }
+  .marca-confirmar { display: flex; gap: 10px; align-items: center; min-height: 44px; margin: 0; font-weight: 400; cursor: pointer; }
+  .marca-confirmar input { width: 18px; height: 18px; min-height: 0; padding: 0; flex: 0 0 auto; accent-color: var(--rosa); }
+
   .modo-generar .con-arte { background: transparent; border-style: dashed; }
 
   /* Tarjetas del carrusel y guion del reel: listas numeradas que se editan

@@ -16,6 +16,11 @@ const espia = vi.hoisted(() => ({
   archivos: [] as unknown[],
 }));
 
+// Dependencia dura del mes (investigación y mapa): cumplida salvo que la prueba la apague.
+const dep = vi.hoisted(() => ({ valor: { ok: true, razon: '' } }));
+vi.mock('@/flujo/dependencias', () => ({ dependenciasDelMes: async () => dep.valor }));
+vi.mock('@/flujo/servicio', async (importarReal) => ({ ...(await importarReal<typeof import('@/flujo/servicio')>()), etapasDelCliente: async () => [] }));
+
 vi.mock('@/db', async (importarReal) => {
   const real = await importarReal<typeof import('@/db')>();
   const datosDe = (tabla: unknown) => {
@@ -95,6 +100,18 @@ beforeEach(() => {
   pedir.mockResolvedValue({ datos: { opciones: [opcion(1), opcion(2), opcion(3)] }, tokensEntrada: 1_000, tokensSalida: 800 });
 });
 afterEach(() => { if (urlPrevia !== undefined) process.env.DATABASE_URL = urlPrevia; });
+
+describe('dependencia dura', () => {
+  it('sin investigación o mapa de pilares no se piden propuestas: 409 con la razón y sin gastar', async () => {
+    dep.valor = { ok: false, razon: 'Falta generar el mapa de pilares antes de armar el mes.' };
+    try {
+      const r = await llamar();
+      expect(r.status).toBe(409);
+      expect((await r.json()).errores[0]).toBe('Falta generar el mapa de pilares antes de armar el mes.');
+      expect(pedir).not.toHaveBeenCalled();
+    } finally { dep.valor = { ok: true, razon: '' }; }
+  });
+});
 
 describe('quién puede pedir propuestas', () => {
   it('un id que no es UUID no llega a la base', async () => {

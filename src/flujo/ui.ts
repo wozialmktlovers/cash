@@ -68,12 +68,15 @@ export function botonesEtapa(o: {
   esOperadorAsignado: boolean;
   comentariosAbiertos: number;
   hayInvestigacionConDatos: boolean;
+  /** Solo cuenta para `desarrollo_mensual`, que aquí no tiene botones: las otras tres etapas no dependen del mapa. */
+  hayMapaDePilares?: boolean;
   etapasCliente: EtapaCliente[];
 }): BotonEtapa[] {
   const { etapa, rol, esOperadorAsignado, comentariosAbiertos, hayInvestigacionConDatos, etapasCliente } = o;
+  const hayMapaDePilares = o.hayMapaDePilares ?? true;
   if (etapa.etapa === 'desarrollo_mensual') return [];
 
-  const dependencias = dependenciasCumplidas(etapa.etapa, etapasCliente, hayInvestigacionConDatos);
+  const dependencias = dependenciasCumplidas(etapa.etapa, etapasCliente, hayInvestigacionConDatos, hayMapaDePilares);
   const prueba = (accion: Accion, comentariosAbiertosPrueba: number, comentarioGeneral: string) =>
     aplicarAccion({ etapa, accion, rol, esOperadorAsignado, comentariosAbiertos: comentariosAbiertosPrueba, comentarioGeneral, dependencias });
 

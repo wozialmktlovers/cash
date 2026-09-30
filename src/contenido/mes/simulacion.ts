@@ -25,7 +25,7 @@ export function respuestaSimulada(t: EntradaTanda): unknown {
   return {
     resultado: {
       piezas: t.ranuras.map((r, i) => {
-        const tema = t.candidatos.get(r.ref)?.[0];
+        const tema = t.temas.get(r.ref);
         const idea = tema?.texto ?? 'Una idea de la estrategia del mes';
         const [a, m, d] = r.fecha.split('-');
         return {

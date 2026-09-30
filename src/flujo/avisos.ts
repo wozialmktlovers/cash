@@ -5,7 +5,7 @@
 // correo — no hay que duplicarla aquí.
 
 import { and, eq } from 'drizzle-orm';
-import { db, notificaciones, users } from '@/db';
+import { db, notificaciones, users, clienteEtapas } from '@/db';
 import { enviarCorreo } from '@/lib/correo';
 import { enlaceCorreo } from '@/lib/base-url';
 import { nombrePeriodo } from '@/lib/ui/periodo';
@@ -76,8 +76,12 @@ function candidatosDe(evento: EventoAviso, ctx: ContextoDestinatarios): (Usuario
     }
     case 'entregable_generado':
     case 'job_fallido':
-    case 'mes_generado':
       return [ctx.autor];
+    case 'mes_generado':
+      // El mes lo escriben dos puestos a la vez: el copy (contenido) y el arte
+      // (diseño) salen de lo mismo, así que se enteran los DOS responsables de
+      // la etapa, además de quien autorizó los temas y lanzó el trabajo.
+      return [ctx.autor, ...ctx.operadores];
     case 'lote_auto_aprobado': {
       // C3: el plazo del lote mensual venció y el sistema lo dio por aprobado.
       // Se entera el equipo, no el cliente: al cliente ya se le anunció el
@@ -321,10 +325,12 @@ export async function notificar(evento: EventoAviso, ctx: ContextoAviso, enlace:
   }));
 }
 
-/** Aviso de un job de pipeline: entregable generado, mes generado o job fallido, solo a quien lo lanzó. */
+/** Aviso de un job de pipeline: entregable generado o job fallido, a quien lo lanzó; mes generado, además, a los dos responsables del desarrollo mensual. */
 export async function avisarJob(o: {
   evento: 'entregable_generado' | 'job_fallido' | 'mes_generado';
   creadoPor: string | null;
+  /** Solo `mes_generado`: con él se buscan los responsables de la etapa del desarrollo mensual. */
+  clientId?: string;
   cliente: string;
   etapa: string;
   enlace: string;
@@ -333,13 +339,21 @@ export async function avisarJob(o: {
   detalle?: string;
 }): Promise<void> {
   const autor = await usuarioPorId(o.creadoPor);
-  if (!autor) return;
+  // El mes avisa también a los responsables (contenido y diseño), aunque quien
+  // lo lanzó ya no exista o sea un admin: nadie se queda sin enterarse.
+  let operadores: Usuario[] = [];
+  if (o.evento === 'mes_generado' && o.clientId) {
+    const [etapa] = await db.select({ id: clienteEtapas.id }).from(clienteEtapas)
+      .where(and(eq(clienteEtapas.clientId, o.clientId), eq(clienteEtapas.etapa, 'desarrollo_mensual'))).limit(1);
+    operadores = await responsablesActivosDeEtapa(etapa?.id);
+  }
+  if (!autor && operadores.length === 0) return;
   const datos: DatosAviso = { cliente: o.cliente, etapa: o.etapa };
   if (o.periodo) datos.periodo = o.periodo;
   if (o.detalle) datos.detalle = o.detalle;
   await notificar(
     o.evento,
-    { admins: [], operadores: [], autor, usuariosCliente: [], etapaVisibleCliente: false, datos },
+    { admins: [], operadores, autor, usuariosCliente: [], etapaVisibleCliente: false, datos },
     o.enlace,
   );
 }

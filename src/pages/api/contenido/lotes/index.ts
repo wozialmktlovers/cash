@@ -1,12 +1,11 @@
 import type { APIRoute } from 'astro';
-import { eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { db, contenidoLotes, researchResults } from '@/db';
+import { db, contenidoLotes } from '@/db';
 import { DIAS_REVISION_POR_OMISION, periodoValido, type Paquete } from '@/contenido/reglas';
 import { sincronizarEtapa } from '@/contenido/servicio';
-import { NOMBRE_ETAPA, dependenciasCumplidas } from '@/flujo/reglas';
+import { NOMBRE_ETAPA } from '@/flujo/reglas';
+import { dependenciasDelMes } from '@/flujo/dependencias';
 import { etapasDelCliente } from '@/flujo/servicio';
-import { investigacionUtil } from '@/lib/precheck';
 import { violaRestriccionUnica } from '@/lib/unicidad';
 import { clienteOperable } from '@/lib/visibilidad';
 
@@ -81,11 +80,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     return json({ ok: false, errores: [`${NOMBRE_ETAPA.desarrollo_mensual} no está contratada.`] }, 409);
   }
 
-  const previos = await db
-    .select({ datos: researchResults.datos, version: researchResults.version })
-    .from(researchResults)
-    .where(eq(researchResults.clientId, clientId));
-  const dependencias = dependenciasCumplidas('desarrollo_mensual', etapas, Boolean(investigacionUtil(previos)));
+  const dependencias = await dependenciasDelMes(clientId, etapas);
   if (!dependencias.ok) return json({ ok: false, errores: [dependencias.razon] }, 409);
 
   let creado;

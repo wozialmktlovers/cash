@@ -158,6 +158,13 @@ export type Ranura = {
   funcion: Funcion;
   /** El pilar al que se le da preferencia al buscar temas (1–5). */
   pilar: number;
+  /**
+   * El tema que el equipo autorizó para esta ranura (paso «Elegir los temas»).
+   * Con él la ranura es cerrada: el modelo escribe sobre ese tema y no elige.
+   */
+  temaId?: string;
+  /** La fecha también quedó autorizada: la pieza se guarda ese día, sin que el modelo la mueva. */
+  fija?: boolean;
 };
 
 /** Qué formatos van al feed. Las historias se reparten aparte: conviven con el feed el mismo día. */
@@ -245,6 +252,12 @@ export function numerosLibres(ocupados: number[], cuantos: number): number[] {
  * mes, el modo y si se confirmó reemplazar piezas con arte. `planeadas` son
  * los ids que eran reemplazables al lanzar: al guardar solo se borran esos, y
  * solo si lo siguen siendo (`decidirGuardado`, ./guardado.ts).
+ *
+ * `temas` son las filas AUTORIZADAS (formato, fecha y tema de cada pieza, ver
+ * `FilaTema` en ./propuesta.ts) y `autorizadaPor`/`autorizadaEn` quién y cuándo
+ * las autorizó. Un trabajo encolado antes del paso «Elegir los temas» no los
+ * trae: el pipeline arma entonces la misma propuesta que habría visto el
+ * equipo, para que no se pierda.
  */
 export type ParametrosMes = {
   loteId: string;
@@ -252,6 +265,9 @@ export type ParametrosMes = {
   modo: Modo;
   incluirConArte: boolean;
   planeadas: string[];
+  temas?: { ref: number; formato: Formato; fecha: string; temaId: string }[];
+  autorizadaPor?: string | null;
+  autorizadaEn?: string | null;
 };
 
 export function leerParametros(v: unknown): ParametrosMes | null {
@@ -265,5 +281,20 @@ export function leerParametros(v: unknown): ParametrosMes | null {
     modo: p.modo as Modo,
     incluirConArte: p.incluirConArte === true,
     planeadas: Array.isArray(p.planeadas) ? p.planeadas.filter((x): x is string => typeof x === 'string') : [],
+    ...leerTemasAutorizados(p.temas),
+    autorizadaPor: typeof p.autorizadaPor === 'string' ? p.autorizadaPor : null,
+    autorizadaEn: typeof p.autorizadaEn === 'string' ? p.autorizadaEn : null,
   };
+}
+
+function leerTemasAutorizados(v: unknown): { temas?: NonNullable<ParametrosMes['temas']> } {
+  if (!Array.isArray(v)) return {};
+  const filas: NonNullable<ParametrosMes['temas']> = [];
+  for (const f of v) {
+    const r = f as Record<string, unknown> | null;
+    if (!r || typeof r.ref !== 'number' || typeof r.fecha !== 'string' || typeof r.temaId !== 'string'
+      || !(FORMATOS as readonly unknown[]).includes(r.formato)) return {};
+    filas.push({ ref: r.ref, formato: r.formato as Formato, fecha: r.fecha, temaId: r.temaId });
+  }
+  return filas.length ? { temas: filas } : {};
 }

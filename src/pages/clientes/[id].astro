@@ -6,7 +6,7 @@ import CampoObjetivos from '@/components/CampoObjetivos.astro';
 import LinksEditor from '@/components/LinksEditor';
 import FilesUploader from '@/components/FilesUploader';
 import LineaEtapas, { type TarjetaEtapaVM, type BotonResuelto } from '@/components/LineaEtapas.astro';
-import { investigacionUtil } from '@/lib/precheck';
+import { investigacionUtil, mapaUtil } from '@/lib/precheck';
 import { iniciales, tinte } from '@/lib/ui/cliente-visual';
 import { ETIQUETA_ESTADO, nombreTrabajo } from '@/lib/ui/progreso';
 import { destinoDeJob } from '@/lib/ui/destino-job';
@@ -15,7 +15,7 @@ import { clienteVisible } from '@/lib/visibilidad';
 import { itemsPerdida } from '@/lib/borrado';
 import { nombreVisible, ordenUsuarios } from '@/lib/usuarios';
 import { db, clientLinks, clientFiles, researchJobs, researchResults, growthResults, pilaresResults, clienteEtapas, etapaEventos, users, invitaciones, contenidoPiezas } from '@/db';
-import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, NOMBRE_PUESTO, PUESTOS_POR_ETAPA, ETAPAS, tipoDocumentoDe, type Etapa } from '@/flujo/reglas';
+import { ETIQUETA_ESTADO_ETAPA, NOMBRE_ETAPA, NOMBRE_PUESTO, PUESTOS_POR_ETAPA, ETAPAS, tipoDocumentoDe, dependenciasCumplidas, type Etapa } from '@/flujo/reglas';
 import { responsablesDeEtapas } from '@/flujo/responsables';
 import { botonesEtapa, marcaEtapa } from '@/flujo/ui';
 import { etapasDelCliente, comentariosAbiertosPorEtapa, enlaceDocumento, eventosDeEntrada, observacionesClientePorEtapa } from '@/flujo/servicio';
@@ -94,6 +94,7 @@ const fechaHora = fechaHoraMx;
 // agrupada para las 4 etapas (evita N+1); la investigación con datos, otra.
 const etapasCliente = await etapasDelCliente(cliente.id);
 const hayInvestigacionConDatos = !!investigacionUtil(resultados);
+const hayMapaDePilares = !!mapaUtil(mapas);
 const comentariosAbiertosPorEtapaId = await comentariosAbiertosPorEtapa(etapasCliente);
 const responsablesPorEtapa = await responsablesDeEtapas(etapasCliente.map((e) => e.id));
 // Responsables por etapa: «ser responsable» se decide etapa por etapa, no por
@@ -139,7 +140,7 @@ const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
   const comentariosAbiertos = comentariosAbiertosPorEtapaId.get(fila.id) ?? 0;
 
   const botones = botonesEtapa({
-    etapa: fila, rol: usuario.rol, esOperadorAsignado: esResponsableDe(fila.id), comentariosAbiertos, hayInvestigacionConDatos, etapasCliente,
+    etapa: fila, rol: usuario.rol, esOperadorAsignado: esResponsableDe(fila.id), comentariosAbiertos, hayInvestigacionConDatos, hayMapaDePilares, etapasCliente,
   });
 
   // Traduce cada botón «permitido» del motor de reglas a lo que la interfaz
@@ -171,11 +172,18 @@ const tarjetasEtapas: TarjetaEtapaVM[] = etapasCliente.map((fila, i) => {
   // devuelve ninguno. Su único botón es la puerta a la pantalla del mes, y la
   // pone aquí la ficha, que es la que sabe cuál es ese mes. Sustituye al
   // «Próximamente» que la tarjeta mostró hasta la tarea B3.
+  //
+  // Dependencia dura (rediseño 2026-09-30): sin investigación con datos y mapa
+  // de pilares no se abre un mes. El botón no se oculta: se deshabilita y dice
+  // por qué. Si el mes ya existe se sigue pudiendo abrir para leerlo, y la
+  // razón se queda a la vista como nota.
   if (fila.etapa === 'desarrollo_mensual') {
+    const dep = dependenciasCumplidas('desarrollo_mensual', etapasCliente, hayInvestigacionConDatos, hayMapaDePilares);
     botonesResueltos.push({
       id: 'mensual',
       href: `/clientes/${cliente.id}/contenido/${mesMensual}`,
       texto: `${loteDelMes ? 'Ver' : 'Abrir'} ${nombrePeriodo(mesMensual)}`,
+      ...(dep.ok ? {} : { bloqueo: dep.razon, deshabilitado: !loteDelMes }),
     });
   }
 

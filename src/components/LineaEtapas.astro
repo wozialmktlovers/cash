@@ -18,7 +18,11 @@ export type BotonResuelto =
   // como los demás: esa función decide qué transiciones puede pedir el
   // usuario, y esto no es una transición sino un enlace a la pantalla donde
   // se arma el lote. Lo resuelve la ficha, que es la que sabe a qué mes lleva.
-  | { id: 'mensual'; href: string; texto: string }
+  // `bloqueo` es la razón por la que falta algo (investigación o mapa de
+  // pilares, dependencia dura del mes) y se pinta siempre como texto visible;
+  // con `deshabilitado` el botón no lleva a ningún lado (no hay lote que
+  // abrir), sin él sigue siendo un enlace (el mes ya existe y se puede leer).
+  | { id: 'mensual'; href: string; texto: string; bloqueo?: string; deshabilitado?: boolean }
   | { id: 'iniciar' }
   | { id: 'solicitar'; disabled: boolean; razon: string }
   | { id: 'aprobar'; disabled: boolean; razon: string }
@@ -102,7 +106,14 @@ const ETAPAS_CONTRATABLES: Etapa[] = ['investigacion', 'pilares', 'desarrollo_me
           {t.botones.map((b) => {
             if (b.id === 'generar') return <a href={b.href} class="btn chico">{ETIQUETA_BOTON.generar}</a>;
             if (b.id === 'ver') return <a href={b.href} class="btn fantasma chico">{b.texto ?? ETIQUETA_BOTON.ver}</a>;
-            if (b.id === 'mensual') return <a href={b.href} class="btn chico">{b.texto}</a>;
+            if (b.id === 'mensual') return (
+              <>
+                {b.deshabilitado
+                  ? <button type="button" class="btn chico" disabled title={b.bloqueo}>{b.texto}</button>
+                  : <a href={b.href} class="btn chico">{b.texto}</a>}
+                {b.bloqueo && <p class="secundario etapa-razon-deshabilitado">{b.bloqueo}</p>}
+              </>
+            );
             if (b.id === 'generar-growth') return <button type="button" class="btn chico" data-generar-growth data-etapa-id={t.etapaId}>{ETIQUETA_BOTON['generar-growth']}</button>;
             if (b.id === 'iniciar') return <button type="button" class="btn chico" data-accion="iniciar" data-etapa-id={t.etapaId}>{ETIQUETA_BOTON.iniciar}</button>;
             if (b.id === 'solicitar') return (

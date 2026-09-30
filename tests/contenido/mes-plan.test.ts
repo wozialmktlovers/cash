@@ -158,7 +158,12 @@ describe('tandas y números', () => {
 
   it('los parámetros del job se leen con cuidado', () => {
     expect(leerParametros({ loteId: 'l', periodo: '2026-10', modo: 'completar' }))
-      .toEqual({ loteId: 'l', periodo: '2026-10', modo: 'completar', incluirConArte: false, planeadas: [] });
+      .toEqual({ loteId: 'l', periodo: '2026-10', modo: 'completar', incluirConArte: false, planeadas: [], autorizadaPor: null, autorizadaEn: null });
+    const temas = [{ ref: 1, formato: 'post', fecha: '2026-10-05', temaId: 'P1-S1-01' }];
+    expect(leerParametros({ loteId: 'l', periodo: '2026-10', modo: 'completar', temas, autorizadaPor: 'u1', autorizadaEn: '2026-09-30T00:00:00Z' }))
+      .toMatchObject({ temas, autorizadaPor: 'u1', autorizadaEn: '2026-09-30T00:00:00Z' });
+    // Unas filas mal formadas se descartan enteras.
+    expect(leerParametros({ loteId: 'l', periodo: '2026-10', modo: 'completar', temas: [{ ref: 'x' }] })?.temas).toBeUndefined();
     expect(leerParametros({ loteId: 'l', periodo: '2026-13', modo: 'completar' })).toBeNull();
     expect(leerParametros({ loteId: 'l', periodo: '2026-10', modo: 'borrar-todo' })).toBeNull();
     expect(leerParametros(null)).toBeNull();

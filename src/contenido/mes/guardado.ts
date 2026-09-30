@@ -65,7 +65,8 @@ export function elegirFecha(plan: string, propuesta: string | null, tomadas: Set
 export function armarAltas(generadas: PiezaGenerada[], numerosOcupados: number[]): Alta[] {
   const tomadas = new Set(generadas.map((g) => g.ranura.fecha));
   const conFecha = generadas.map((g) => {
-    const fecha = elegirFecha(g.ranura.fecha, g.pieza.fecha, tomadas);
+    // Una fecha autorizada (`fija`) no se mueve: el equipo la eligió a mano.
+    const fecha = g.ranura.fija ? g.ranura.fecha : elegirFecha(g.ranura.fecha, g.pieza.fecha, tomadas);
     tomadas.add(fecha);
     return { g, fecha };
   }).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.g.ranura.ref - b.g.ranura.ref);

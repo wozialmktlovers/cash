@@ -1,200 +1,342 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 /**
- * POST /api/contenido/lotes/[id]/generar — lanzar la generación del mes con IA.
- *
- * Se simula `@/db` con el patrón de `contenido-propuestas.test.ts`: cualquier
- * consulta no prevista revienta. La ruta no llama al modelo (solo encola el
- * job), y aquí se comprueba quién puede, qué pide antes y qué deja en la cola.
+ * El paso «Elegir los temas del mes» (`…/lotes/[id]/temas`) y «Autorizar temas y
+ * generar contenido» (`…/lotes/[id]/generar`). Sin base ni modelo: `@/db` y los
+ * servicios que leen el banco están simulados, y lo que se comprueba son las
+ * decisiones de las rutas —quién puede, qué valida, qué guarda y qué deja en la
+ * cola—.
  */
 const espia = vi.hoisted(() => ({
-  lotes: [] as unknown[],
-  mapas: [] as unknown[],
-  piezas: [] as unknown[],
-  jobs: [] as unknown[],
+  lote: null as any,
+  cliente: null as any,
+  piezas: [] as any[],
+  jobs: [] as any[],
   insertados: [] as any[],
+  /** Lo que se escribió en `contenido_lotes.temas_mes`. */
+  guardados: [] as any[],
+  dependencias: { ok: true, razon: '' },
+  responsables: new Set<string>(),
+  catalogo: [] as any[],
+  usadoEn: new Map<string, string>(),
 }));
 
 vi.mock('@/db', async (importarReal) => {
   const real = await importarReal<typeof import('@/db')>();
-  const datosDe = (tabla: unknown) => {
-    if (tabla === real.contenidoLotes) return espia.lotes;
-    if (tabla === real.pilaresResults) return espia.mapas;
-    if (tabla === real.contenidoPiezas) return espia.piezas;
-    if (tabla === real.researchJobs) return espia.jobs;
-    throw new Error('Consulta no prevista en la prueba');
-  };
   const lectura = () => {
     let tabla: unknown;
+    const datos = () => (tabla === real.researchJobs ? espia.jobs : tabla === real.clienteEtapas ? [{ id: 'etapa-mensual' }] : (() => { throw new Error('Consulta no prevista'); })());
     const b: Record<string, unknown> = {
       from(t: unknown) { tabla = t; return b; },
-      innerJoin() { return b; },
       where() { return b; },
-      orderBy() { return b; },
-      limit: async () => datosDe(tabla),
-      then: (ok: (v: unknown) => unknown, mal: (e: unknown) => unknown) => Promise.resolve().then(() => datosDe(tabla)).then(ok, mal),
+      limit: async () => datos(),
     };
     return b;
   };
-  return {
-    ...real,
-    db: {
-      select: () => lectura(),
-      insert: (tabla: unknown) => ({
-        values: (v: any) => ({
-          returning: async () => {
-            if (tabla !== real.researchJobs) throw new Error('Alta no prevista');
-            espia.insertados.push(v);
-            return [{ id: 'job-nuevo' }];
-          },
-        }),
-      }),
-    },
-  };
+  const escritura = (tx: boolean) => ({
+    update: () => ({ set: (v: any) => ({ where: async () => { if ('temasMes' in v) espia.guardados.push(v.temasMes); } }) }),
+    insert: () => ({ values: (v: any) => ({ returning: async () => { espia.insertados.push(v); return [{ id: 'job-nuevo' }]; } }) }),
+    ...(tx ? {} : {}),
+  });
+  return { ...real, db: { select: () => lectura(), ...escritura(false), transaction: async (fn: any) => fn(escritura(true)) } };
 });
 
-import { POST } from '@/pages/api/contenido/lotes/[id]/generar';
+vi.mock('@/lib/visibilidad', async (importarReal) => ({
+  ...(await importarReal<typeof import('@/lib/visibilidad')>()),
+  loteVisible: async (u: any) => (u.rol === 'cliente' ? null : { lote: espia.lote, cliente: espia.cliente }),
+}));
+vi.mock('@/flujo/dependencias', () => ({ dependenciasDelMes: async () => espia.dependencias }));
+vi.mock('@/flujo/servicio', async (importarReal) => ({ ...(await importarReal<typeof import('@/flujo/servicio')>()), etapasDelCliente: async () => [] }));
+vi.mock('@/flujo/responsables', () => ({ esResponsableDeEtapa: async (_e: string, u: string) => espia.responsables.has(u) }));
+vi.mock('@/contenido/mes/banco-servicio', async (importarReal) => ({
+  ...(await importarReal<typeof import('@/contenido/mes/banco-servicio')>()),
+  cargarBancoDelMes: async () => ({
+    mapaId: 'mapa-1', mapa: espia.mapa, catalogo: espia.catalogo, piezasLote: espia.piezas,
+    temasDelCliente: espia.piezas.map((p) => ({ id: p.id, temaId: p.temaId })), usadoEn: espia.usadoEn,
+  }),
+}));
+
+import { POST as GENERAR } from '@/pages/api/contenido/lotes/[id]/generar';
+import { POST as PROPONER, PUT as GUARDAR } from '@/pages/api/contenido/lotes/[id]/temas';
+import { leerSeleccion } from '@/contenido/mes/propuesta';
+import { catalogoDeTemas } from '@/contenido/mes/temas';
 import { mapaFalso } from '../fixtures/pilares';
 
 const LOTE = '00000000-0000-4000-8000-0000000000b1';
 const CLIENTE = '00000000-0000-4000-8000-0000000000c1';
-const OPERADOR = '00000000-0000-4000-8000-0000000000e1';
+const usuario = (id: string, rol: 'admin' | 'operador' | 'cliente' = 'operador') =>
+  ({ id, email: `${id}@x.mx`, nombre: id, apellido: null, rol, clientId: rol === 'cliente' ? CLIENTE : null, activo: true });
+const admin = usuario('admin', 'admin');
+const contenido = usuario('contenido');
+const diseno = usuario('diseno');
+const otro = usuario('otro');
+const cliente = usuario('cliente', 'cliente');
 
-const admin = { id: '00000000-0000-4000-8000-0000000000a9', email: 'a@x.mx', nombre: null, apellido: null, rol: 'admin' as const, clientId: null, activo: true };
-const operador = { id: OPERADOR, email: 'o@x.mx', nombre: 'Ope', apellido: null, rol: 'operador' as const, clientId: null, activo: true };
-const operadorAjeno = { ...operador, id: '00000000-0000-4000-8000-0000000000e9' };
-const usuarioCliente = { id: '00000000-0000-4000-8000-0000000000f1', email: 'c@x.mx', nombre: null, apellido: null, rol: 'cliente' as const, clientId: CLIENTE, activo: true };
+const pieza = (id: string, extra: Record<string, unknown> = {}) =>
+  ({ id, numero: 1, formato: 'post', estadoCliente: 'pendiente', arte: [], fechaPublicacion: null, temaId: null, ...extra });
 
-const cliente = { id: CLIENTE, operadorId: OPERADOR, nombre: 'Negocio de prueba', paquete: { post: 2, reel: 1 } };
-const lote = { id: LOTE, clientId: CLIENTE, periodo: '2026-10', estado: 'en_proceso' };
-const pieza = (id: string, extra: Record<string, unknown> = {}) => ({ id, numero: 1, formato: 'post', estadoCliente: 'pendiente', arte: [], fechaPublicacion: null, temaId: null, ...extra });
-
-const llamar = (cuerpo?: unknown, usuario: unknown = operador) => POST({
+const peticion = (metodo: 'POST' | 'PUT', cuerpo: unknown, quien: unknown) => ({
   params: { id: LOTE },
-  request: new Request(`http://x/api/contenido/lotes/${LOTE}/generar`, {
-    method: 'POST',
+  request: new Request(`http://x/api/contenido/lotes/${LOTE}/x`, {
+    method: metodo,
     ...(cuerpo === undefined ? {} : { body: JSON.stringify(cuerpo), headers: { 'Content-Type': 'application/json' } }),
   }),
-  locals: { usuario },
-} as any);
+  locals: { usuario: quien },
+}) as any;
+const proponer = (cuerpo?: unknown, quien: unknown = contenido) => PROPONER(peticion('POST', cuerpo, quien));
+const guardar = (cuerpo: unknown, quien: unknown = contenido) => GUARDAR(peticion('PUT', cuerpo, quien));
+const generar = (cuerpo?: unknown, quien: unknown = contenido) => GENERAR(peticion('POST', cuerpo, quien));
 
-let urlPrevia: string | undefined;
+/** Propone y devuelve las filas, como lo haría la pantalla. */
+async function filasPropuestas(cuerpo?: unknown) {
+  const r = await (await proponer(cuerpo)).json();
+  return r.seleccion.filas as { ref: number; formato: string; fecha: string; temaId: string | null }[];
+}
+
 beforeEach(() => {
-  urlPrevia = process.env.DATABASE_URL;
-  delete process.env.DATABASE_URL;
-  espia.lotes = [{ lote: { ...lote }, cliente: { ...cliente } }];
-  espia.mapas = [{ datos: mapaFalso() }];
+  espia.mapa = mapaFalso();
+  espia.catalogo = catalogoDeTemas(espia.mapa);
+  espia.lote = { id: LOTE, clientId: CLIENTE, periodo: '2026-10', estado: 'en_proceso', temasMes: null };
+  espia.cliente = { id: CLIENTE, nombre: 'Negocio de prueba', paquete: { post: 2, reel: 1 } };
   espia.piezas = [];
   espia.jobs = [];
   espia.insertados = [];
+  espia.guardados = [];
+  espia.dependencias = { ok: true, razon: '' };
+  espia.responsables = new Set(['contenido', 'diseno']);
+  espia.usadoEn = new Map();
 });
-afterEach(() => { if (urlPrevia !== undefined) process.env.DATABASE_URL = urlPrevia; });
 
-describe('permisos', () => {
-  it('el admin lanza', async () => {
-    const r = await llamar(undefined, admin);
-    expect(r.status).toBe(201);
-    expect(espia.insertados[0].creadoPor).toBe(admin.id);
+describe('permisos: proponer, editar y autorizar', () => {
+  it('el admin y los responsables de contenido y de diseño sí', async () => {
+    for (const quien of [admin, contenido, diseno]) {
+      expect((await proponer(undefined, quien)).status, quien.id).toBe(200);
+      espia.lote = { ...espia.lote, temasMes: espia.guardados.at(-1) };
+      expect((await generar(undefined, quien)).status, quien.id).toBe(201);
+      espia.jobs = [];
+    }
   });
 
-  it('el operador asignado lanza', async () => {
-    const r = await llamar();
-    expect(r.status).toBe(201);
-    expect(await r.json()).toMatchObject({ ok: true, id: 'job-nuevo', piezas: 3 });
+  it('otro operador ve pero no toca: 403 y nada se guarda ni se encola', async () => {
+    for (const r of [await proponer(undefined, otro), await guardar({ filas: [] }, otro), await generar(undefined, otro)]) {
+      expect(r.status).toBe(403);
+      expect((await r.json()).errores[0]).toMatch(/responsables del desarrollo mensual/);
+    }
+    expect(espia.guardados).toHaveLength(0);
+    expect(espia.insertados).toHaveLength(0);
   });
 
-  it('cualquier operador puede encolar (visibilidad total)', async () => {
-    const r = await llamar(undefined, operadorAjeno);
-    expect(r.status).toBe(201);
-    expect(espia.insertados).toHaveLength(1);
+  it('el usuario cliente recibe 404', async () => {
+    expect((await proponer(undefined, cliente)).status).toBe(404);
+    expect((await generar(undefined, cliente)).status).toBe(404);
   });
+});
 
-  it('el usuario cliente recibe 404 y no encola nada', async () => {
-    const r = await llamar(undefined, usuarioCliente);
-    expect(r.status).toBe(404);
+describe('dependencia dura', () => {
+  it('sin investigación o sin mapa, proponer y generar responden 409 con la razón y no hacen nada', async () => {
+    espia.dependencias = { ok: false, razon: 'Falta generar el mapa de pilares antes de armar el mes.' };
+    for (const r of [await proponer(), await guardar({ filas: [] }), await generar()]) {
+      expect(r.status).toBe(409);
+      expect((await r.json()).errores[0]).toBe('Falta generar el mapa de pilares antes de armar el mes.');
+    }
+    expect(espia.guardados).toHaveLength(0);
     expect(espia.insertados).toHaveLength(0);
   });
 });
 
-describe('lo que pide antes de lanzar', () => {
+describe('lo que pide antes de continuar', () => {
   it('sin paquete, pide definirlo y manda a la ficha', async () => {
-    espia.lotes = [{ lote, cliente: { ...cliente, paquete: null } }];
-    const r = await llamar();
+    espia.cliente = { ...espia.cliente, paquete: null };
+    const r = await proponer();
     expect(r.status).toBe(409);
-    const cuerpo = await r.json();
-    expect(cuerpo.errores[0]).toMatch(/paquete/i);
-    expect(cuerpo.enlace).toBe(`/clientes/${CLIENTE}#paquete`);
-    expect(espia.insertados).toHaveLength(0);
-  });
-
-  it('un paquete en ceros cuenta como sin paquete', async () => {
-    espia.lotes = [{ lote, cliente: { ...cliente, paquete: { post: 0 } } }];
-    expect((await llamar()).status).toBe(409);
-  });
-
-  it('sin mapa de pilares no hay de dónde generar', async () => {
-    espia.mapas = [];
-    const r = await llamar();
-    expect(r.status).toBe(409);
-    expect((await r.json()).errores[0]).toMatch(/mapa de pilares/);
+    expect((await r.json()).enlace).toBe(`/clientes/${CLIENTE}#paquete`);
   });
 
   it('solo un mes en proceso', async () => {
-    espia.lotes = [{ lote: { ...lote, estado: 'en_revision' }, cliente }];
-    expect((await llamar()).status).toBe(409);
+    espia.lote = { ...espia.lote, estado: 'en_revision' };
+    expect((await proponer()).status).toBe(409);
   });
 
   it('con piezas, hay que elegir completar o reemplazar', async () => {
     espia.piezas = [pieza('p1')];
-    const r = await llamar({});
+    const r = await proponer({});
     expect(r.status).toBe(400);
     expect((await r.json()).errores[0]).toMatch(/completar|reemplazar/);
   });
 
-  it('un cliente con otro trabajo en curso no lanza un segundo', async () => {
-    espia.jobs = [{ id: 'job-viejo' }];
-    const r = await llamar();
-    expect(r.status).toBe(409);
-    expect(await r.json()).toMatchObject({ ok: false, jobId: 'job-viejo' });
-  });
-
-  it('si el mes ya cuadra, no hay nada que generar', async () => {
+  it('si el mes ya cuadra, no hay nada que proponer ni generar', async () => {
     espia.piezas = [pieza('p1'), pieza('p2'), pieza('r1', { formato: 'reel' })];
-    const r = await llamar({ modo: 'completar' });
-    expect(r.status).toBe(409);
+    expect((await proponer({ modo: 'completar' })).status).toBe(409);
+    expect((await generar({ modo: 'completar' })).status).toBe(409);
   });
 });
 
-describe('lo que deja en la cola', () => {
-  it('completar: un job `contenido` con el lote y el mes, sin nada que borrar', async () => {
-    espia.piezas = [pieza('p1', { estadoCliente: 'aprobada' })];
-    const r = await llamar({ modo: 'completar' });
+describe('POST …/temas: la propuesta', () => {
+  it('propone una fila por pieza del paquete, con tema distinto, dentro del mes, y la guarda como borrador', async () => {
+    const r = await (await proponer()).json();
+    const { filas } = r.seleccion;
+    expect(filas).toHaveLength(3);
+    expect(filas.filter((f: any) => f.formato === 'post')).toHaveLength(2);
+    expect(filas.filter((f: any) => f.formato === 'reel')).toHaveLength(1);
+    for (const f of filas) { expect(f.fecha.startsWith('2026-10-')).toBe(true); expect(f.temaId).toMatch(/^P\d-S\d-\d{2}$/); }
+    expect(new Set(filas.map((f: any) => f.temaId)).size).toBe(3);
+    expect(espia.guardados).toHaveLength(1);
+    expect(leerSeleccion(espia.guardados[0])).toMatchObject({ autorizada: null, propuestaPor: 'contenido' });
+    expect(espia.insertados).toHaveLength(0); // proponer no encola IA
+  });
+
+  it('prefiere pendientes y no propone los temas de otras piezas del cliente', async () => {
+    const avance: Record<string, string> = {};
+    for (const t of espia.catalogo.slice(0, 250)) avance[t.id] = 'en_desarrollo';
+    espia.catalogo = catalogoDeTemas(espia.mapa, avance);
+    const usados = espia.catalogo.filter((t) => t.estado === 'pendiente').slice(0, 3).map((t) => t.id);
+    espia.piezas = usados.map((temaId, i) => pieza(`x${i}`, { temaId, estadoCliente: 'aprobada', formato: 'historia' }));
+    const filas = await filasPropuestas({ modo: 'completar' });
+    const ids = filas.map((f) => f.temaId!);
+    for (const id of ids) {
+      expect(usados).not.toContain(id);
+      expect(espia.catalogo.find((t) => t.id === id)?.estado).toBe('pendiente');
+    }
+  });
+
+  it('volver a proponer regenera todo y descarta lo editado', async () => {
+    const [primera] = await filasPropuestas();
+    await guardar({ filas: [{ ...primera, temaId: 'P5-S3-20' }] }).catch(() => null);
+    const otra = await filasPropuestas();
+    expect(otra[0].temaId).toBe(primera.temaId);
+  });
+});
+
+describe('PUT …/temas: cambiar un tema por otro del banco', () => {
+  it('acepta cualquier tema del banco, incluso de otro pilar, y el borrador sobrevive a recargar', async () => {
+    const filas = await filasPropuestas();
+    const de = (n: number) => espia.catalogo.find((t) => t.pilar === n && !filas.some((f) => f.temaId === t.id))!;
+    const cambiadas = filas.map((f, i) => (i === 0 ? { ...f, temaId: de(5).id, formato: 'reel', fecha: '2026-10-31' } : f));
+    const r = await guardar({ filas: cambiadas });
+    expect(r.status).toBe(200);
+    // «Recargar»: lo último que quedó en el lote es lo que ve la pantalla.
+    const leida = leerSeleccion(espia.guardados.at(-1))!;
+    expect(leida.filas).toEqual(cambiadas);
+    expect(leida.autorizada).toBeNull();
+  });
+
+  it('no deja repetir el mismo tema dos veces en el mes', async () => {
+    const filas = await filasPropuestas();
+    const r = await guardar({ filas: filas.map((f, i) => (i === 1 ? { ...f, temaId: filas[0].temaId } : f)) });
+    expect(r.status).toBe(409);
+    expect((await r.json()).errores[0]).toMatch(/no se puede repetir/);
+  });
+
+  it('tampoco el de una pieza que se queda en el mes', async () => {
+    espia.piezas = [pieza('p1', { numero: 7, temaId: 'P1-S1-01', estadoCliente: 'aprobada' })];
+    const filas = await filasPropuestas({ modo: 'completar' });
+    const r = await guardar({ modo: 'completar', filas: filas.map((f, i) => (i === 0 ? { ...f, temaId: 'P1-S1-01' } : f)) });
+    expect(r.status).toBe(409);
+    expect((await r.json()).errores[0]).toMatch(/pieza 7/);
+  });
+
+  it('un tema inventado, una fecha fuera del mes o un conteo distinto del paquete se rechazan', async () => {
+    const filas = await filasPropuestas();
+    expect((await guardar({ filas: filas.map((f, i) => (i === 0 ? { ...f, temaId: 'P9-S9-99' } : f)) })).status).toBe(409);
+    expect((await guardar({ filas: filas.map((f, i) => (i === 0 ? { ...f, fecha: '2026-11-02' } : f)) })).status).toBe(409);
+    expect((await guardar({ filas: filas.slice(1) })).status).toBe(409);
+  });
+
+  it('avisa, sin impedirlo, que un cambio de formato rompe el conteo del paquete', async () => {
+    const filas = await filasPropuestas();
+    const r = await guardar({ filas: filas.map((f, i) => (i === 0 ? { ...f, formato: 'historia' } : f)) });
+    expect(r.status).toBe(200);
+    const cuerpo = await r.json();
+    expect(cuerpo.avisos[0]).toMatch(/no cuadra/);
+    expect(cuerpo.desajuste).not.toBeNull();
+  });
+});
+
+describe('POST …/generar: autorizar y lanzar', () => {
+  it('sin temas elegidos (ni filas ni borrador) pide elegirlos primero', async () => {
+    const r = await generar();
+    expect(r.status).toBe(409);
+    expect((await r.json()).errores[0]).toMatch(/Primero elige los temas/);
+    expect(espia.insertados).toHaveLength(0);
+  });
+
+  it('autoriza el borrador guardado: guarda quién y cuándo y encola el job con los temas fijos', async () => {
+    const filas = await filasPropuestas();
+    espia.lote = { ...espia.lote, temasMes: espia.guardados.at(-1) };
+    const antes = Date.now();
+    const r = await generar(undefined, diseno);
     expect(r.status).toBe(201);
+    expect(await r.json()).toMatchObject({ ok: true, id: 'job-nuevo', piezas: 3 });
+
+    const auth = leerSeleccion(espia.guardados.at(-1))!.autorizada!;
+    expect(auth).toMatchObject({ usuarioId: 'diseno', nombre: 'diseno' });
+    expect(Date.parse(auth.en)).toBeGreaterThanOrEqual(antes - 1000);
+
     expect(espia.insertados[0]).toMatchObject({
-      clientId: CLIENTE, tipo: 'contenido', estado: 'encolado',
-      parametros: { loteId: LOTE, periodo: '2026-10', modo: 'completar', incluirConArte: false, planeadas: [] },
+      clientId: CLIENTE, tipo: 'contenido', estado: 'encolado', creadoPor: 'diseno',
+      parametros: { loteId: LOTE, periodo: '2026-10', modo: 'completar', incluirConArte: false, planeadas: [], autorizadaPor: 'diseno', autorizadaEn: auth.en },
     });
-    expect((await r.json()).piezas).toBe(2);
+    expect(espia.insertados[0].parametros.temas).toEqual(filas.map((f) => ({ ref: f.ref, formato: f.formato, fecha: f.fecha, temaId: f.temaId })));
+  });
+
+  it('autoriza las filas que manda la pantalla, con el tema que el usuario cambió', async () => {
+    const filas = await filasPropuestas();
+    const nuevo = espia.catalogo.find((t) => t.pilar === 4 && !filas.some((f) => f.temaId === t.id))!.id;
+    const editadas = filas.map((f, i) => (i === 0 ? { ...f, temaId: nuevo } : f));
+    expect((await generar({ filas: editadas })).status).toBe(201);
+    expect(espia.insertados[0].parametros.temas[0].temaId).toBe(nuevo);
+  });
+
+  it('todas las filas necesitan tema y no se repite ninguno', async () => {
+    const filas = await filasPropuestas();
+    const sin = await generar({ filas: filas.map((f, i) => (i === 0 ? { ...f, temaId: null } : f)) });
+    expect(sin.status).toBe(409);
+    expect((await sin.json()).errores[0]).toMatch(/Elige un tema/);
+    const dup = await generar({ filas: filas.map((f, i) => (i === 1 ? { ...f, temaId: filas[0].temaId } : f)) });
+    expect(dup.status).toBe(409);
+    expect(espia.insertados).toHaveLength(0);
+  });
+
+  it('si el conteo del paquete no cuadra, hay que confirmarlo de forma explícita', async () => {
+    const filas = await filasPropuestas();
+    const cambiadas = filas.map((f, i) => (i === 0 ? { ...f, formato: 'historia' } : f));
+    const r = await generar({ filas: cambiadas });
+    expect(r.status).toBe(409);
+    expect(await r.json()).toMatchObject({ requiereConfirmar: true });
+    expect(espia.insertados).toHaveLength(0);
+    expect((await generar({ filas: cambiadas, confirmarDesajuste: true })).status).toBe(201);
+  });
+
+  it('un cliente con otro trabajo en curso no lanza un segundo', async () => {
+    const filas = await filasPropuestas();
+    espia.jobs = [{ id: 'job-viejo' }];
+    const r = await generar({ filas });
+    expect(r.status).toBe(409);
+    expect(await r.json()).toMatchObject({ ok: false, jobId: 'job-viejo' });
+    expect(espia.insertados).toHaveLength(0);
   });
 
   it('reemplazar: solo planea borrar las sin revisar, y las con arte solo si se confirma', async () => {
     espia.piezas = [
-      pieza('aprobada', { estadoCliente: 'aprobada' }),
-      pieza('cambios', { estadoCliente: 'cambios' }),
-      pieza('conArte', { arte: [{ tipo: 'imagen', fileId: 'f' }] }),
-      pieza('libre', { formato: 'reel' }),
+      pieza('aprobada', { numero: 1, estadoCliente: 'aprobada' }),
+      pieza('cambios', { numero: 2, estadoCliente: 'cambios' }),
+      pieza('conArte', { numero: 3, arte: [{ tipo: 'imagen', fileId: 'f' }] }),
+      pieza('libre', { numero: 4, formato: 'reel' }),
     ];
-    await llamar({ modo: 'reemplazar' });
+    const filas = async (extra: object) => (await (await proponer({ modo: 'reemplazar', ...extra })).json()).seleccion.filas;
+    expect((await generar({ modo: 'reemplazar', filas: await filas({}) })).status).toBe(201);
     expect(espia.insertados[0].parametros).toMatchObject({ modo: 'reemplazar', incluirConArte: false, planeadas: ['libre'] });
 
     espia.insertados = [];
-    await llamar({ modo: 'reemplazar', incluirConArte: true });
+    const conArte = await filas({ incluirConArte: true });
+    expect((await generar({ modo: 'reemplazar', incluirConArte: true, filas: conArte })).status).toBe(201);
     expect(espia.insertados[0].parametros.planeadas.sort()).toEqual(['conArte', 'libre']);
   });
 
   it('`incluirConArte` no significa nada al completar', async () => {
-    espia.piezas = [pieza('conArte', { arte: [{ tipo: 'imagen', fileId: 'f' }] })];
-    await llamar({ modo: 'completar', incluirConArte: true });
+    espia.piezas = [pieza('conArte', { numero: 1, arte: [{ tipo: 'imagen', fileId: 'f' }] })];
+    const filas = (await (await proponer({ modo: 'completar' })).json()).seleccion.filas;
+    await generar({ modo: 'completar', incluirConArte: true, filas });
     expect(espia.insertados[0].parametros).toMatchObject({ modo: 'completar', incluirConArte: false, planeadas: [] });
   });
 });

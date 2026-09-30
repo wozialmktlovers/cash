@@ -15,6 +15,7 @@ import {
 } from './reglas';
 import { puedeCambiarEstadoComentario, comentariosVisibles, esDeOtraVersion, abiertosQueCuentan, limiteObservacionesCliente, type EstadoComentario } from './comentarios';
 import { investigacionUtil } from '@/lib/precheck';
+import { dependenciasDelMes } from './dependencias';
 import { clienteOperable, clienteVisible, esUuid } from '@/lib/visibilidad';
 import type { UsuarioSesion } from '@/lib/permisos';
 import { nombreVisible } from '@/lib/usuarios';
@@ -579,16 +580,21 @@ export async function ejecutarTransicion(o: {
   // investigación ni la de las 4 etapas del cliente.
   let dependencias: { ok: boolean; razon: string } = { ok: true, razon: '' };
   if (accion === 'iniciar') {
-    let hayInvestigacionConDatos = true;
-    if (fila.etapa === 'pilares' || fila.etapa === 'manual_campana') {
-      const investigaciones = await db
-        .select({ datos: researchResults.datos, version: researchResults.version })
-        .from(researchResults)
-        .where(eq(researchResults.clientId, cliente.id));
-      hayInvestigacionConDatos = Boolean(investigacionUtil(investigaciones));
-    }
     const etapasCliente = await db.select().from(clienteEtapas).where(eq(clienteEtapas.clientId, cliente.id));
-    dependencias = dependenciasCumplidas(fila.etapa, etapasCliente.map(paraReglas), hayInvestigacionConDatos);
+    if (fila.etapa === 'desarrollo_mensual') {
+      // Investigación con datos Y mapa de pilares (dependencia dura del mes).
+      dependencias = await dependenciasDelMes(cliente.id, etapasCliente.map(paraReglas));
+    } else {
+      let hayInvestigacionConDatos = true;
+      if (fila.etapa === 'pilares' || fila.etapa === 'manual_campana') {
+        const investigaciones = await db
+          .select({ datos: researchResults.datos, version: researchResults.version })
+          .from(researchResults)
+          .where(eq(researchResults.clientId, cliente.id));
+        hayInvestigacionConDatos = Boolean(investigacionUtil(investigaciones));
+      }
+      dependencias = dependenciasCumplidas(fila.etapa, etapasCliente.map(paraReglas), hayInvestigacionConDatos, true);
+    }
   }
 
   const comentarioGeneral = (comentario ?? '').trim();

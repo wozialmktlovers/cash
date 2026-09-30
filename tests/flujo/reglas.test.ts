@@ -220,18 +220,25 @@ describe('dependenciasCumplidas', () => {
   // A3: se cae el bloqueo «Próximamente». La etapa entra por la misma puerta
   // que pilares y el manual — ni más (no espera a que nadie apruebe) ni menos
   // (sin investigación con datos no hay de dónde sacar temas ni copy).
-  it('desarrollo_mensual solo pide investigación con datos, como pilares y el manual', () => {
+  it('desarrollo_mensual pide investigación con datos Y mapa de pilares (dependencia dura)', () => {
     const etapas = [
       et('investigacion', { estado: 'aprobada' }),
       et('pilares', { estado: 'aprobada' }),
     ];
     for (const lista of [[], etapas]) {
-      expect(dependenciasCumplidas('desarrollo_mensual', lista, true)).toEqual({ ok: true, razon: '' });
+      expect(dependenciasCumplidas('desarrollo_mensual', lista, true, true)).toEqual({ ok: true, razon: '' });
+      expect(dependenciasCumplidas('desarrollo_mensual', lista, true, false))
+        .toEqual({ ok: false, razon: 'Falta generar el mapa de pilares antes de armar el mes.' });
     }
+    // Sin investigación, esa razón va primero: no hay mapa sin ella.
+    expect(dependenciasCumplidas('desarrollo_mensual', [], false, false).razon).toBe('Falta completar la investigación antes de continuar.');
+    // El mapa solo le importa al mes.
+    expect(dependenciasCumplidas('pilares', [], true, false).ok).toBe(true);
+    expect(dependenciasCumplidas('manual_campana', [], true, false).ok).toBe(true);
   });
 
   it('desarrollo_mensual sin investigación con datos: bloqueada por la misma razón que las otras', () => {
-    const r = dependenciasCumplidas('desarrollo_mensual', [], false);
+    const r = dependenciasCumplidas('desarrollo_mensual', [], false, true);
     expect(r.ok).toBe(false);
     expect(r.razon).toBe(dependenciasCumplidas('pilares', [], false).razon);
     expect(r.razon).not.toContain('Próximamente');

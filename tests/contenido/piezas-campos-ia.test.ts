@@ -47,9 +47,13 @@ describe('prompt de imagen, guion y tarjetas en la API de piezas', () => {
 
 describe('el aviso en la campana al terminar', () => {
   const autor = { id: 'u1', email: 'o@x.mx', nombre: null, apellido: null, rol: 'operador' as const, activo: true };
-  it('le llega solo a quien lo lanzó y dice de qué mes y cuántas piezas', () => {
-    expect(destinatarios('mes_generado', { admins: [], operador: null, autor, usuariosCliente: [], etapaVisibleCliente: false }))
-      .toEqual([autor]);
+  it('le llega a quien lo lanzó y a los dos responsables (contenido y diseño), sin duplicar, y dice de qué mes y cuántas piezas', () => {
+    const contenido = { ...autor, id: 'u2', email: 'c@x.mx' };
+    const diseno = { ...autor, id: 'u3', email: 'd@x.mx' };
+    const ctx = { admins: [], autor, usuariosCliente: [], etapaVisibleCliente: false };
+    expect(destinatarios('mes_generado', { ...ctx, operadores: [] })).toEqual([autor]);
+    // El autor que además es responsable no recibe dos avisos.
+    expect(destinatarios('mes_generado', { ...ctx, operadores: [autor, contenido, diseno] })).toEqual([autor, contenido, diseno]);
     const t = textoAviso('mes_generado', { cliente: 'Negocio', etapa: 'Desarrollo mensual', periodo: '2026-10', detalle: '22 piezas' });
     expect(t.titulo).toBe('El contenido de Octubre 2026 de Negocio está listo');
     expect(t.texto).toContain('22 piezas');

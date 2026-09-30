@@ -19,6 +19,7 @@ const espia = vi.hoisted(() => ({
   cliente: null as Record<string, unknown> | null,
   etapas: [] as Record<string, unknown>[],
   investigaciones: [] as Record<string, unknown>[],
+  mapas: [] as Record<string, unknown>[],
   fallo: null as unknown,
   insertado: undefined as Record<string, unknown> | undefined,
   sincronizados: [] as string[],
@@ -26,7 +27,11 @@ const espia = vi.hoisted(() => ({
 
 vi.mock('@/db', async (importarReal) => {
   const real = await importarReal<typeof import('@/db')>();
-  const lectura = { from: () => lectura, where: async () => espia.investigaciones };
+  let tabla: unknown;
+  const lectura = {
+    from: (t: unknown) => { tabla = t; return lectura; },
+    where: async () => (tabla === real.pilaresResults ? espia.mapas : espia.investigaciones),
+  };
   const alta = {
     values(fila: Record<string, unknown>) {
       espia.insertado = fila;
@@ -87,6 +92,7 @@ beforeEach(() => {
   // Una investigación con datos: `contarEtapasConDatos` cuenta las etapas del
   // JSON que salieron `ok`, así que basta con una.
   espia.investigaciones = [{ datos: { mercado: { estado: 'ok' } }, version: 1 }];
+  espia.mapas = [{ datos: { pilares: [{ estado: 'ok', subcategorias: [{ nombre: 'S', temas: [{ id: 'P1-S1-01' }] }] }] }, version: 1 }];
   espia.fallo = null;
   espia.insertado = undefined;
   espia.sincronizados = [];
@@ -172,6 +178,16 @@ describe('POST /api/contenido/lotes', () => {
     const res = await llamar({ clientId: CLIENTE, periodo: '2026-09' });
     expect(res.status).toBe(409);
     expect((await res.json()).errores[0]).toContain('investigación');
+  });
+
+  it('sin mapa de pilares, 409 con la razón, y un mapa sin temas tampoco cuenta', async () => {
+    for (const mapas of [[], [{ datos: { pilares: [{ estado: 'fallo' }] }, version: 1 }]]) {
+      espia.mapas = mapas;
+      const res = await llamar({ clientId: CLIENTE, periodo: '2026-09' });
+      expect(res.status).toBe(409);
+      expect((await res.json()).errores[0]).toBe('Falta generar el mapa de pilares antes de armar el mes.');
+    }
+    expect(espia.insertado).toBeUndefined();
   });
 
   // Lo contrario de `puedeGenerar`, y a propósito (diseño §2): la etapa

@@ -7,14 +7,19 @@
 // modelo), `semana1`…`semana5` (una tanda de piezas por semana del mes) y
 // `guardado` (la única escritura sobre el lote, en una transacción).
 //
+// Los temas llegan YA AUTORIZADOS (`parametros.temas`, el paso «Elegir los
+// temas del mes», ./propuesta.ts): el trabajo no elige ninguno, solo arma las
+// ranuras con ellos y el modelo redacta. Un trabajo encolado antes de ese paso
+// no los trae; entonces se arma la misma propuesta que habría visto el equipo.
+//
 // Nada se escribe en el lote hasta el final. Si el trabajo se corta a la
 // mitad, las piezas que ya estaban siguen intactas; lo que sí se guarda es lo
 // que se alcanzó a escribir (rescate parcial), y el operador puede volver a
 // lanzar «completar lo que falta».
 
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import {
-  db, researchJobs, researchResults, pilaresResults, clients, clientLinks, clientFiles, contenidoLotes, contenidoPiezas,
+  db, researchJobs, researchResults, clients, clientLinks, clientFiles, contenidoLotes, contenidoPiezas,
 } from '@/db';
 import { armarContexto } from '@/research/contexto';
 import { superaTope, marcarDetenidas } from '@/research/pipeline';
@@ -25,15 +30,14 @@ import { investigacionUtil } from '@/lib/precheck';
 import { nombrePeriodo, periodoActual } from '@/lib/ui/periodo';
 import { avisarJob } from '@/flujo/avisos';
 import { NOMBRE_ETAPA } from '@/flujo/reglas';
-import type { MapaPilares, Funcion } from '@/pilares/schemas';
-import { avanceDelMapa, marcarTemasEnDesarrollo } from '@/pilares/avance-servicio';
+import type { MapaPilares } from '@/pilares/schemas';
+import { marcarTemasEnDesarrollo } from '@/pilares/avance-servicio';
 import { leerPaquete } from '../paquete';
 import { marcarContenidoTocado, refrescarLote } from '../servicio';
-import {
-  armarRanuras, faltantes, leerParametros, separarPiezas, tandasPorSemana, totalDe,
-  type ParametrosMes, type PiezaExistente, type Ranura,
-} from './plan';
-import { candidatosDeTanda, candidatosPara, catalogoDeTemas, pilaresPorUso, resolverTema, temasUsados, type TemaCatalogo } from './temas';
+import { leerParametros, tandasPorSemana, type ParametrosMes, type PiezaExistente, type Ranura } from './plan';
+import { type TemaCatalogo } from './temas';
+import { cargarBancoDelMes } from './banco-servicio';
+import { proponerTemas, ranurasAutorizadas } from './propuesta';
 import { correrTanda, modeloMes, resumenEstrategia, type EntradaTanda } from './agente';
 import { decidirGuardado, type PiezaGenerada } from './guardado';
 
@@ -94,14 +98,13 @@ type Deps = {
  * Genera las piezas de todas las tandas, sin tocar la base. Separado del job
  * para poder probar el reparto, los temas y el rescate con un agente simulado.
  *
- * `usados` entra con los temas de todas las piezas del cliente y sale con los
- * de este mes agregados: ningún tema se repite, ni con meses anteriores ni
- * entre tandas.
+ * Cada ranura trae su tema autorizado (`ranura.temaId`): el modelo escribe
+ * sobre él y la pieza se guarda con ese tema, digan lo que digan las llaves del
+ * JSON que devuelva. Ninguna ranura sin tema llega aquí (`ranurasAutorizadas`).
  */
 export async function generarTandas(o: {
   ranuras: Ranura[];
   catalogo: TemaCatalogo[];
-  usados: Set<string>;
   contexto: string;
   periodo: string;
   nombresPilares: string[];
@@ -117,6 +120,7 @@ export async function generarTandas(o: {
   let corte: CorteDeTrabajo | null = null;
   let tIn = 0, tOut = 0;
   const tandas = tandasPorSemana(o.ranuras);
+  const temaDe = new Map(o.catalogo.map((t) => [t.id, t]));
 
   for (let semana = 1; semana <= 5; semana++) {
     const etapa = `semana${semana}`;
@@ -130,13 +134,14 @@ export async function generarTandas(o: {
     let algunaOk = false;
     for (const tanda of deSemana) {
       if (!o.hayPresupuesto()) break;
-      const candidatos = candidatosDeTanda(tanda.ranuras, o.catalogo, o.usados);
+      const temas = new Map<number, TemaCatalogo>();
+      for (const r of tanda.ranuras) { const t = r.temaId ? temaDe.get(r.temaId) : undefined; if (t) temas.set(r.ref, t); }
       const entrada: EntradaTanda = {
         contexto: o.contexto,
         periodo: o.periodo,
         nombreMes: nombrePeriodo(o.periodo),
         ranuras: tanda.ranuras,
-        candidatos,
+        temas,
         nombresPilares: o.nombresPilares,
         yaEscritas: generadas.map((g) => recortar(g.pieza.copy.split('\n')[0], 120)),
       };
@@ -147,12 +152,7 @@ export async function generarTandas(o: {
         for (const pieza of r.datos.piezas) {
           const ranura = tanda.ranuras.find((x) => x.ref === pieza.ref);
           if (!ranura) continue;
-          let temaId = resolverTema(pieza.temaId, candidatos.get(ranura.ref) ?? [], o.usados);
-          // Todos los candidatos de la ranura ya se usaron en esta misma tanda:
-          // se busca otro libre en el mapa entero.
-          if (!temaId) temaId = candidatosPara(ranura, o.catalogo, o.usados, 1)[0]?.id ?? null;
-          if (temaId) o.usados.add(temaId);
-          generadas.push({ ranura, pieza, temaId });
+          generadas.push({ ranura, pieza, temaId: ranura.temaId ?? null });
           algunaOk = true;
         }
       } catch (e) {
@@ -192,52 +192,34 @@ export async function ejecutarContenidoMes(jobId: string, deps: Deps = { correr:
   const paquete = leerPaquete(cliente.paquete);
   if (!paquete) return fallar('Este cliente no tiene paquete mensual. Defínelo en su ficha y vuelve a lanzar.');
 
-  const [mapaFila] = await db.select().from(pilaresResults)
-    .where(eq(pilaresResults.clientId, job.clientId)).orderBy(desc(pilaresResults.version)).limit(1);
-  const mapa = (mapaFila?.datos ?? null) as MapaPilares | null;
-  if (!mapaFila || !mapa?.pilares?.some((p) => p.estado === 'ok')) {
-    return fallar('Este cliente no tiene un mapa de pilares con temas. El mes sale de ahí.');
-  }
+  const banco = await cargarBancoDelMes(job.clientId, lote.id);
+  if (!banco) return fallar('Este cliente no tiene un mapa de pilares con temas. El mes sale de ahí.');
+  const { mapa, mapaId, catalogo } = banco;
 
   await db.update(researchJobs).set({ estado: 'corriendo', startedAt: job.startedAt ?? deps.ahora(), etapaActual: 'plan' })
     .where(eq(researchJobs.id, jobId));
 
-  // ── 1 · Plan: qué hay, qué falta, cuándo y de qué temas ───────────────
-  const piezasLote = await db.select().from(contenidoPiezas)
-    .where(eq(contenidoPiezas.loteId, lote.id)).orderBy(asc(contenidoPiezas.numero));
-  const { quedan, reemplazar } = separarPiezas(piezasLote, params.modo, params.incluirConArte);
-  const porGenerar = faltantes(paquete, quedan);
-  if (totalDe(porGenerar) === 0) return fallar('El mes ya cuadra con el paquete: no hay piezas que generar.');
-
-  const lotesCliente = await db.select({ id: contenidoLotes.id }).from(contenidoLotes).where(eq(contenidoLotes.clientId, job.clientId));
-  const piezasCliente = lotesCliente.length
-    ? await db.select({ id: contenidoPiezas.id, temaId: contenidoPiezas.temaId }).from(contenidoPiezas)
-        .where(inArray(contenidoPiezas.loteId, lotesCliente.map((l) => l.id)))
-    : [];
-  // Los temas de las piezas que se van a reemplazar vuelven a estar libres.
-  const seVan = new Set(reemplazar.map((p) => p.id));
-  const usados = temasUsados(piezasCliente.filter((p) => !seVan.has(p.id)));
-
-  const avance = await avanceDelMapa(mapaFila.id);
-  const catalogo = catalogoDeTemas(mapa, avance);
-  const funcionDe = new Map(catalogo.map((t) => [t.id, t.funcion]));
-  const funcionesQueQuedan: Partial<Record<Funcion, number>> = {};
-  for (const p of quedan) {
-    const f = p.temaId ? funcionDe.get(p.temaId) : undefined;
-    if (f) funcionesQueQuedan[f] = (funcionesQueQuedan[f] ?? 0) + 1;
-  }
-
+  // ── 1 · Plan: qué hay, qué falta, cuándo y con qué temas ──────────────
+  // Los temas ya vienen autorizados. Sin ellos (un trabajo de antes del paso
+  // «Elegir los temas») se arma la propuesta de siempre.
   const hoy = deps.ahora().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
-  const ranuras = armarRanuras({
+  const filas = params.temas ?? proponerTemas({
     periodo: params.periodo,
-    aGenerar: porGenerar,
-    quedan,
+    paquete,
+    modo: params.modo,
+    incluirConArte: params.incluirConArte,
+    piezasLote: banco.piezasLote,
+    temasDelCliente: banco.temasDelCliente,
+    catalogo,
     mix: mapa.estrategia?.mix,
-    funcionesQueQuedan,
-    pilares: pilaresPorUso(catalogo, usados),
     // Si el mes ya empezó, se publica de hoy en adelante (ver `diasParaPublicar`).
     desde: params.periodo === periodoActual(deps.ahora()) ? hoy : undefined,
-  });
+  }).filter((f) => f.temaId).map((f) => ({ ...f, temaId: f.temaId! }));
+  if (filas.length === 0) return fallar('El mes ya cuadra con el paquete: no hay piezas que generar.');
+
+  const armadas = ranurasAutorizadas(filas, catalogo);
+  if ('error' in armadas) return fallar(armadas.error);
+  const ranuras = armadas.ranuras;
 
   const [links, archivos, investigaciones] = await Promise.all([
     db.select().from(clientLinks).where(eq(clientLinks.clientId, job.clientId)),
@@ -260,7 +242,7 @@ export async function ejecutarContenidoMes(jobId: string, deps: Deps = { correr:
   // ── 2 · Tandas por semana ─────────────────────────────────────────────
   const nombresPilares = (mapa.estrategia?.pilares ?? []).map((p) => p.nombre);
   const r = await generarTandas({
-    ranuras, catalogo, usados, contexto, periodo: params.periodo, nombresPilares, estado,
+    ranuras, catalogo, contexto, periodo: params.periodo, nombresPilares, estado,
     correr: deps.correr,
     hayPresupuesto: () => !superaTope(gasto.valor, tope),
     onUso: (e, s) => { gasto.valor += calcularCosto(modelo, e, s); return !superaTope(gasto.valor, tope); },
@@ -279,7 +261,7 @@ export async function ejecutarContenidoMes(jobId: string, deps: Deps = { correr:
   let errorGuardado: string | null = null;
   if (r.generadas.length > 0) {
     try {
-      guardadas = await guardarMes(lote.id, job.clientId, params, r.generadas, mapaFila.id, job.creadoPor, deps.ahora());
+      guardadas = await guardarMes(lote.id, job.clientId, params, r.generadas, mapaId, job.creadoPor, deps.ahora());
     } catch (e) {
       console.error(`[${jobId}] guardado:`, e);
       errorGuardado = e instanceof Error ? e.message : String(e);
@@ -303,10 +285,11 @@ export async function ejecutarContenidoMes(jobId: string, deps: Deps = { correr:
 
   // El aviso de éxito sale de aquí; el de fallo lo manda el worker al ver el
   // estado final (`avisarSiJobFallido`), igual que con los otros documentos.
-  if (guardadas > 0 && job.creadoPor) {
+  if (guardadas > 0) {
     void avisarJob({
       evento: 'mes_generado',
       creadoPor: job.creadoPor,
+      clientId: job.clientId,
       cliente: cliente.nombre,
       etapa: NOMBRE_ETAPA.desarrollo_mensual,
       periodo: params.periodo,
