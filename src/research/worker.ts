@@ -1,6 +1,7 @@
 import { eq, or, asc } from 'drizzle-orm';
 import { db, researchJobs, clients } from '@/db';
 import { ejecutarJob } from './pipeline';
+import { elegirProveedor } from './claude';
 import { ejecutarGrowth } from '@/growth/pipeline';
 import { ejecutarPilares } from '@/pilares/pipeline';
 import { ejecutarContenidoMes } from '@/contenido/mes/pipeline';
@@ -25,7 +26,7 @@ let conversionIntentada = false;
  * función pura") para no tener que montar el worker completo solo para
  * probar la regla. Las cuatro condiciones son necesarias a la vez: cola
  * vacía (un job real siempre va primero), no intentada ya en este arranque,
- * llave de Anthropic presente y la bandera de apagado no está activa.
+ * llave del proveedor de IA activo presente y la bandera de apagado no está activa.
  */
 export function debeConvertirLecturas(input: {
   colaVacia: boolean;
@@ -77,7 +78,9 @@ export async function tick() {
     if (debeConvertirLecturas({
       colaVacia: true,
       yaIntentada: conversionIntentada,
-      tieneApiKey: !!process.env.ANTHROPIC_API_KEY,
+      tieneApiKey: !!(elegirProveedor(false) === 'openai'
+        ? process.env.OPENAI_API_KEY
+        : process.env.ANTHROPIC_API_KEY),
       activada: process.env.CONVERTIR_LECTURAS !== '0',
     })) {
       conversionIntentada = true;

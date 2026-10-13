@@ -85,7 +85,9 @@ describe('errores que NO cortan el trabajo', () => {
 describe('mensaje para la persona', () => {
   it('el de saldo dice qué pasó y qué hacer, sin volcado del SDK', () => {
     const corte = new CorteDeTrabajo('saldo', SIN_SALDO());
-    expect(corte.message).toBe('Se agotó el saldo de la cuenta de Anthropic. Recarga en console.anthropic.com y vuelve a lanzarlo.');
+    expect(corte.message).toContain('Se agotó el saldo de la cuenta del proveedor de IA');
+    expect(corte.message).toContain('console.anthropic.com');
+    expect(corte.message).toContain('platform.openai.com');
     expect(corte.message).toBe(MENSAJE_SALDO);
     expect(corte.message).not.toContain('400');
     expect(corte.message).not.toContain('invalid_request_error');
@@ -95,6 +97,7 @@ describe('mensaje para la persona', () => {
   it('el de credenciales apunta a la variable de entorno', () => {
     expect(new CorteDeTrabajo('credenciales').message).toBe(MENSAJE_CREDENCIALES);
     expect(MENSAJE_CREDENCIALES).toContain('ANTHROPIC_API_KEY');
+    expect(MENSAJE_CREDENCIALES).toContain('OPENAI_API_KEY');
   });
 
   it('el error original se conserva para los registros, fuera del mensaje', () => {
@@ -125,5 +128,28 @@ describe('cortar: anota en la caja y lanza', () => {
 
   it('un corte ya lanzado se vuelve a reconocer como corte (no se degrada a fallo de etapa)', () => {
     expect(motivoDeCorte(new CorteDeTrabajo('saldo'))).toBe('saldo');
+  });
+});
+
+describe('errores de OpenAI', () => {
+  // Misma forma que arma `llamar` en proveedores/openai.ts.
+  const deOpenAI = (status: number, code: string, mensaje: string) =>
+    Object.assign(new Error(`OpenAI: ${mensaje}`), { status, type: 'error', code });
+
+  it('el 429 insufficient_quota es falta de saldo, no un límite temporal', () => {
+    const e = deOpenAI(429, 'insufficient_quota', 'You exceeded your current quota, please check your plan and billing details.');
+    expect(motivoDeCorte(e)).toBe('saldo');
+  });
+
+  it('el 429 de límite de peticiones sigue siendo temporal', () => {
+    expect(motivoDeCorte(deOpenAI(429, 'rate_limit_exceeded', 'Rate limit reached for gpt-5 in organization org-x'))).toBeNull();
+  });
+
+  it('una llave inválida (401) es de credenciales', () => {
+    expect(motivoDeCorte(deOpenAI(401, 'invalid_api_key', 'Incorrect API key provided'))).toBe('credenciales');
+  });
+
+  it('sin OPENAI_API_KEY es de credenciales', () => {
+    expect(motivoDeCorte(new Error('Falta OPENAI_API_KEY'))).toBe('credenciales');
   });
 });
