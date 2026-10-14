@@ -113,7 +113,13 @@ async function llamar(cuerpo: Record<string, unknown>): Promise<any> {
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const mensaje = json?.error?.message ?? res.statusText ?? `HTTP ${res.status}`;
-    throw new Error(`OpenAI: ${mensaje}`);
+    // `status`, `type` y `code` van en el error para que `motivoDeCorte`
+    // (errores-agentes.ts) distinga sin saldo / llave inválida de un tropiezo.
+    throw Object.assign(new Error(`OpenAI: ${mensaje}`), {
+      status: res.status,
+      type: json?.error?.type,
+      code: json?.error?.code,
+    });
   }
   return json;
 }

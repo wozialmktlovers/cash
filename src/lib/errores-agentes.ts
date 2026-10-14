@@ -34,10 +34,10 @@ export type MotivoCorte = 'saldo' | 'credenciales';
  * hacer, y no lleva ni el volcado del SDK ni el código de estado.
  */
 export const MENSAJE_SALDO =
-  'Se agotó el saldo de la cuenta de Anthropic. Recarga en console.anthropic.com y vuelve a lanzarlo.';
+  'Se agotó el saldo de la cuenta del proveedor de IA (Anthropic: console.anthropic.com · OpenAI: platform.openai.com). Recarga y vuelve a lanzarlo.';
 
 export const MENSAJE_CREDENCIALES =
-  'La llave de Anthropic no es válida o no tiene permiso para este modelo. Revisa ANTHROPIC_API_KEY y vuelve a lanzarlo.';
+  'La llave del proveedor de IA no es válida, no está configurada o no tiene permiso para este modelo. Revisa ANTHROPIC_API_KEY u OPENAI_API_KEY, según PROVEEDOR_IA, y vuelve a lanzarlo.';
 
 export const MENSAJE_CORTE: Record<MotivoCorte, string> = {
   saldo: MENSAJE_SALDO,
@@ -70,7 +70,14 @@ export const nuevaCaja = (): Corte => ({ valor: null });
  */
 const SIN_SALDO = /credit balance is too low|insufficient credit/i;
 
-function forma(error: unknown): { status?: number; tipo?: string; texto: string } {
+/**
+ * OpenAI avisa que no hay saldo con un 429 (`insufficient_quota`), no con un
+ * 400 como Anthropic. Se distingue del 429 de límite de peticiones, que sí se
+ * resuelve esperando, por el código o por el texto «exceeded your current quota».
+ */
+const SIN_CUOTA_OPENAI = /insufficient_quota|exceeded your current quota/i;
+
+function forma(error: unknown): { status?: number; tipo?: string; codigo?: string; texto: string } {
   const e = (error ?? {}) as Record<string, any>;
   const status = typeof e.status === 'number' ? e.status : undefined;
   // `e.type` lo pone el SDK; `e.error.error.type` es el cuerpo crudo, por si
@@ -81,11 +88,14 @@ function forma(error: unknown): { status?: number; tipo?: string; texto: string 
     : undefined;
   // El mensaje del SDK ya trae el cuerpo en JSON, pero se concatena también el
   // del cuerpo por si `makeMessage` cambia de formato en una versión futura.
+  const codigo = typeof e.code === 'string' ? e.code
+    : typeof delCuerpo?.code === 'string' ? delCuerpo.code
+    : undefined;
   const texto = [
     typeof e.message === 'string' ? e.message : '',
     typeof delCuerpo?.message === 'string' ? delCuerpo.message : '',
   ].join(' ');
-  return { status, tipo, texto };
+  return { status, tipo, codigo, texto };
 }
 
 /**
@@ -95,10 +105,13 @@ function forma(error: unknown): { status?: number; tipo?: string; texto: string 
 export function motivoDeCorte(error: unknown): MotivoCorte | null {
   if (error instanceof CorteDeTrabajo) return error.motivo;
 
-  // Sin llave ni se sale a la red: `claude.ts` lanza este Error pelado.
-  if (error instanceof Error && error.message.includes('Falta ANTHROPIC_API_KEY')) return 'credenciales';
+  // Sin llave ni se sale a la red: los proveedores lanzan este Error pelado.
+  if (error instanceof Error && /Falta (ANTHROPIC|OPENAI)_API_KEY/.test(error.message)) return 'credenciales';
 
-  const { status, tipo, texto } = forma(error);
+  const { status, tipo, codigo, texto } = forma(error);
+
+  // Sin saldo en OpenAI: va ANTES del descarte de 429, que es de lo temporal.
+  if (codigo === 'insufficient_quota' || SIN_CUOTA_OPENAI.test(texto)) return 'saldo';
 
   // Lo temporal se descarta PRIMERO, para que ninguna regla de abajo pueda
   // confundirlo con algo definitivo. El 429 de límite de peticiones es el caso
@@ -115,7 +128,7 @@ export function motivoDeCorte(error: unknown): MotivoCorte | null {
   if (status === 400 && SIN_SALDO.test(texto)) return 'saldo';
 
   // Credenciales: llave inválida (401) o sin permiso para el recurso (403).
-  if (status === 401 || tipo === 'authentication_error') return 'credenciales';
+  if (status === 401 || tipo === 'authentication_error' || codigo === 'invalid_api_key') return 'credenciales';
   if (status === 403 || tipo === 'permission_error') return 'credenciales';
 
   // Todo lo demás —red caída, JSON inválido, un 400 por un parámetro mal
