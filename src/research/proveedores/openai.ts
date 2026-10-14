@@ -148,13 +148,18 @@ export async function pedirJsonOpenAI<T>(opts: PedirJsonOpts<T>): Promise<Result
   // OpenAI exige que la palabra "json" aparezca en las instrucciones.
   const instrucciones = `${sistema}\n\nResponde únicamente con un objeto JSON válido, sin texto antes ni después.`;
 
+  // La API de OpenAI rechaza con 400 («Web Search cannot be used with JSON
+  // mode») combinar `web_search` con `text.format: json_object`. Con búsqueda
+  // se omite el modo JSON: el JSON se pide en las instrucciones, se extrae con
+  // `extraerJson` y la corrección posterior (sin herramientas) sí lo usa.
   const cuerpo = (mensaje: string, conBusqueda: boolean, modeloLlamada = modelo, tope = maxTokens) => ({
     model: modeloLlamada,
     instructions: instrucciones,
     input: mensaje,
     max_output_tokens: tope,
-    text: { format: { type: 'json_object' } },
-    ...(conBusqueda ? { tools: [{ type: 'web_search' }] } : {}),
+    ...(conBusqueda
+      ? { tools: [{ type: 'web_search' }] }
+      : { text: { format: { type: 'json_object' } } }),
   });
 
   const turno = async (mensaje: string): Promise<any> => {
