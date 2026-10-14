@@ -154,6 +154,26 @@ describe('pedirJsonOpenAI', () => {
     expect(cuerpo.text.format.type).toBe('json_object');
   });
 
+  it('con búsqueda web NO usa json_object (OpenAI lo rechaza con web_search)', async () => {
+    process.env.PROVEEDOR_IA = 'openai';
+    const { pedirJson } = await import('@/research/claude');
+    const fetchMock = mockFetchJson(respuestaOpenAI('{"valor":"x"}'));
+    vi.stubGlobal('fetch', fetchMock);
+    await pedirJson({ modelo: 'claude-sonnet-5', sistema: 's', usuario: 'u', schema: esquema, buscarWeb: true });
+    const cuerpo = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(cuerpo.tools).toEqual([{ type: 'web_search' }]);
+    expect(cuerpo.text).toBeUndefined();
+  });
+
+  it('con búsqueda web extrae el JSON aunque venga con texto o bloque de código', async () => {
+    process.env.PROVEEDOR_IA = 'openai';
+    const { pedirJson } = await import('@/research/claude');
+    const fetchMock = mockFetchJson(respuestaOpenAI('Aquí está:\n```json\n{"valor":"x"}\n```'));
+    vi.stubGlobal('fetch', fetchMock);
+    const r = await pedirJson({ modelo: 'claude-sonnet-5', sistema: 's', usuario: 'u', schema: esquema, buscarWeb: true });
+    expect(r.datos.valor).toBe('x');
+  });
+
   it('aplica `preparar` antes de validar, igual que con Anthropic', async () => {
     process.env.PROVEEDOR_IA = 'openai';
     const { pedirJson } = await import('@/research/claude');
